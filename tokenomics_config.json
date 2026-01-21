@@ -1,0 +1,46 @@
+{
+  "allocations": [
+    {
+      "name": "Private_Sale",
+      "percent": 0.20,
+      "cliff_months": 0,
+      "vesting_months": 12,
+      "release_interval_months": 1
+    },
+    {
+      "name": "Ecosystem_Rewards",
+      "percent": 0.30,
+      "cliff_months": 0,
+      "vesting_months": 48,
+      "release_interval_months": 1
+    },
+    {
+      "name": "Team_Advisors",
+      "percent": 0.20,
+      "cliff_months": 12,
+      "vesting_months": 36,
+      "release_interval_months": 1
+    },
+    {
+      "name": "Partners_Growth",
+      "percent": 0.10,
+      "cliff_months": 0,
+      "vesting_months": 12,
+      "release_interval_months": 3
+    },
+    {
+      "name": "Liquidity_MM",
+      "percent": 0.10,
+      "cliff_months": 0,
+      "vesting_months": 0,
+      "release_interval_months": 1
+    },
+    {
+      "name": "Treasury",
+      "percent": 0.10,
+      "cliff_months": 24,
+      "vesting_months": 1,
+      "release_interval_months": 1
+    }
+  ]
+}
