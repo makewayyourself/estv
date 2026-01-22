@@ -556,7 +556,7 @@ if st.session_state.get("contract_mode_applied") != contract_mode:
 input_supply = st.sidebar.slider(
     "1. 초기 유통량 (%)",
     min_value=0.0,
-    max_value=20.0,
+    max_value=100.0,
     value=3.0,
     step=0.5,
     help="초기 유통되는 토큰 비율입니다. 높을수록 시장 유통 물량이 많아져 가격 방어가 어려울 수 있습니다.",
