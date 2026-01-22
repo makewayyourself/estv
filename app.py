@@ -793,7 +793,7 @@ st.sidebar.code("cd marketing_dashboard\nnpm install\nnpm run dev")
 st.sidebar.markdown(
     "실행 후 브라우저에서 `http://localhost:5173`로 접속해 확인할 수 있습니다."
 )
-st.sidebar.markdown("[마케팅 대시보드 열기](http://localhost:5173)")
+st.sidebar.link_button("마케팅 대시보드 열기", "http://localhost:5173")
 
 campaigns = []
 triggers = []
