@@ -389,10 +389,25 @@ st.set_page_config(page_title="ESTV 토큰 시뮬레이터", layout="wide")
 st.title("📊 ESTV 토큰 상장 리스크 시뮬레이터")
 st.markdown("특약 계약서(Legal)와 토크노믹스(Design) 변수를 조정하여 **미래 가격**을 예측합니다.")
 
+manual_path = os.path.abspath("user_manual.md")
+if st.session_state.get("show_user_manual"):
+    if os.path.exists(manual_path):
+        with open(manual_path, "r", encoding="utf-8") as manual_file:
+            manual_text = manual_file.read()
+        with st.expander("📘 사용설명서", expanded=True):
+            st.markdown(manual_text)
+    else:
+        st.info("사용설명서 파일을 찾을 수 없습니다.")
+
 
 
 # 사이드바: 사용자 입력 컨트롤
 st.sidebar.header("🛠 시나리오 설정")
+def toggle_user_manual():
+    st.session_state["show_user_manual"] = not st.session_state.get("show_user_manual", False)
+
+manual_button_label = "📘 사용설명서 닫기" if st.session_state.get("show_user_manual") else "📘 사용설명서 열기"
+st.sidebar.button(manual_button_label, on_click=toggle_user_manual)
 
 if st.session_state.get("apply_target_scenario"):
     target_payload = {
@@ -785,14 +800,6 @@ if use_master_plan:
 
 st.sidebar.markdown("---")
 st.sidebar.header("📊 마케팅 대시보드")
-st.sidebar.markdown(
-    "마케팅 대시보드는 별도 React 앱으로 제공됩니다. "
-    "로컬에서 `marketing_dashboard`를 실행해 연결하세요."
-)
-st.sidebar.code("cd marketing_dashboard\nnpm install\nnpm run dev")
-st.sidebar.markdown(
-    "실행 후 브라우저에서 `http://localhost:5173`로 접속해 확인할 수 있습니다."
-)
 st.sidebar.link_button("마케팅 대시보드 열기", "http://localhost:5173")
 
 campaigns = []
@@ -902,7 +909,7 @@ price_model = st.sidebar.selectbox(
     "가격 모델",
     options=["AMM", "CEX", "HYBRID"],
     index=0,
-    help="AMM은 상수곱, CEX는 오더북 기반, HYBRID는 오더북 깊이가 월별로 증가합니다.",
+    help="AMM은 풀의 상수곱(x*y=k)로 가격을 계산합니다. CEX는 오더북 깊이에 따라 체결 슬리피지를 반영합니다. HYBRID는 CEX 방식에 월별 오더북 깊이 증가를 더해 유동성 확장을 모사합니다.",
     key="price_model"
 )
 depth_usdt_1pct = st.sidebar.number_input(
