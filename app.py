@@ -800,7 +800,16 @@ if use_master_plan:
 
 st.sidebar.markdown("---")
 st.sidebar.header("📊 마케팅 대시보드")
-st.sidebar.link_button("마케팅 대시보드 열기", "http://localhost:5173")
+default_dashboard_url = os.getenv("MARKETING_DASHBOARD_URL", "http://localhost:5173")
+dashboard_url = st.sidebar.text_input(
+    "대시보드 URL",
+    value=default_dashboard_url,
+    key="marketing_dashboard_url",
+    help="Streamlit Cloud에서는 로컬 주소가 아니라 배포된 URL을 입력해야 합니다."
+)
+st.sidebar.link_button("마케팅 대시보드 열기", dashboard_url)
+if dashboard_url.startswith("http://localhost") or dashboard_url.startswith("http://127.0.0.1"):
+    st.sidebar.info("Streamlit Cloud에서는 로컬 주소로 접속할 수 없습니다. 배포된 URL로 변경하세요.")
 
 campaigns = []
 triggers = []
