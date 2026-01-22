@@ -355,6 +355,77 @@ def run_sim_with_cache(inputs):
     return _run_sim_cached(inputs_json)
 
 
+@st.cache_data(show_spinner=False)
+def _run_confidence_cached(inputs_json, runs, noise_pct, mape_threshold):
+    base_inputs = json.loads(inputs_json)
+    engine = TokenSimulationEngine()
+    base_result = engine.run(base_inputs)
+    base_trend = np.array(base_result["daily_price_trend"], dtype=float)
+    base_trend = np.maximum(base_trend, 1e-9)
+
+    rng = np.random.default_rng(42)
+    target_keys = [
+        "initial_circulating_percent",
+        "unbonding_days",
+        "sell_pressure_ratio",
+        "monthly_buy_volume",
+        "turnover_ratio",
+        "lp_growth_rate",
+        "max_buy_usdt_ratio",
+        "max_sell_token_ratio",
+        "burn_fee_rate",
+        "monthly_buyback_usdt",
+        "depth_usdt_1pct",
+        "depth_usdt_2pct",
+        "depth_growth_rate"
+    ]
+    int_keys = {"unbonding_days"}
+    mape_list = []
+    good = 0
+
+    for _ in range(max(1, runs)):
+        sim_inputs = dict(base_inputs)
+        for key in target_keys:
+            if key not in sim_inputs:
+                continue
+            val = sim_inputs[key]
+            if val is None:
+                continue
+            noise = rng.uniform(-noise_pct, noise_pct)
+            new_val = val * (1 + noise)
+            if key in int_keys:
+                new_val = int(round(new_val))
+            if key in ["initial_circulating_percent"]:
+                new_val = min(max(new_val, 0.0), 100.0)
+            elif key in ["sell_pressure_ratio", "turnover_ratio", "lp_growth_rate", "max_buy_usdt_ratio", "max_sell_token_ratio", "burn_fee_rate", "depth_growth_rate"]:
+                new_val = max(new_val, 0.0)
+            else:
+                new_val = max(new_val, 0.0)
+            sim_inputs[key] = new_val
+
+        sim_result = engine.run(sim_inputs)
+        sim_trend = np.array(sim_result["daily_price_trend"], dtype=float)
+        n = min(len(base_trend), len(sim_trend))
+        mape = float(np.mean(np.abs(sim_trend[:n] - base_trend[:n]) / base_trend[:n]) * 100)
+        mape_list.append(mape)
+        if mape <= mape_threshold:
+            good += 1
+
+    confidence = (good / max(1, runs)) * 100
+    mape_array = np.array(mape_list, dtype=float)
+    return {
+        "confidence": confidence,
+        "avg_mape": float(np.mean(mape_array)),
+        "p10_mape": float(np.percentile(mape_array, 10)),
+        "p90_mape": float(np.percentile(mape_array, 90))
+    }
+
+
+def run_confidence_with_cache(inputs, runs, noise_pct, mape_threshold):
+    inputs_json = json.dumps(inputs, sort_keys=True, ensure_ascii=False)
+    return _run_confidence_cached(inputs_json, runs, noise_pct, mape_threshold)
+
+
 def apply_contract_inputs(base_inputs, mode):
     adjusted = dict(base_inputs)
     notes = []
@@ -946,6 +1017,38 @@ depth_growth_rate = st.sidebar.slider(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.header("✅ 가격 변동추이 신뢰도")
+enable_confidence = st.sidebar.checkbox(
+    "신뢰도 계산 활성화",
+    value=False,
+    help="입력값에 불확실성을 부여해 여러 번 시뮬레이션하고, 기준 추이와 유사한 비율을 신뢰도로 계산합니다."
+)
+confidence_runs = st.sidebar.slider(
+    "시뮬레이션 횟수",
+    min_value=100,
+    max_value=1000,
+    value=300,
+    step=50,
+    help="횟수가 많을수록 안정적이지만 계산 시간이 늘어납니다."
+)
+confidence_uncertainty = st.sidebar.slider(
+    "입력값 불확실성(±%)",
+    min_value=0.0,
+    max_value=30.0,
+    value=10.0,
+    step=1.0,
+    help="주요 입력값에 랜덤 변동을 주는 범위입니다."
+)
+confidence_mape = st.sidebar.slider(
+    "허용 변동폭(평균 오차, %)",
+    min_value=5.0,
+    max_value=30.0,
+    value=15.0,
+    step=1.0,
+    help="기준 추이와 평균 오차가 이 값 이하인 시뮬레이션의 비율을 신뢰도로 계산합니다."
+)
+
+st.sidebar.markdown("---")
 st.sidebar.header("🇰🇷 Upbit 평균 시나리오")
 show_upbit_baseline = st.sidebar.checkbox(
     "Upbit 평균 그래프 표시",
@@ -1153,6 +1256,19 @@ col3.metric("법적 리스크", "통과" if result['legal_check'] else "위반(I
 col4.metric("경고 발생 횟수", f"{len(result['risk_logs'])} 회")
 if contract_notes:
     st.info("계약 적용: " + ", ".join(contract_notes))
+
+if enable_confidence:
+    confidence_result = run_confidence_with_cache(
+        adjusted_inputs,
+        confidence_runs,
+        confidence_uncertainty / 100.0,
+        confidence_mape
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("가격 변동추이 신뢰도", f"{confidence_result['confidence']:.1f}%")
+    c2.metric("평균 오차(MAPE)", f"{confidence_result['avg_mape']:.1f}%")
+    c3.metric("오차 범위(10~90%)", f"{confidence_result['p10_mape']:.1f}% ~ {confidence_result['p90_mape']:.1f}%")
+    st.caption("신뢰도는 입력값 불확실성 범위 내에서 기준 추이와 유사한 시뮬레이션 비율입니다.")
 
 with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract_mode == "역산목표가격")):
     target_price = st.number_input("목표 최종 가격 ($)", min_value=0.1, value=5.0, step=0.1)
