@@ -1132,17 +1132,17 @@ inflow_help.markdown("""
 | C (공격적) | 2.00% | $200 | 공격적 캠페인 |
 """)
 
-    preset_map = {
-        "직접 입력": None,
-        "Scenario A (보수적)": {"conversion_rate": 0.05, "avg_ticket": 50},
-        "Scenario B (현실적)": {"conversion_rate": 0.50, "avg_ticket": 100},
-        "Scenario C (공격적)": {"conversion_rate": 2.00, "avg_ticket": 200},
-    }
-    def apply_preset():
-        preset = st.session_state.get("scenario_preset", "직접 입력")
-        if preset_map.get(preset):
-            st.session_state["conversion_rate"] = preset_map[preset]["conversion_rate"]
-            st.session_state["avg_ticket"] = preset_map[preset]["avg_ticket"]
+preset_map = {
+    "직접 입력": None,
+    "Scenario A (보수적)": {"conversion_rate": 0.05, "avg_ticket": 50},
+    "Scenario B (현실적)": {"conversion_rate": 0.50, "avg_ticket": 100},
+    "Scenario C (공격적)": {"conversion_rate": 2.00, "avg_ticket": 200},
+}
+def apply_preset():
+    preset = st.session_state.get("scenario_preset", "직접 입력")
+    if preset_map.get(preset):
+        st.session_state["conversion_rate"] = preset_map[preset]["conversion_rate"]
+        st.session_state["avg_ticket"] = preset_map[preset]["avg_ticket"]
 
 scenario_preset = inflow_expander.selectbox(
         "시나리오 프리셋",
@@ -1171,71 +1171,71 @@ avg_ticket = inflow_expander.number_input(
         help="신규 유입 1인당 평균 매수 금액입니다. 클수록 월간 추가 매수세가 증가합니다."
     )
 
-    onboarding_months = 12
+onboarding_months = 12
 
-    total_new_buyers = estv_total_users * (conversion_rate / 100.0)
-    total_inflow_money = total_new_buyers * avg_ticket
-    monthly_user_buy_volume = total_inflow_money / onboarding_months
-    total_inflow_days = onboarding_months * 30
-    base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
+total_new_buyers = estv_total_users * (conversion_rate / 100.0)
+total_inflow_money = total_new_buyers * avg_ticket
+monthly_user_buy_volume = total_inflow_money / onboarding_months
+total_inflow_days = onboarding_months * 30
+base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
 
 use_phase_inflow = inflow_expander.checkbox(
-        "유입 스케줄(Phase) 적용",
-        value=False,
-        help="Master MD의 Phase 흐름을 반영해 초기 30일 유입을 강화합니다.",
-        key="use_phase_inflow"
+    "유입 스케줄(Phase) 적용",
+    value=False,
+    help="Master MD의 Phase 흐름을 반영해 초기 30일 유입을 강화합니다.",
+    key="use_phase_inflow"
+)
+phase2_days = 30
+phase2_multiplier = 2.0
+prelisting_days = 30
+prelisting_multiplier = 1.5
+prelisting_release_days = 7
+if use_phase_inflow:
+    phase2_days = inflow_expander.slider(
+        "Phase 2 기간(일)",
+        min_value=7,
+        max_value=60,
+        value=30,
+        step=1,
+        key="phase2_days",
+        help="상장 직후 집중 유입이 유지되는 기간입니다."
     )
-    phase2_days = 30
-    phase2_multiplier = 2.0
-    prelisting_days = 30
-    prelisting_multiplier = 1.5
-    prelisting_release_days = 7
-    if use_phase_inflow:
-        phase2_days = inflow_expander.slider(
-            "Phase 2 기간(일)",
-            min_value=7,
-            max_value=60,
-            value=30,
-            step=1,
-            key="phase2_days",
-            help="상장 직후 집중 유입이 유지되는 기간입니다."
-        )
-        phase2_multiplier = inflow_expander.slider(
-            "Phase 2 유입 배수",
-            min_value=1.0,
-            max_value=5.0,
-            value=2.0,
-            step=0.1,
-            key="phase2_multiplier",
-            help="상장 직후 유입을 몇 배로 증폭할지 설정합니다."
-        )
-        prelisting_days = inflow_expander.slider(
-            "Phase 1 대기 기간(일)",
-            min_value=7,
-            max_value=60,
-            value=30,
-            step=1,
-            key="prelisting_days",
-            help="상장 전 유입이 대기(잠재 수요로 누적)되는 기간입니다."
-        )
-        prelisting_multiplier = inflow_expander.slider(
-            "Phase 1 대기 수요 배수",
-            min_value=1.0,
-            max_value=5.0,
-            value=1.5,
-            step=0.1,
-            key="prelisting_multiplier",
-            help="대기 수요가 상장 직후 유입될 때의 증폭 정도입니다."
-        )
-        prelisting_release_days = inflow_expander.slider(
-            "Phase 1 방출 기간(일)",
-            min_value=1,
-            max_value=30,
-            value=7,
-            step=1,
-            key="prelisting_release_days",
-            help="대기 수요가 상장 후 며칠에 걸쳐 분산 방출되는지 설정합니다."
-        )
+    phase2_multiplier = inflow_expander.slider(
+        "Phase 2 유입 배수",
+        min_value=1.0,
+        max_value=5.0,
+        value=2.0,
+        step=0.1,
+        key="phase2_multiplier",
+        help="상장 직후 유입을 몇 배로 증폭할지 설정합니다."
+    )
+    prelisting_days = inflow_expander.slider(
+        "Phase 1 대기 기간(일)",
+        min_value=7,
+        max_value=60,
+        value=30,
+        step=1,
+        key="prelisting_days",
+        help="상장 전 유입이 대기(잠재 수요로 누적)되는 기간입니다."
+    )
+    prelisting_multiplier = inflow_expander.slider(
+        "Phase 1 대기 수요 배수",
+        min_value=1.0,
+        max_value=5.0,
+        value=1.5,
+        step=0.1,
+        key="prelisting_multiplier",
+        help="대기 수요가 상장 직후 유입될 때의 증폭 정도입니다."
+    )
+    prelisting_release_days = inflow_expander.slider(
+        "Phase 1 방출 기간(일)",
+        min_value=1,
+        max_value=30,
+        value=7,
+        step=1,
+        key="prelisting_release_days",
+        help="대기 수요가 상장 후 며칠에 걸쳐 분산 방출되는지 설정합니다."
+    )
 
     phase2_days = min(phase2_days, total_inflow_days)
     prelisting_days = min(prelisting_days, total_inflow_days)
