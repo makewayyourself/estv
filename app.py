@@ -72,22 +72,26 @@ def calculate_holder_score(holders, target_tier):
     return 0, f"🚨 [광탈 확정] {target_tier} 최소 기준({required:,}명)에 턱없이 부족합니다."
 
 
-def check_red_flags(total_supply, pre_circulated, unlocked, target_tier, holders):
+def check_comprehensive_red_flags(inputs):
     warnings = []
-    safe_supply = max(float(total_supply), 1.0)
-    circ_ratio = (float(pre_circulated) / safe_supply) * 100.0
+    safe_supply = max(float(inputs.get("total_supply", 1.0)), 1.0)
+    pre_circulated = float(inputs.get("pre_circulated", 0.0))
+    unlocked = float(inputs.get("unlocked", 0.0))
+    holders = int(inputs.get("holders", 0))
+    target_tier = inputs.get("target_tier", "Tier 3")
+    circ_ratio = (pre_circulated / safe_supply) * 100.0
     if circ_ratio > 30:
         warnings.append({
             "level": "CRITICAL",
             "msg": f"🚨 초기 유통량({circ_ratio:.1f}%) 과다! 거래소는 15% 미만을 선호합니다."
         })
-    unlock_ratio = (float(unlocked) / float(pre_circulated) * 100.0) if pre_circulated > 0 else 0.0
+    unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
     if unlock_ratio > 50:
         warnings.append({
             "level": "DANGER",
             "msg": f"💣 기유통 물량의 {unlock_ratio:.1f}%가 언락 상태입니다. 상장 직후 투매가 발생합니다."
         })
-    holder_score, holder_msg = calculate_holder_score(int(holders), target_tier)
+    holder_score, holder_msg = calculate_holder_score(holders, target_tier)
     if holder_score < 50:
         warnings.append({
             "level": "CRITICAL",
@@ -97,6 +101,32 @@ def check_red_flags(total_supply, pre_circulated, unlocked, target_tier, holders
         warnings.append({
             "level": "WARNING",
             "msg": holder_msg
+        })
+    audit_status = inputs.get("audit_status", "미진행")
+    if audit_status == "미진행":
+        warnings.append({
+            "level": "CRITICAL",
+            "msg": "❌ 보안 요건 미달: Audit 리포트가 필수입니다."
+        })
+    if not inputs.get("has_legal_opinion", False):
+        warnings.append({
+            "level": "CRITICAL",
+            "msg": "❌ 법적 리스크: 증권성 검토 의견서가 없으면 심사 접수조차 불가합니다."
+        })
+    if inputs.get("concentration_ratio", 0) > 80:
+        warnings.append({
+            "level": "DANGER",
+            "msg": "💣 중앙화 리스크: 상위 홀더 물량이 과도합니다. 공정 분배 위반 소지."
+        })
+    if inputs.get("project_type", "").startswith("Meme") and holders < 10000:
+        warnings.append({
+            "level": "WARNING",
+            "msg": "⚠️ 밈코인은 압도적인 커뮤니티 화력이 필수입니다."
+        })
+    if not inputs.get("has_whitepaper", False):
+        warnings.append({
+            "level": "CRITICAL",
+            "msg": "❌ 필수 서류 누락: 백서와 유통량 계획표는 필수입니다."
         })
     return warnings
 
@@ -287,6 +317,7 @@ class TokenSimulationEngine:
         depth_usdt_2pct = inputs.get('depth_usdt_2pct', 3_000_000.0)
         depth_growth_rate = inputs.get('depth_growth_rate', 0.0)
         market_cfg = inputs.get('market_sentiment_config', {})
+        target_tier = inputs.get("target_tier", "Tier 3")
         panic_sensitivity = market_cfg.get('panic_sensitivity', 1.5)
         fomo_sensitivity = market_cfg.get('fomo_sensitivity', 1.2)
         private_sale_price = market_cfg.get('private_sale_price', 0.05)
@@ -527,6 +558,17 @@ class TokenSimulationEngine:
                 step_buy = min(step_buy, buy_cap)
 
             total_buy = step_buy + step_turnover_buy
+            if target_tier == "Tier 1" and current_price > prev_day_price * 1.05:
+                total_sell *= 1.5
+                if effective_max_sell_ratio > 0:
+                    sell_cap = pool_token * effective_max_sell_ratio
+                    total_sell = min(total_sell, sell_cap)
+                log_reason_action("KIMCHI_PREMIUM", "INCREASE_SELL_PRESSURE")
+                action_logs.append({
+                    "day": day_index + 1,
+                    "action": "김치 프리미엄 역풍",
+                    "reason": "해외 대비 과열 가격 가정"
+                })
             # Shadow AMM price for arbitrage reference
             amm_pool_token += total_sell
             amm_usdt_out = amm_pool_usdt - (amm_k / max(amm_pool_token, 1e-9))
@@ -602,6 +644,16 @@ class TokenSimulationEngine:
                 pool_token += add_token
                 new_price = pool_usdt / pool_token
                 k_constant = pool_token * pool_usdt
+
+            if marketing_dump_today:
+                pool_usdt *= 0.8
+                new_price = pool_usdt / pool_token
+                log_reason_action("SUPPLY_SHOCK", "RESTORE_TRUST")
+                action_logs.append({
+                    "day": day_index + 1,
+                    "action": "유통량 쇼크 패널티",
+                    "reason": "마케팅 덤핑으로 유통량 계획 위반"
+                })
 
             panic_triggered = dynamic_sell_ratio > base_sell_ratio * 1.1 and price_change_ratio < 0
             fomo_triggered = (step_buy > base_step_buy) or (step_turnover_buy > base_turnover_buy)
@@ -929,9 +981,58 @@ target_tier = st.sidebar.selectbox(
     index=1,
     key="target_tier"
 )
-target_tier_key = target_tier.split(" ")[0]
+project_type = st.sidebar.selectbox(
+    "프로젝트 유형",
+    ["유틸리티(Platform)", "DeFi/DAO", "NFT/P2E", "Meme(밈)", "단순 결제형"],
+    index=0,
+    key="project_type"
+)
+audit_status = st.sidebar.selectbox(
+    "보안 감사(Audit) 여부",
+    ["완료 (Tier 1 - CertiK 등)", "완료 (Tier 2)", "진행 중", "미진행"],
+    index=3,
+    key="audit_status"
+)
+concentration_ratio = st.sidebar.slider(
+    "상위 10인 지갑 보유 비중 (%)",
+    min_value=0.0,
+    max_value=100.0,
+    value=float(st.session_state.get("concentration_ratio", 0.0)),
+    step=1.0,
+    key="concentration_ratio"
+)
+has_legal_opinion = st.sidebar.checkbox(
+    "증권성 검토 법률 의견서 보유",
+    value=bool(st.session_state.get("has_legal_opinion", False)),
+    key="has_legal_opinion"
+)
+has_whitepaper = st.sidebar.checkbox(
+    "백서 및 유통량 계획표 완비",
+    value=bool(st.session_state.get("has_whitepaper", False)),
+    key="has_whitepaper"
+)
+if target_tier.startswith("Tier 1"):
+    target_tier_key = "Tier 1"
+elif target_tier.startswith("Tier 2"):
+    target_tier_key = "Tier 2"
+elif target_tier.startswith("Tier 3"):
+    target_tier_key = "Tier 3"
+else:
+    target_tier_key = "DEX"
 pre_circ_ratio = (pre_circulated / total_supply_input * 100.0) if total_supply_input > 0 else 0.0
-for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, target_tier_key, holders):
+red_flag_inputs = {
+    "total_supply": total_supply_input,
+    "pre_circulated": pre_circulated,
+    "unlocked": unlocked,
+    "target_tier": target_tier_key,
+    "holders": holders,
+    "project_type": project_type,
+    "audit_status": audit_status,
+    "concentration_ratio": concentration_ratio,
+    "has_legal_opinion": has_legal_opinion,
+    "has_whitepaper": has_whitepaper
+}
+for warn in check_comprehensive_red_flags(red_flag_inputs):
     if warn["level"] == "CRITICAL":
         st.sidebar.error(warn["msg"])
     elif warn["level"] == "DANGER":
@@ -947,6 +1048,12 @@ if unlock_ratio > 20:
     score -= (unlock_ratio - 20) * 2.0
 holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
 score -= (100 - holder_score) * 0.2
+if audit_status == "미진행":
+    score -= 30
+if not has_legal_opinion:
+    score -= 30
+if not has_whitepaper:
+    score -= 30
 score = max(0.0, min(100.0, score))
 if score >= 80:
     grade = "양호"
@@ -2106,6 +2213,7 @@ if initial_investor_locked_tokens > 0 and initial_investor_locked_percent <= 100
 # 시뮬레이션 실행
 engine = TokenSimulationEngine()
 inputs = {
+    'target_tier': target_tier_key,
     'total_supply': total_supply_input,
     'initial_circulating_percent': input_supply,
     'unbonding_days': input_unbonding,
