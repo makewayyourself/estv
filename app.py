@@ -46,6 +46,14 @@ def adjust_depth_by_volatility(base_depth, price_history, config):
     return base_depth * final_multiplier
 
 
+def apply_fomo_buy(base_buy, current_price, prev_price, config):
+    if current_price > prev_price:
+        growth_rate = (current_price - prev_price) / max(prev_price, 1e-9)
+        fomo_volume = base_buy * growth_rate * config.get('fomo_sensitivity', 1.2)
+        return base_buy + fomo_volume
+    return base_buy
+
+
 class TokenSimulationEngine:
     def __init__(self):
         self.TOTAL_SUPPLY = 1_000_000_000
@@ -199,8 +207,6 @@ class TokenSimulationEngine:
 
             current_price = pool_usdt / pool_token
             price_change_ratio = (current_price - prev_day_price) / max(prev_day_price, 1e-9)
-            fomo_multiplier = 1.0 + (fomo_sensitivity * max(0.0, price_change_ratio))
-            fomo_multiplier = min(3.0, fomo_multiplier)
             depth_ratio = 1.0
             if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
                 depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
@@ -304,10 +310,10 @@ class TokenSimulationEngine:
             if day_index < len(base_daily_buy_schedule):
                 base_daily_buy = base_daily_buy_schedule[day_index]
             step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
+            step_buy = apply_fomo_buy(step_buy, current_price, prev_day_price, market_cfg)
             step_turnover_sell = remaining_turnover_sell / steps_per_month
             step_turnover_buy = remaining_turnover_buy / steps_per_month
-            step_buy *= fomo_multiplier
-            step_turnover_buy *= fomo_multiplier
+            step_turnover_buy = apply_fomo_buy(step_turnover_buy, current_price, prev_day_price, market_cfg)
 
             if inputs.get('use_marketing_contract_scenario') and marketing_remaining > 0:
                 if current_price >= marketing_cost_basis * 2.0:
