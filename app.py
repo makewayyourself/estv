@@ -1099,18 +1099,13 @@ if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
 if "tutorial_step" not in st.session_state:
     st.session_state["tutorial_step"] = 0
-prev_mode = st.session_state.get("mode")
-mode = st.sidebar.radio(
-    "모드 선택",
-    options=["초보자", "전문가"],
-    index=0,
-    help="초보자는 핵심 3개만, 전문가는 상세 설정까지 봅니다."
-)
-st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
-is_expert = mode == "전문가"
-is_tutorial = not is_expert
-if prev_mode != st.session_state["mode"] and is_tutorial:
+if "step0_completed" not in st.session_state:
+    st.session_state["step0_completed"] = False
+if not st.session_state["step0_completed"]:
     st.session_state["tutorial_step"] = 0
+prev_mode = st.session_state.get("mode")
+is_expert = st.session_state.get("mode") == "expert"
+is_tutorial = not is_expert
 
 if st.session_state.get("apply_target_scenario"):
     target_payload = {
@@ -1159,125 +1154,147 @@ if st.session_state.get("apply_upbit_baseline"):
 
 
 st.sidebar.markdown("---")
-if is_tutorial:
+total_steps = 6
+current_step = int(st.session_state.get("tutorial_step", 0))
+current_step = max(0, min(total_steps - 1, current_step))
+if not st.session_state.get("step0_completed"):
+    current_step = 0
+st.session_state["tutorial_step"] = current_step
+
+if current_step == 0:
+    st.session_state["step0_completed"] = False
+    st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
     st.sidebar.info(
-        "🔰 초보자 모드 시작 안내\n"
-        "- 진행 순서: 프로젝트 기본 → 목표 → 공급 → 수요 → 시장 → 방어\n"
-        "- 핵심 7개만 설정: 목표 가격, 계약 시나리오, 초기 유통량, "
-        "언본딩 기간, 전환율, 평균 매수액, 월간 바이백 예산\n"
-        "- 나머지(오더북/회전율/캡/심리 등)는 안정적인 기본값으로 자동 적용됩니다."
+        "상장 심사에서 가장 먼저 보는 기본 요건입니다. "
+        "정량(유통/언락)과 정성(Audit/법률/백서)을 먼저 체크합니다."
     )
-    total_steps = 6
-    current_step = int(st.session_state.get("tutorial_step", 0))
-    current_step = max(0, min(total_steps - 1, current_step))
-    st.session_state["tutorial_step"] = current_step
+    st.sidebar.caption("필수 서류가 미준비면 심사 접수 자체가 불가능합니다.")
+    st.sidebar.button(
+        "⏭️ Step 0 건너뛰기",
+        on_click=lambda: (
+            st.session_state.__setitem__("step0_completed", True),
+            st.session_state.__setitem__("tutorial_step", 1)
+        )
+    )
+    if st.sidebar.button("다음 ➡"):
+        st.session_state["step0_completed"] = True
+        st.session_state["tutorial_step"] = 1
+        st.rerun()
+else:
+    mode = st.sidebar.radio(
+        "모드 선택",
+        options=["초보자", "전문가"],
+        index=0 if st.session_state.get("mode") == "tutorial" else 1,
+        help="초보자는 핵심 7개만, 전문가는 상세 설정까지 봅니다."
+    )
+    st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
+    is_expert = st.session_state["mode"] == "expert"
+    is_tutorial = not is_expert
+
     st.sidebar.progress((current_step + 1) / total_steps)
     st.sidebar.caption(f"Step {current_step} / {total_steps - 1}")
 
-    if current_step == 0:
-        st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
+    if is_tutorial:
         st.sidebar.info(
-            "상장 심사에서 가장 먼저 보는 기본 요건입니다. "
-            "정량(유통/언락)과 정성(Audit/법률/백서)을 먼저 체크합니다."
+            "🔰 초보자 모드 시작 안내\n"
+            "- 진행 순서: 프로젝트 기본 → 목표 → 공급 → 수요 → 시장 → 방어\n"
+            "- 핵심 7개만 설정: 목표 가격, 계약 시나리오, 초기 유통량, "
+            "언본딩 기간, 전환율, 평균 매수액, 월간 바이백 예산\n"
+            "- 나머지(오더북/회전율/캡/심리 등)는 안정적인 기본값으로 자동 적용됩니다."
         )
-        st.sidebar.caption("필수 서류가 미준비면 심사 접수 자체가 불가능합니다.")
-        st.sidebar.button("⏭️ Step 0 건너뛰기", on_click=lambda: st.session_state.__setitem__("tutorial_step", 1))
-        if st.sidebar.button("다음 ➡"):
-            st.session_state["tutorial_step"] = 1
-            st.rerun()
-    elif current_step == 1:
-        st.sidebar.subheader("🎯 Step 1. 목표 설정")
-        st.sidebar.info(
-            "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
-            "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
-        )
-        target_price = st.sidebar.number_input("목표 가격 ($)", min_value=0.1, value=5.0, step=0.1, key="tutorial_target_price")
-        contract_mode = st.sidebar.selectbox(
-            "계약 시나리오",
-            options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
-            index=0,
-            key="contract_mode"
-        )
-    elif current_step == 2:
-        st.sidebar.subheader("📉 Step 2. 공급 제한 (Risk 관리)")
-        st.sidebar.info(
-            "시장에 풀리는 물량을 제한해야 가격을 방어할 수 있습니다. "
-            "초기 유통량 3% 이하 + 언본딩 지연이 핵심입니다."
-        )
-        input_supply = st.sidebar.slider(
-            "초기 유통량 (%)",
-            min_value=0.0,
-            max_value=max(0.1, min(100.0, pre_circ_ratio)),
-            value=min(st.session_state.get("input_supply", 3.0), 10.0),
-            step=0.5,
-            key="input_supply"
-        )
-        if input_supply > 3.0:
-            st.sidebar.error("🚨 법적 리스크 발생: 초기 유통량은 3%를 초과할 수 없습니다.")
-        input_unbonding = st.sidebar.slider(
-            "언본딩 기간 (일)",
-            min_value=0,
-            max_value=60,
-            value=int(st.session_state.get("input_unbonding", 30)),
-            step=5,
-            key="input_unbonding"
-        )
-        input_sell_ratio = st.session_state.get("input_sell_ratio", 30)
-    elif current_step == 3:
-        st.sidebar.subheader("📈 Step 3. 수요 견인 (Growth)")
-        st.sidebar.info(
-            "유입 전환율과 객단가가 월간 매수 파워를 결정합니다. "
-            "기본 매수 유입은 튜토리얼에서 자동값을 사용합니다."
-        )
-        conversion_rate = st.sidebar.slider(
-            "거래소 유입 전환율 (%)",
-            min_value=0.01,
-            max_value=2.00,
-            value=float(st.session_state.get("conversion_rate", 0.10)),
-            step=0.01,
-            format="%.2f%%",
-            key="conversion_rate"
-        )
-        avg_ticket = st.sidebar.number_input(
-            "1인당 평균 매수액 ($)",
-            value=float(st.session_state.get("avg_ticket", 100.0)),
-            step=10.0,
-            key="avg_ticket"
-        )
-        estv_total_users = 160_000_000
-        calculated_inflow = (estv_total_users * (conversion_rate / 100.0) * avg_ticket) / 12.0
-        st.sidebar.metric("월간 매수 파워", f"${calculated_inflow:,.0f}")
-    elif current_step == 4:
-        st.sidebar.subheader("🏗️ Step 4. 시장 깊이 (Volatility)")
-        st.sidebar.info(
-            "오더북이 얇으면 작은 매도에도 가격이 크게 흔들립니다. "
-            "튜토리얼에서는 오더북 체력을 기본값(보통)으로 자동 설정합니다."
-        )
-        st.sidebar.caption("전문가 모드에서 오더북 깊이를 직접 조정할 수 있습니다.")
-    else:
-        st.sidebar.subheader("🛡️ Step 5. 방어 정책 및 실행")
-        st.sidebar.info(
-            "급락 시 사용할 바이백 예산을 설정합니다. "
-            "소각 수수료율 등 세부 정책은 기본값으로 자동 적용됩니다."
-        )
-        monthly_buyback_usdt = st.sidebar.number_input(
-            "월간 바이백 예산($)",
-            value=int(st.session_state.get("monthly_buyback_usdt", 0)),
-            step=100000,
-            key="monthly_buyback_usdt"
-        )
-        st.sidebar.button("🚀 시뮬레이션 결과 확인하기")
 
-    if current_step != 0:
-        nav_cols = st.sidebar.columns(2)
-        with nav_cols[0]:
-            if st.button("⬅ 이전", disabled=current_step == 0):
-                st.session_state["tutorial_step"] = current_step - 1
-                st.rerun()
-        with nav_cols[1]:
-            if st.button("다음 ➡", disabled=current_step == total_steps - 1):
-                st.session_state["tutorial_step"] = current_step + 1
-                st.rerun()
+        if current_step == 1:
+            st.sidebar.subheader("🎯 Step 1. 목표 설정")
+            st.sidebar.info(
+                "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
+                "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
+            )
+            target_price = st.sidebar.number_input("목표 가격 ($)", min_value=0.1, value=5.0, step=0.1, key="tutorial_target_price")
+            contract_mode = st.sidebar.selectbox(
+                "계약 시나리오",
+                options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
+                index=0,
+                key="contract_mode"
+            )
+        elif current_step == 2:
+            st.sidebar.subheader("📉 Step 2. 공급 제한 (Risk 관리)")
+            st.sidebar.info(
+                "시장에 풀리는 물량을 제한해야 가격을 방어할 수 있습니다. "
+                "초기 유통량 3% 이하 + 언본딩 지연이 핵심입니다."
+            )
+            input_supply = st.sidebar.slider(
+                "초기 유통량 (%)",
+                min_value=0.0,
+                max_value=max(0.1, min(100.0, pre_circ_ratio)),
+                value=min(st.session_state.get("input_supply", 3.0), 10.0),
+                step=0.5,
+                key="input_supply"
+            )
+            if input_supply > 3.0:
+                st.sidebar.error("🚨 법적 리스크 발생: 초기 유통량은 3%를 초과할 수 없습니다.")
+            input_unbonding = st.sidebar.slider(
+                "언본딩 기간 (일)",
+                min_value=0,
+                max_value=60,
+                value=int(st.session_state.get("input_unbonding", 30)),
+                step=5,
+                key="input_unbonding"
+            )
+            input_sell_ratio = st.session_state.get("input_sell_ratio", 30)
+        elif current_step == 3:
+            st.sidebar.subheader("📈 Step 3. 수요 견인 (Growth)")
+            st.sidebar.info(
+                "유입 전환율과 객단가가 월간 매수 파워를 결정합니다. "
+                "기본 매수 유입은 튜토리얼에서 자동값을 사용합니다."
+            )
+            conversion_rate = st.sidebar.slider(
+                "거래소 유입 전환율 (%)",
+                min_value=0.01,
+                max_value=2.00,
+                value=float(st.session_state.get("conversion_rate", 0.10)),
+                step=0.01,
+                format="%.2f%%",
+                key="conversion_rate"
+            )
+            avg_ticket = st.sidebar.number_input(
+                "1인당 평균 매수액 ($)",
+                value=float(st.session_state.get("avg_ticket", 100.0)),
+                step=10.0,
+                key="avg_ticket"
+            )
+            estv_total_users = 160_000_000
+            calculated_inflow = (estv_total_users * (conversion_rate / 100.0) * avg_ticket) / 12.0
+            st.sidebar.metric("월간 매수 파워", f"${calculated_inflow:,.0f}")
+        elif current_step == 4:
+            st.sidebar.subheader("🏗️ Step 4. 시장 깊이 (Volatility)")
+            st.sidebar.info(
+                "오더북이 얇으면 작은 매도에도 가격이 크게 흔들립니다. "
+                "튜토리얼에서는 오더북 체력을 기본값(보통)으로 자동 설정합니다."
+            )
+            st.sidebar.caption("전문가 모드에서 오더북 깊이를 직접 조정할 수 있습니다.")
+        else:
+            st.sidebar.subheader("🛡️ Step 5. 방어 정책 및 실행")
+            st.sidebar.info(
+                "급락 시 사용할 바이백 예산을 설정합니다. "
+                "소각 수수료율 등 세부 정책은 기본값으로 자동 적용됩니다."
+            )
+            monthly_buyback_usdt = st.sidebar.number_input(
+                "월간 바이백 예산($)",
+                value=int(st.session_state.get("monthly_buyback_usdt", 0)),
+                step=100000,
+                key="monthly_buyback_usdt"
+            )
+            st.sidebar.button("🚀 시뮬레이션 결과 확인하기")
+
+    nav_cols = st.sidebar.columns(2)
+    with nav_cols[0]:
+        if st.button("⬅ 이전"):
+            st.session_state["tutorial_step"] = max(0, current_step - 1)
+            st.rerun()
+    with nav_cols[1]:
+        if st.button("다음 ➡", disabled=current_step == total_steps - 1):
+            st.session_state["tutorial_step"] = current_step + 1
+            st.rerun()
 
     # Tutorial defaults for hidden fields
     contract_mode = st.session_state.get("contract_mode", "사용자 조정")
@@ -1356,7 +1373,7 @@ if is_tutorial:
     enable_confidence = False
     show_upbit_baseline = False
     krw_per_usd = 1300
-else:
+if is_expert and current_step > 0:
     st.sidebar.info(
         "⚙️ 전문가 모드 안내\n"
         "- 모든 변수를 직접 조정합니다.\n"
@@ -2147,7 +2164,7 @@ if use_master_plan:
         }
     ]
 
-if is_expert:
+if is_expert and current_step > 0:
     st.sidebar.markdown("---")
     st.sidebar.header("📊 분석/비교")
     st.sidebar.subheader("✅ 가격 변동추이 신뢰도")
