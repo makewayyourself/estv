@@ -338,11 +338,11 @@ class TokenSimulationEngine:
                 )
             else:
                 pool_token += total_sell
-            usdt_out = pool_usdt - (k_constant / pool_token)
-            pool_usdt -= usdt_out
+                usdt_out = pool_usdt - (k_constant / pool_token)
+                pool_usdt -= usdt_out
                 pool_usdt += (step_buy + step_turnover_buy)
-            token_out = pool_token - (k_constant / pool_usdt)
-            pool_token -= token_out
+                token_out = pool_token - (k_constant / pool_usdt)
+                pool_token -= token_out
             
             current_price = pool_usdt / pool_token
             if price_model in ["CEX", "HYBRID"]:
