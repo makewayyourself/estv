@@ -8,6 +8,8 @@ import math
 import json
 import os
 
+# NOTE: Streamlit Cloud redeploy trigger (no functional change)
+
 # ==========================================
 # 1. 시뮬레이션 엔진 클래스 (핵심 로직)
 # ==========================================
