@@ -54,6 +54,29 @@ def apply_fomo_buy(base_buy, current_price, prev_price, config):
     return base_buy
 
 
+def check_red_flags(total_supply, pre_circulated, unlocked, holders):
+    warnings = []
+    safe_supply = max(float(total_supply), 1.0)
+    circ_ratio = (float(pre_circulated) / safe_supply) * 100.0
+    if circ_ratio > 30:
+        warnings.append({
+            "level": "CRITICAL",
+            "msg": f"🚨 초기 유통량({circ_ratio:.1f}%) 과다! 거래소는 15% 미만을 선호합니다."
+        })
+    unlock_ratio = (float(unlocked) / float(pre_circulated) * 100.0) if pre_circulated > 0 else 0.0
+    if unlock_ratio > 50:
+        warnings.append({
+            "level": "DANGER",
+            "msg": f"💣 기유통 물량의 {unlock_ratio:.1f}%가 언락 상태입니다. 상장 직후 투매가 발생합니다."
+        })
+    if int(holders) < 500:
+        warnings.append({
+            "level": "WARNING",
+            "msg": "👻 홀더 수가 너무 적습니다 (<500명). 최소한의 커뮤니티 빌딩이 필요합니다."
+        })
+    return warnings
+
+
 def create_ramp_schedule(target_users, ramp_months, total_months, avg_ticket):
     daily_schedule = []
     days_per_month = 30
@@ -832,6 +855,52 @@ if legal_supply > 3.0:
     st.sidebar.error("🚨 [Legal Check] 초기 유통량 3% 초과")
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
+st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
+symbol = st.sidebar.text_input(
+    "코인 심볼",
+    value=st.session_state.get("project_symbol", "ESTV"),
+    key="project_symbol"
+)
+total_supply_input = st.sidebar.number_input(
+    "총 발행량 (Total Supply)",
+    min_value=1.0,
+    value=float(st.session_state.get("project_total_supply", 1_000_000_000)),
+    step=1_000_000.0,
+    key="project_total_supply",
+    help="프로젝트의 총 발행량입니다."
+)
+pre_circulated = st.sidebar.number_input(
+    "현재 유통량 (Pre-circulated)",
+    min_value=0.0,
+    value=float(st.session_state.get("project_pre_circulated", 0.0)),
+    step=1_000_000.0,
+    key="project_pre_circulated",
+    help="재단 지갑을 떠나 외부로 나간 물량입니다."
+)
+unlocked = st.sidebar.number_input(
+    "언락 물량 (Unlocked)",
+    min_value=0.0,
+    value=float(st.session_state.get("project_unlocked", 0.0)),
+    step=1_000_000.0,
+    key="project_unlocked",
+    help="현재 유통량 중 즉시 매도 가능한 물량입니다."
+)
+holders = st.sidebar.number_input(
+    "보유자 수 (Holders)",
+    min_value=0,
+    value=int(st.session_state.get("project_holders", 0)),
+    step=100,
+    key="project_holders",
+    help="현재 코인을 보유한 지갑 수입니다."
+)
+for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, holders):
+    if warn["level"] == "CRITICAL":
+        st.sidebar.error(warn["msg"])
+    elif warn["level"] == "DANGER":
+        st.sidebar.warning(warn["msg"])
+    else:
+        st.sidebar.warning(warn["msg"])
+
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
 if "tutorial_step" not in st.session_state:
