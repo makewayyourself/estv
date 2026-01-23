@@ -27,6 +27,16 @@ def calculate_dynamic_sell_pressure(base_ratio, current_price, price_history, co
     return max(0.0, base_ratio * lock_factor)
 
 
+def get_investor_decision(daily_unlock, current_price, config):
+    private_sale_price = max(config.get('private_sale_price', 0.05), 1e-9)
+    roi = current_price / private_sale_price
+    if roi < 1.1:
+        return daily_unlock * 0.1
+    if roi > config.get('profit_taking_multiple', 5.0):
+        return daily_unlock * 2.0
+    return daily_unlock
+
+
 class TokenSimulationEngine:
     def __init__(self):
         self.TOTAL_SUPPLY = 1_000_000_000
@@ -168,7 +178,7 @@ class TokenSimulationEngine:
             target_day = day_index + delay_days
             if target_day < len(sell_queue):
                 sell_queue[target_day] += daily_unlock * inputs['sell_pressure_ratio']
-                sell_queue_initial[target_day] += daily_initial_unlock * initial_investor_sell_ratio
+                sell_queue_initial[target_day] += daily_initial_unlock
 
             remaining_sell = sell_queue[day_index]
             remaining_initial_sell = sell_queue_initial[day_index]
@@ -266,10 +276,14 @@ class TokenSimulationEngine:
             if base_sell_ratio > 0:
                 sell_ratio_scale = effective_sell_pressure / base_sell_ratio
             step_sell = remaining_sell * sell_ratio_scale
-            initial_sell_scale = 1.0
-            if current_price <= private_sale_price:
-                initial_sell_scale = 0.0
-            step_sell += remaining_initial_sell * initial_sell_scale
+            investor_sell = get_investor_decision(
+                remaining_initial_sell * initial_investor_sell_ratio,
+                current_price,
+                market_cfg
+            )
+            investor_sell = min(investor_sell, initial_investor_remaining)
+            step_sell += investor_sell
+            initial_investor_remaining = max(initial_investor_remaining - investor_sell, 0.0)
             daily_user_buy = 0.0
             if day_index < len(daily_user_buy_schedule):
                 daily_user_buy = daily_user_buy_schedule[day_index]
