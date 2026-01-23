@@ -1180,6 +1180,7 @@ if current_step == 0:
         st.session_state["step0_completed"] = True
         st.session_state["tutorial_step"] = 1
         st.rerun()
+    st.stop()
 else:
     mode = st.sidebar.radio(
         "모드 선택",
