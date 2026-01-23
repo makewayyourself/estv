@@ -1296,6 +1296,9 @@ else:
             st.session_state["tutorial_step"] = current_step + 1
             st.rerun()
 
+    if not st.session_state.get("step0_completed", False):
+        st.stop()
+
     # Tutorial defaults for hidden fields
     contract_mode = st.session_state.get("contract_mode", "사용자 조정")
     input_supply = st.session_state.get("input_supply", 3.0)
