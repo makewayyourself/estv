@@ -948,85 +948,99 @@ with top_controls[1]:
         st.rerun()
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
-st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
-symbol = st.sidebar.text_input(
-    "코인 심볼",
-    value=st.session_state.get("project_symbol", "ESTV"),
-    key="project_symbol"
-)
-total_supply_input = st.sidebar.number_input(
-    "총 발행량 (Total Supply)",
-    min_value=1.0,
-    value=float(st.session_state.get("project_total_supply", 1_000_000_000)),
-    step=1_000_000.0,
-    key="project_total_supply",
-    help="프로젝트의 총 발행량입니다."
-)
-pre_circulated = st.sidebar.number_input(
-    "현재 유통량 (Pre-circulated)",
-    min_value=0.0,
-    value=float(st.session_state.get("project_pre_circulated", 0.0)),
-    step=1_000_000.0,
-    key="project_pre_circulated",
-    help="재단 지갑을 떠나 외부로 나간 물량입니다."
-)
-unlocked = st.sidebar.number_input(
-    "언락 물량 (Unlocked)",
-    min_value=0.0,
-    value=float(st.session_state.get("project_unlocked", 0.0)),
-    step=1_000_000.0,
-    key="project_unlocked",
-    help="현재 유통량 중 즉시 매도 가능한 물량입니다."
-)
-holders = st.sidebar.number_input(
-    "보유자 수 (Holders)",
-    min_value=0,
-    value=int(st.session_state.get("project_holders", 0)),
-    step=100,
-    key="project_holders",
-    help="현재 코인을 보유한 지갑 수입니다."
-)
-target_tier = st.sidebar.selectbox(
-    "목표로 하는 거래소 등급은 무엇입니까?",
-    options=[
-        "Tier 1 (Binance, Upbit, Coinbase) - Hell",
-        "Tier 2 (Bybit, Gate.io, KuCoin) - Hard",
-        "Tier 3 (Small CEX) - Normal",
-        "DEX (Uniswap only) - Easy"
-    ],
-    index=1,
-    key="target_tier"
-)
-project_type = st.sidebar.selectbox(
-    "프로젝트 유형",
-    ["유틸리티(Platform)", "DeFi/DAO", "NFT/P2E", "Meme(밈)", "단순 결제형"],
-    index=0,
-    key="project_type"
-)
-audit_status = st.sidebar.selectbox(
-    "보안 감사(Audit) 여부",
-    ["완료 (Tier 1 - CertiK 등)", "완료 (Tier 2)", "진행 중", "미진행"],
-    index=3,
-    key="audit_status"
-)
-concentration_ratio = st.sidebar.slider(
-    "상위 10인 지갑 보유 비중 (%)",
-    min_value=0.0,
-    max_value=100.0,
-    value=float(st.session_state.get("concentration_ratio", 0.0)),
-    step=1.0,
-    key="concentration_ratio"
-)
-has_legal_opinion = st.sidebar.checkbox(
-    "증권성 검토 법률 의견서 보유",
-    value=bool(st.session_state.get("has_legal_opinion", False)),
-    key="has_legal_opinion"
-)
-has_whitepaper = st.sidebar.checkbox(
-    "백서 및 유통량 계획표 완비",
-    value=bool(st.session_state.get("has_whitepaper", False)),
-    key="has_whitepaper"
-)
+step0_visible = st.session_state.get("tutorial_step", 0) == 0 and not st.session_state.get("step0_completed", False)
+if step0_visible:
+    st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
+    symbol = st.sidebar.text_input(
+        "코인 심볼",
+        value=st.session_state.get("project_symbol", "ESTV"),
+        key="project_symbol"
+    )
+    total_supply_input = st.sidebar.number_input(
+        "총 발행량 (Total Supply)",
+        min_value=1.0,
+        value=float(st.session_state.get("project_total_supply", 1_000_000_000)),
+        step=1_000_000.0,
+        key="project_total_supply",
+        help="프로젝트의 총 발행량입니다."
+    )
+    pre_circulated = st.sidebar.number_input(
+        "현재 유통량 (Pre-circulated)",
+        min_value=0.0,
+        value=float(st.session_state.get("project_pre_circulated", 0.0)),
+        step=1_000_000.0,
+        key="project_pre_circulated",
+        help="재단 지갑을 떠나 외부로 나간 물량입니다."
+    )
+    unlocked = st.sidebar.number_input(
+        "언락 물량 (Unlocked)",
+        min_value=0.0,
+        value=float(st.session_state.get("project_unlocked", 0.0)),
+        step=1_000_000.0,
+        key="project_unlocked",
+        help="현재 유통량 중 즉시 매도 가능한 물량입니다."
+    )
+    holders = st.sidebar.number_input(
+        "보유자 수 (Holders)",
+        min_value=0,
+        value=int(st.session_state.get("project_holders", 0)),
+        step=100,
+        key="project_holders",
+        help="현재 코인을 보유한 지갑 수입니다."
+    )
+    target_tier = st.sidebar.selectbox(
+        "목표로 하는 거래소 등급은 무엇입니까?",
+        options=[
+            "Tier 1 (Binance, Upbit, Coinbase) - Hell",
+            "Tier 2 (Bybit, Gate.io, KuCoin) - Hard",
+            "Tier 3 (Small CEX) - Normal",
+            "DEX (Uniswap only) - Easy"
+        ],
+        index=1,
+        key="target_tier"
+    )
+    project_type = st.sidebar.selectbox(
+        "프로젝트 유형",
+        ["유틸리티(Platform)", "DeFi/DAO", "NFT/P2E", "Meme(밈)", "단순 결제형"],
+        index=0,
+        key="project_type"
+    )
+    audit_status = st.sidebar.selectbox(
+        "보안 감사(Audit) 여부",
+        ["완료 (Tier 1 - CertiK 등)", "완료 (Tier 2)", "진행 중", "미진행"],
+        index=3,
+        key="audit_status"
+    )
+    concentration_ratio = st.sidebar.slider(
+        "상위 10인 지갑 보유 비중 (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=float(st.session_state.get("concentration_ratio", 0.0)),
+        step=1.0,
+        key="concentration_ratio"
+    )
+    has_legal_opinion = st.sidebar.checkbox(
+        "증권성 검토 법률 의견서 보유",
+        value=bool(st.session_state.get("has_legal_opinion", False)),
+        key="has_legal_opinion"
+    )
+    has_whitepaper = st.sidebar.checkbox(
+        "백서 및 유통량 계획표 완비",
+        value=bool(st.session_state.get("has_whitepaper", False)),
+        key="has_whitepaper"
+    )
+else:
+    symbol = st.session_state.get("project_symbol", "ESTV")
+    total_supply_input = float(st.session_state.get("project_total_supply", 1_000_000_000))
+    pre_circulated = float(st.session_state.get("project_pre_circulated", 0.0))
+    unlocked = float(st.session_state.get("project_unlocked", 0.0))
+    holders = int(st.session_state.get("project_holders", 0))
+    target_tier = st.session_state.get("target_tier", "Tier 2 (Bybit, Gate.io, KuCoin) - Hard")
+    project_type = st.session_state.get("project_type", "유틸리티(Platform)")
+    audit_status = st.session_state.get("audit_status", "미진행")
+    concentration_ratio = float(st.session_state.get("concentration_ratio", 0.0))
+    has_legal_opinion = bool(st.session_state.get("has_legal_opinion", False))
+    has_whitepaper = bool(st.session_state.get("has_whitepaper", False))
 if target_tier.startswith("Tier 1"):
     target_tier_key = "Tier 1"
 elif target_tier.startswith("Tier 2"):
