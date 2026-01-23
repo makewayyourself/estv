@@ -8,6 +8,29 @@ import math
 import json
 import os
 
+COIN_TYPE_VOLATILITY = {
+    "New Listing (신규 상장)": {
+        "default": 1.6,
+        "range": "1.2~2.2",
+        "desc": "상장 초기 변동성이 높아 급등락이 잦습니다."
+    },
+    "Major (비트/이더)": {
+        "default": 0.6,
+        "range": "0.3~1.0",
+        "desc": "유동성이 깊어 상대적으로 안정적인 움직임을 보입니다."
+    },
+    "Major Alts (메이저 알트)": {
+        "default": 1.0,
+        "range": "0.6~1.6",
+        "desc": "중간 수준의 변동성을 가진 대표 알트 구간입니다."
+    },
+    "Meme/Low Cap (밈/잡코인)": {
+        "default": 2.3,
+        "range": "1.6~3.0",
+        "desc": "유동성 얕고 투기성이 강해 변동성이 극단적입니다."
+    }
+}
+
 # NOTE: Streamlit Cloud redeploy trigger (no functional change)
 
 # ==========================================
@@ -131,13 +154,21 @@ def check_comprehensive_red_flags(inputs):
     return warnings
 
 
-def create_ramp_schedule(target_users, ramp_months, total_months, avg_ticket):
+def create_realistic_schedule(
+    target_users,
+    ramp_months,
+    total_months,
+    avg_ticket,
+    volatility,
+    use_weekend_effect=True
+):
     daily_schedule = []
     days_per_month = 30
     total_days = max(1, int(total_months * days_per_month))
     safe_ramp = max(1, int(ramp_months))
     safe_target = max(0.0, float(target_users))
     safe_ticket = max(0.0, float(avg_ticket))
+    safe_volatility = max(0.0, float(volatility))
 
     for day in range(total_days):
         current_month = day / days_per_month
@@ -146,8 +177,22 @@ def create_ramp_schedule(target_users, ramp_months, total_months, avg_ticket):
             monthly_users = safe_target * growth_factor
         else:
             monthly_users = safe_target
-        daily_usd = (monthly_users * safe_ticket) / days_per_month
-        daily_schedule.append(daily_usd)
+
+        base_daily_usd = (monthly_users * safe_ticket) / days_per_month
+
+        noise = np.random.normal(loc=1.0, scale=safe_volatility)
+        noise = max(0.1, noise)
+
+        weekend_factor = 1.0
+        if use_weekend_effect:
+            day_of_week = day % 7
+            if day_of_week >= 5:
+                weekend_factor = np.random.uniform(0.6, 0.75)
+            else:
+                weekend_factor = np.random.uniform(1.0, 1.1)
+
+        final_daily_usd = base_daily_usd * noise * weekend_factor
+        daily_schedule.append(final_daily_usd)
 
     return daily_schedule
 
@@ -930,8 +975,9 @@ if st.session_state.get("show_user_manual"):
 
 
 # 사이드바: 사용자 입력 컨트롤
+step0_visible = st.session_state.get("tutorial_step", 0) == 0 and not st.session_state.get("step0_completed", False)
 legal_supply = st.session_state.get("input_supply", 3.0)
-if legal_supply > 3.0:
+if legal_supply > 3.0 and step0_visible:
     st.sidebar.error("🚨 [Legal Check] 초기 유통량 3% 초과")
 
 def toggle_user_manual():
@@ -948,7 +994,6 @@ with top_controls[1]:
         st.rerun()
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
-step0_visible = st.session_state.get("tutorial_step", 0) == 0 and not st.session_state.get("step0_completed", False)
 if step0_visible:
     st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
     symbol = st.sidebar.text_input(
@@ -1001,7 +1046,12 @@ if step0_visible:
     )
     project_type = st.sidebar.selectbox(
         "프로젝트 유형",
-        ["유틸리티(Platform)", "DeFi/DAO", "NFT/P2E", "Meme(밈)", "단순 결제형"],
+        [
+            "New Listing (신규 상장)",
+            "Major (비트/이더)",
+            "Major Alts (메이저 알트)",
+            "Meme/Low Cap (밈/잡코인)"
+        ],
         index=0,
         key="project_type"
     )
@@ -1036,7 +1086,7 @@ else:
     unlocked = float(st.session_state.get("project_unlocked", 0.0))
     holders = int(st.session_state.get("project_holders", 0))
     target_tier = st.session_state.get("target_tier", "Tier 2 (Bybit, Gate.io, KuCoin) - Hard")
-    project_type = st.session_state.get("project_type", "유틸리티(Platform)")
+    project_type = st.session_state.get("project_type", "New Listing (신규 상장)")
     audit_status = st.session_state.get("audit_status", "미진행")
     concentration_ratio = float(st.session_state.get("concentration_ratio", 0.0))
     has_legal_opinion = bool(st.session_state.get("has_legal_opinion", False))
@@ -1050,67 +1100,68 @@ elif target_tier.startswith("Tier 3"):
 else:
     target_tier_key = "DEX"
 pre_circ_ratio = (pre_circulated / total_supply_input * 100.0) if total_supply_input > 0 else 0.0
-red_flag_inputs = {
-    "total_supply": total_supply_input,
-    "pre_circulated": pre_circulated,
-    "unlocked": unlocked,
-    "target_tier": target_tier_key,
-    "holders": holders,
-    "project_type": project_type,
-    "audit_status": audit_status,
-    "concentration_ratio": concentration_ratio,
-    "has_legal_opinion": has_legal_opinion,
-    "has_whitepaper": has_whitepaper
-}
-for warn in check_comprehensive_red_flags(red_flag_inputs):
-    if warn["level"] == "CRITICAL":
-        st.sidebar.error(warn["msg"])
-    elif warn["level"] == "DANGER":
-        st.sidebar.warning(warn["msg"])
+if step0_visible:
+    red_flag_inputs = {
+        "total_supply": total_supply_input,
+        "pre_circulated": pre_circulated,
+        "unlocked": unlocked,
+        "target_tier": target_tier_key,
+        "holders": holders,
+        "project_type": project_type,
+        "audit_status": audit_status,
+        "concentration_ratio": concentration_ratio,
+        "has_legal_opinion": has_legal_opinion,
+        "has_whitepaper": has_whitepaper
+    }
+    for warn in check_comprehensive_red_flags(red_flag_inputs):
+        if warn["level"] == "CRITICAL":
+            st.sidebar.error(warn["msg"])
+        elif warn["level"] == "DANGER":
+            st.sidebar.warning(warn["msg"])
+        else:
+            st.sidebar.warning(warn["msg"])
+
+    score = 100.0
+    if pre_circ_ratio > 10:
+        score -= (pre_circ_ratio - 10) * 1.0
+    unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
+    if unlock_ratio > 20:
+        score -= (unlock_ratio - 20) * 2.0
+    holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
+    score -= (100 - holder_score) * 0.2
+    if audit_status == "미진행":
+        score -= 30
+    if not has_legal_opinion:
+        score -= 30
+    if not has_whitepaper:
+        score -= 30
+    score = max(0.0, min(100.0, score))
+    if score >= 80:
+        grade = "양호"
+    elif score >= 60:
+        grade = "주의"
     else:
-        st.sidebar.warning(warn["msg"])
+        grade = "거절 위험"
+    scorecard_help = (
+        "거래소는 수수료보다 신뢰를 먼저 봅니다. 신뢰가 무너지면 뱅크런이 발생합니다.\n"
+        "즉시 거절되는 3대 리스크: 덤핑 구조(과도한 초기 유통/물량 집중), "
+        "유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
+        "내부 심사는 덤핑 테스트/유동성 스트레스 테스트로 진행되며 회복 불가 판정이면 거절·상폐됩니다.\n"
+        "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
+        "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
+    )
+    score_cols = st.sidebar.columns([5, 1])
+    score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
+    with score_cols[1].popover("?", use_container_width=True):
+        st.markdown(scorecard_help)
 
-score = 100.0
-if pre_circ_ratio > 10:
-    score -= (pre_circ_ratio - 10) * 1.0
-unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
-if unlock_ratio > 20:
-    score -= (unlock_ratio - 20) * 2.0
-holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
-score -= (100 - holder_score) * 0.2
-if audit_status == "미진행":
-    score -= 30
-if not has_legal_opinion:
-    score -= 30
-if not has_whitepaper:
-    score -= 30
-score = max(0.0, min(100.0, score))
-if score >= 80:
-    grade = "양호"
-elif score >= 60:
-    grade = "주의"
-else:
-    grade = "거절 위험"
-scorecard_help = (
-    "거래소는 수수료보다 신뢰를 먼저 봅니다. 신뢰가 무너지면 뱅크런이 발생합니다.\n"
-    "즉시 거절되는 3대 리스크: 덤핑 구조(과도한 초기 유통/물량 집중), "
-    "유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
-    "내부 심사는 덤핑 테스트/유동성 스트레스 테스트로 진행되며 회복 불가 판정이면 거절·상폐됩니다.\n"
-    "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
-    "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
-)
-score_cols = st.sidebar.columns([5, 1])
-score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
-with score_cols[1].popover("?", use_container_width=True):
-    st.markdown(scorecard_help)
-
-score_msg = f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})"
-if grade == "거절 위험":
-    st.sidebar.error(score_msg)
-elif grade == "주의":
-    st.sidebar.warning(score_msg)
-else:
-    st.sidebar.info(score_msg)
+    score_msg = f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})"
+    if grade == "거절 위험":
+        st.sidebar.error(score_msg)
+    elif grade == "주의":
+        st.sidebar.warning(score_msg)
+    else:
+        st.sidebar.info(score_msg)
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
@@ -1335,7 +1386,19 @@ else:
     monthly_user_buy_volume = total_inflow_money / onboarding_months
     total_inflow_days = onboarding_months * 30
     base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
-    daily_user_buy_schedule = [base_daily_user_buy if d < total_inflow_days else 0.0 for d in range(total_days)]
+    selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
+    ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
+    schedule_volatility = float(st.session_state.get("volume_volatility", ref_data["default"]))
+    schedule_weekend = bool(st.session_state.get("weekend_dip", True))
+    monthly_user_target = total_new_buyers / max(onboarding_months, 1)
+    daily_user_buy_schedule = create_realistic_schedule(
+        monthly_user_target,
+        onboarding_months,
+        simulation_months,
+        avg_ticket,
+        schedule_volatility,
+        schedule_weekend
+    )[:total_days]
     use_phase_inflow = False
     phase2_days = 30
     prelisting_days = 30
@@ -1412,7 +1475,19 @@ if step0_preview:
     monthly_user_buy_volume = total_inflow_money / onboarding_months
     total_inflow_days = onboarding_months * 30
     base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
-    daily_user_buy_schedule = [base_daily_user_buy if d < total_inflow_days else 0.0 for d in range(total_days)]
+    selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
+    ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
+    schedule_volatility = float(st.session_state.get("volume_volatility", ref_data["default"]))
+    schedule_weekend = bool(st.session_state.get("weekend_dip", True))
+    monthly_user_target = total_new_buyers / max(onboarding_months, 1)
+    daily_user_buy_schedule = create_realistic_schedule(
+        monthly_user_target,
+        onboarding_months,
+        simulation_months,
+        avg_ticket,
+        schedule_volatility,
+        schedule_weekend
+    )[:total_days]
     use_phase_inflow = False
     phase2_days = 30
     prelisting_days = 30
@@ -1840,16 +1915,28 @@ if is_expert and current_step > 0:
 
     total_sim_months = simulation_months
     if enable_dual_pipeline:
-        schedule_migration = create_ramp_schedule(
-            migration_target, migration_ramp_months, total_sim_months, avg_ticket
+        schedule_volatility = float(st.session_state.get("volume_volatility", 0.5))
+        schedule_weekend = bool(st.session_state.get("weekend_dip", True))
+        schedule_migration = create_realistic_schedule(
+            migration_target,
+            migration_ramp_months,
+            total_sim_months,
+            avg_ticket,
+            schedule_volatility,
+            schedule_weekend
         )
-        schedule_acquisition = create_ramp_schedule(
-            acquisition_target, acquisition_ramp_months, total_sim_months, avg_ticket
+        schedule_acquisition = create_realistic_schedule(
+            acquisition_target,
+            acquisition_ramp_months,
+            total_sim_months,
+            avg_ticket,
+            schedule_volatility,
+            schedule_weekend
         )
-        final_daily_schedule = [
+        final_daily_buy_schedule = [
             a + b for a, b in zip(schedule_migration, schedule_acquisition)
         ]
-        daily_user_buy_schedule = final_daily_schedule[:total_days]
+        daily_user_buy_schedule = final_daily_buy_schedule[:total_days]
         total_inflow_days = max(1, len(daily_user_buy_schedule))
         total_inflow_money = float(sum(daily_user_buy_schedule))
         monthly_user_buy_volume = float(sum(daily_user_buy_schedule[:min(30, total_inflow_days)]))
@@ -1867,10 +1954,16 @@ if is_expert and current_step > 0:
         remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
         phase3_daily = remaining_total / remaining_days
 
-        daily_user_buy_schedule = []
-        for d in range(total_days):
-            if d < total_inflow_days:
-                if use_phase_inflow:
+        selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
+        ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
+        schedule_volatility = float(st.session_state.get("volume_volatility", ref_data["default"]))
+        schedule_weekend = bool(st.session_state.get("weekend_dip", True))
+        monthly_user_target = total_new_buyers / max(onboarding_months, 1)
+
+        if use_phase_inflow:
+            daily_user_buy_schedule = []
+            for d in range(total_days):
+                if d < total_inflow_days:
                     if d < prelisting_days:
                         daily_user_buy_schedule.append(0.0)
                     elif d < prelisting_days + phase2_days:
@@ -1880,9 +1973,20 @@ if is_expert and current_step > 0:
                     else:
                         daily_user_buy_schedule.append(phase3_daily)
                 else:
-                    daily_user_buy_schedule.append(base_daily_user_buy)
-            else:
-                daily_user_buy_schedule.append(0.0)
+                    daily_user_buy_schedule.append(0.0)
+        else:
+            daily_user_buy_schedule = create_realistic_schedule(
+                monthly_user_target,
+                onboarding_months,
+                simulation_months,
+                avg_ticket,
+                schedule_volatility,
+                schedule_weekend
+            )[:total_days]
+            total_inflow_days = max(1, len(daily_user_buy_schedule))
+            total_inflow_money = float(sum(daily_user_buy_schedule))
+            monthly_user_buy_volume = float(sum(daily_user_buy_schedule[:min(30, total_inflow_days)]))
+            base_daily_user_buy = monthly_user_buy_volume / 30.0
 
     if enable_dual_pipeline:
         inflow_expander.info(
@@ -1910,6 +2014,26 @@ if is_expert and current_step > 0:
     st.sidebar.markdown("---")
     st.sidebar.header("🏗️ 시장 구조/유동성")
     market_expander = st.sidebar.expander("가격 모델 & 오더북", expanded=is_expert)
+    selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
+    ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
+    if st.session_state.get("volatility_project_type") != selected_type:
+        st.session_state["volume_volatility"] = float(ref_data["default"])
+        st.session_state["volatility_project_type"] = selected_type
+    volume_volatility = market_expander.slider(
+        "📊 거래량 변동성 (Volatility)",
+        min_value=0.1,
+        max_value=3.0,
+        value=float(st.session_state.get("volume_volatility", ref_data["default"])),
+        step=0.1,
+        help=f"선택하신 '{selected_type}'의 권장 변동성은 {ref_data['range']} 입니다.\n({ref_data['desc']})",
+        key="volume_volatility"
+    )
+    weekend_dip = market_expander.checkbox(
+        "주말 거래량 감소 반영",
+        value=bool(st.session_state.get("weekend_dip", True)),
+        key="weekend_dip",
+        help="주말 거래량 감소를 반영해 일시적 수요 약화를 시뮬레이션합니다."
+    )
     price_model = market_expander.selectbox(
         "가격 모델",
         options=["AMM", "CEX", "HYBRID"],
@@ -2374,6 +2498,8 @@ inputs = {
     'burn_fee_rate': burn_fee_rate / 100.0,
     'monthly_buyback_usdt': monthly_buyback_usdt,
     'market_sentiment_config': market_sentiment_config,
+    'volume_volatility': st.session_state.get("volume_volatility"),
+    'weekend_dip': st.session_state.get("weekend_dip"),
     'initial_investor_allocation': initial_investor_allocation,
     'initial_investor_sell_ratio': initial_investor_sell_ratio / 100.0,
     'initial_investor_sell_usdt_schedule': initial_investor_sell_usdt_schedule,
