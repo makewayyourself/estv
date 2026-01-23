@@ -1941,7 +1941,16 @@ if go is not None:
 
         narrative_annotations = []
         whale_threshold = 1_000_000
-        for i in range(1, len(series)):
+        max_log_len = min(
+            len(log.get("sentiment_index", [])),
+            len(log.get("whale_sell_volume", [])),
+            len(log.get("liquidity_depth_ratio", [])),
+            len(log.get("marketing_trigger", [])),
+            len(log.get("buy_power_vol", [])),
+            len(log.get("normal_buy_volume", []))
+        )
+        max_idx = min(len(series), max_log_len)
+        for i in range(1, max_idx):
             prev_price = series[i - 1]
             if prev_price <= 0:
                 continue
