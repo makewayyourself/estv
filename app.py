@@ -882,13 +882,13 @@ simulation_unit = st.sidebar.selectbox(
     "4-1. 시뮬레이션 기간 단위",
     options=["일", "월", "년"],
     index=1,
-    help="기간 단위를 선택합니다.",
+    help="기간 단위를 선택합니다. 월 단위는 30일 기준으로 환산됩니다.",
     key="simulation_unit"
 )
 simulation_value = st.sidebar.number_input(
     "4-2. 시뮬레이션 기간 값",
     min_value=1,
-    value=24 if simulation_unit == "월" else 1,
+    value=1 if simulation_unit == "월" else 30,
     step=1,
     help="선택한 단위에 맞는 기간 값을 입력합니다.",
     key="simulation_value"
