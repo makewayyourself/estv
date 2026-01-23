@@ -930,7 +930,14 @@ score_cols = st.sidebar.columns([5, 1])
 score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
 with score_cols[1].popover("?", use_container_width=True):
     st.markdown(scorecard_help)
-st.sidebar.info(f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})")
+
+score_msg = f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})"
+if grade == "거절 위험":
+    st.sidebar.error(score_msg)
+elif grade == "주의":
+    st.sidebar.warning(score_msg)
+else:
+    st.sidebar.info(score_msg)
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
