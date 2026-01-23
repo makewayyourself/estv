@@ -11,6 +11,20 @@ import os
 # ==========================================
 # 1. 시뮬레이션 엔진 클래스 (핵심 로직)
 # ==========================================
+def calculate_dynamic_sell_pressure(base_ratio, current_price, price_history, config):
+    if len(price_history) < 7:
+        return base_ratio
+    ma_7 = sum(price_history[-7:]) / 7
+    if ma_7 <= 0:
+        return base_ratio
+    trend_delta = (current_price - ma_7) / ma_7
+    if trend_delta < 0:
+        panic_factor = 1 + (abs(trend_delta) * config.get('panic_sensitivity', 1.5))
+        return min(1.0, base_ratio * panic_factor)
+    lock_factor = 1 - (trend_delta * 0.5)
+    return max(0.0, base_ratio * lock_factor)
+
+
 class TokenSimulationEngine:
     def __init__(self):
         self.TOTAL_SUPPLY = 1_000_000_000
@@ -164,8 +178,6 @@ class TokenSimulationEngine:
 
             current_price = pool_usdt / pool_token
             price_change_ratio = (current_price - prev_day_price) / max(prev_day_price, 1e-9)
-            panic_multiplier = 1.0 + (panic_sensitivity * max(0.0, -price_change_ratio))
-            panic_multiplier = min(3.0, panic_multiplier)
             fomo_multiplier = 1.0 + (fomo_sensitivity * max(0.0, price_change_ratio))
             fomo_multiplier = min(3.0, fomo_multiplier)
             depth_ratio = 1.0
@@ -240,10 +252,17 @@ class TokenSimulationEngine:
                 buyback_usdt_delta += c.get("buyback_usdt_delta", 0.0)
                 max_sell_token_ratio_delta += c.get("max_sell_token_ratio_delta", 0.0)
 
-            effective_sell_pressure = max(0.0, inputs['sell_pressure_ratio'] - sell_suppression_delta)
+            base_sell_ratio = inputs['sell_pressure_ratio']
+            dynamic_sell_ratio = calculate_dynamic_sell_pressure(
+                base_sell_ratio,
+                current_price,
+                daily_price_history,
+                market_cfg
+            )
+            effective_sell_pressure = max(0.0, dynamic_sell_ratio - sell_suppression_delta)
             sell_ratio_scale = 1.0
-            if inputs['sell_pressure_ratio'] > 0:
-                sell_ratio_scale = effective_sell_pressure / inputs['sell_pressure_ratio']
+            if base_sell_ratio > 0:
+                sell_ratio_scale = effective_sell_pressure / base_sell_ratio
             step_sell = remaining_sell * sell_ratio_scale
             initial_sell_scale = 1.0
             if current_price <= private_sale_price:
@@ -259,8 +278,6 @@ class TokenSimulationEngine:
             step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
             step_turnover_sell = remaining_turnover_sell / steps_per_month
             step_turnover_buy = remaining_turnover_buy / steps_per_month
-            step_sell *= panic_multiplier
-            step_turnover_sell *= panic_multiplier
             step_buy *= fomo_multiplier
             step_turnover_buy *= fomo_multiplier
 
@@ -348,7 +365,7 @@ class TokenSimulationEngine:
                     token_out_buyback = pool_token - (k_constant / pool_usdt)
                     pool_token -= token_out_buyback
                 burned_total += token_out_buyback
-
+            
             new_price = pool_usdt / pool_token
             if step_lp_growth_rate > 0 and new_price > prev_step_price:
                 add_usdt = pool_usdt * step_lp_growth_rate
