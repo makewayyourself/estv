@@ -2040,8 +2040,9 @@ if go is not None:
                 fomo_multiplier=1.5
             )
         # Always annotate explicit PANIC_SELL events from log if present
-        for i in range(1, max_idx):
-            if "PANIC_SELL" in log.get("reason", [""])[i]:
+        reason_list = log.get("reason", [])
+        for i in range(1, min(max_idx, len(reason_list))):
+            if "PANIC_SELL" in reason_list[i]:
                 narrative_annotations.append({
                     "day": i,
                     "price": series[i],
