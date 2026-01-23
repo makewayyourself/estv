@@ -131,7 +131,11 @@ class TokenSimulationEngine:
             "action_needed": [],
             "sentiment_index": [],
             "sell_pressure_vol": [],
-            "buy_power_vol": []
+            "buy_power_vol": [],
+            "liquidity_depth_ratio": [],
+            "marketing_trigger": [],
+            "whale_sell_volume": [],
+            "normal_buy_volume": []
         }
         
         initial_supply = self.TOTAL_SUPPLY * (inputs['initial_circulating_percent'] / 100.0)
@@ -335,7 +339,10 @@ class TokenSimulationEngine:
             base_turnover_buy = step_turnover_buy
             step_turnover_buy = apply_fomo_buy(step_turnover_buy, current_price, prev_day_price, market_cfg)
 
+            normal_buy_volume = base_step_buy + base_turnover_buy
+
             marketing_dump_today = False
+            dump_today = 0.0
             if inputs.get('use_marketing_contract_scenario') and marketing_remaining > 0:
                 if current_price >= marketing_cost_basis * 2.0:
                     dump_today = marketing_remaining * 0.005
@@ -349,6 +356,7 @@ class TokenSimulationEngine:
                     })
 
             profit_dump_today = False
+            profit_dump = 0.0
             if initial_investor_remaining > 0 and current_price >= private_sale_price * profit_taking_multiple:
                 profit_dump = initial_investor_remaining * 0.01
                 initial_investor_remaining = max(initial_investor_remaining - profit_dump, 0.0)
@@ -465,6 +473,9 @@ class TokenSimulationEngine:
             else:
                 action_needed = "NONE"
             sentiment_index = max(0.5, min(1.5, 1.0 + (price_change_ratio * fomo_sensitivity)))
+            liquidity_depth_ratio = depth_ratio if price_model in ["CEX", "HYBRID"] else 1.0
+            marketing_trigger = marketing_dump_today or (buy_multiplier > 1.0)
+            whale_sell_volume = dump_today + profit_dump
 
             simulation_log["day"].append(day_index + 1)
             simulation_log["price"].append(new_price)
@@ -473,6 +484,10 @@ class TokenSimulationEngine:
             simulation_log["sentiment_index"].append(sentiment_index)
             simulation_log["sell_pressure_vol"].append(total_sell)
             simulation_log["buy_power_vol"].append(total_buy)
+            simulation_log["liquidity_depth_ratio"].append(liquidity_depth_ratio)
+            simulation_log["marketing_trigger"].append(marketing_trigger)
+            simulation_log["whale_sell_volume"].append(whale_sell_volume)
+            simulation_log["normal_buy_volume"].append(normal_buy_volume)
 
             daily_price_history.append(new_price)
             price_history.append(new_price)
@@ -1923,6 +1938,55 @@ if go is not None:
                     "<extra></extra>"
                 )
             ))
+
+        narrative_annotations = []
+        whale_threshold = 1_000_000
+        for i in range(1, len(series)):
+            prev_price = series[i - 1]
+            if prev_price <= 0:
+                continue
+            price_change = (series[i] - prev_price) / prev_price
+            sentiment = log["sentiment_index"][i]
+            whale_sell = log["whale_sell_volume"][i]
+            liquidity_depth = log["liquidity_depth_ratio"][i]
+            marketing_trigger = log["marketing_trigger"][i]
+            buy_volume = log["buy_power_vol"][i]
+            normal_buy = max(log["normal_buy_volume"][i], 1e-9)
+            tag = None
+            if price_change <= -0.05 and sentiment < 0.8:
+                tag = "📉 공포 투매 (Panic Sell)"
+            elif price_change <= -0.05 and whale_sell > whale_threshold:
+                tag = "🐋 고래 덤핑 (Whale Dump)"
+            elif price_change <= -0.03 and liquidity_depth < 0.5:
+                tag = "💧 유동성 고갈 (Slippage Spike)"
+            elif price_change >= 0.05 and marketing_trigger:
+                tag = "🚀 마케팅 효과 (Campaign)"
+            elif price_change >= 0.05 and buy_volume > normal_buy * 2:
+                tag = "🔥 FOMO 유입"
+            if tag:
+                narrative_annotations.append({
+                    "day": i,
+                    "price": series[i],
+                    "tag": tag,
+                    "score": abs(price_change)
+                })
+        narrative_annotations = sorted(narrative_annotations, key=lambda x: x["score"], reverse=True)[:12]
+        if narrative_annotations:
+            y_offset = max(series) * 0.05
+            for idx, ann in enumerate(narrative_annotations):
+                fig.add_annotation(
+                    x=ann["day"],
+                    y=ann["price"],
+                    text=ann["tag"],
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1,
+                    arrowwidth=1,
+                    ax=0,
+                    ay=-20 - (idx % 3) * 10,
+                    bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor="rgba(0,0,0,0.2)"
+                )
 
     if len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
