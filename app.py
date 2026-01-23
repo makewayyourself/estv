@@ -1862,7 +1862,14 @@ except Exception:
 
 if go is not None:
     days = list(range(len(series)))
-    fig = go.Figure()
+    make_subplots = importlib.import_module("plotly.subplots").make_subplots
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.72, 0.28],
+        vertical_spacing=0.08
+    )
     turnover_pct = result["inputs"].get("turnover_ratio", 0.0) * 100
     lp_growth_pct = result["inputs"].get("lp_growth_rate", 0.0) * 100
     max_buy_pct = result["inputs"].get("max_buy_usdt_ratio", 0.0) * 100
@@ -1876,7 +1883,7 @@ if go is not None:
         mode="lines",
         name="ESTV Price ($)",
         line=dict(color="blue" if result['legal_check'] else "red")
-    ))
+    ), row=1, col=1)
     if upbit_baseline_result:
         up_series = upbit_baseline_result["daily_price_trend"]
         up_days = list(range(len(up_series)))
@@ -1886,14 +1893,22 @@ if go is not None:
             mode="lines",
             name="Upbit 평균 시나리오",
             line=dict(color="gray", dash="dash")
-        ))
+        ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=[0, len(series) - 1],
         y=[0.5, 0.5],
         mode="lines",
         name="Listing Price ($0.50)",
         line=dict(color="gray", dash="dot")
-    ))
+    ), row=1, col=1)
+    support_line = float(np.percentile(series, 20)) if series else 0.5
+    fig.add_trace(go.Scatter(
+        x=[0, len(series) - 1],
+        y=[support_line, support_line],
+        mode="lines",
+        name="Support Line",
+        line=dict(color="rgba(120,120,120,0.6)", dash="dash")
+    ), row=1, col=1)
 
     log = result.get("simulation_log")
     if log:
@@ -1941,7 +1956,7 @@ if go is not None:
                     "매수 지지력 %{customdata[4]:,.0f}"
                     "<extra></extra>"
                 )
-            ))
+            ), row=1, col=1)
 
         narrative_annotations = []
         whale_volumes = log.get("whale_sell_volume", [])
@@ -2010,7 +2025,7 @@ if go is not None:
             for idx, ann in enumerate(narrative_annotations):
                 fig.add_annotation(
                     x=ann["day"],
-                    y=ann["price"],
+                    y=ann["price"] + (max(series) * 0.05 if series else 0),
                     text=ann["tag"],
                     showarrow=True,
                     arrowhead=2,
@@ -2019,11 +2034,69 @@ if go is not None:
                     ax=0,
                     ay=-20 - (idx % 3) * 10,
                     bgcolor="rgba(255,255,255,0.8)",
-                    bordercolor="rgba(0,0,0,0.2)"
+                    bordercolor="rgba(0,0,0,0.2)",
+                    row=1,
+                    col=1
                 )
             st.caption(f"스토리텔링 주석 {len(narrative_annotations)}개 표시됨")
         else:
             st.caption("스토리텔링 주석 조건에 맞는 구간이 없어 표시되지 않았습니다.")
+
+        # Zone coloring based on sentiment index
+        sentiment_series = log.get("sentiment_index", [])
+        if sentiment_series:
+            zones = []
+            current_zone = None
+            start_idx = 0
+            for i, sentiment in enumerate(sentiment_series[:len(series)]):
+                if sentiment < 0.9:
+                    zone = "RED"
+                elif sentiment > 1.1:
+                    zone = "GREEN"
+                else:
+                    zone = "GREY"
+                if current_zone is None:
+                    current_zone = zone
+                    start_idx = i
+                    continue
+                if zone != current_zone:
+                    zones.append((start_idx, i, current_zone))
+                    current_zone = zone
+                    start_idx = i
+            zones.append((start_idx, len(sentiment_series), current_zone))
+            zone_colors = {
+                "RED": "rgba(255, 0, 0, 0.08)",
+                "GREEN": "rgba(0, 180, 0, 0.08)",
+                "GREY": "rgba(120, 120, 120, 0.04)"
+            }
+            for start, end, zone in zones:
+                fig.add_vrect(
+                    x0=start,
+                    x1=max(start + 1, end),
+                    fillcolor=zone_colors[zone],
+                    opacity=0.6,
+                    line_width=0,
+                    row=1,
+                    col=1
+                )
+
+        # Battlefield view: buy vs sell bars
+        sell_vols = log.get("sell_pressure_vol", [])
+        buy_vols = log.get("buy_power_vol", [])
+        if sell_vols and buy_vols:
+            bar_days = list(range(min(len(sell_vols), len(buy_vols), len(series))))
+            fig.add_trace(go.Bar(
+                x=bar_days,
+                y=[sell_vols[i] for i in bar_days],
+                name="매도 압력",
+                marker_color="rgba(255, 0, 0, 0.6)"
+            ), row=2, col=1)
+            fig.add_trace(go.Bar(
+                x=bar_days,
+                y=[buy_vols[i] for i in bar_days],
+                name="매수 지지력",
+                marker_color="rgba(0, 180, 0, 0.6)"
+            ), row=2, col=1)
 
     if len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
@@ -2069,7 +2142,7 @@ if go is not None:
                 "LP 일단위 적용 %{customdata[5]}"
                 "<extra></extra>"
             )
-        ))
+        ), row=1, col=1)
         fig.add_trace(go.Scatter(
             x=down_days,
             y=[series[d] for d in down_days],
@@ -2089,7 +2162,7 @@ if go is not None:
                 "LP 일단위 적용 %{customdata[5]}"
                 "<extra></extra>"
             )
-        ))
+        ), row=1, col=1)
 
         event_days = []
         event_prices = []
@@ -2119,17 +2192,31 @@ if go is not None:
                     "LP 일단위 적용 %{customdata[1][1]}"
                     "<extra></extra>"
                 )
-            ))
+            ), row=1, col=1)
 
     fig.update_layout(
         xaxis_title="Day",
-        yaxis_title="Price",
-        yaxis=dict(dtick=0.25),
         hovermode="closest",
-        height=420,
-        margin=dict(l=10, r=10, t=30, b=10)
+        height=520,
+        margin=dict(l=10, r=10, t=30, b=10),
+        barmode="overlay"
     )
+    fig.update_yaxes(title_text="Price", dtick=0.25, row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
     st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+    if log:
+        last_idx = min(len(series), len(log.get("sell_pressure_vol", [])), len(log.get("buy_power_vol", []))) - 1
+        if last_idx >= 0:
+            last_price = series[last_idx]
+            last_sell = log["sell_pressure_vol"][last_idx]
+            last_buy = log["buy_power_vol"][last_idx]
+            signal_icons = []
+            if last_price < support_line and last_buy < last_sell:
+                signal_icons.append("🛡️ 바이백 권장")
+            if last_sell > last_buy * 1.2:
+                signal_icons.append("📢 호재 뉴스 필요")
+            if signal_icons:
+                st.markdown("**액션 제안:** " + " · ".join(signal_icons))
 else:
     st.info("툴팁 표시를 위해 plotly가 필요합니다. `pip install plotly` 후 다시 실행해 주세요.")
     fig, ax = plt.subplots(figsize=(10, 4))
