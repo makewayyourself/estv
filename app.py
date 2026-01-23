@@ -35,6 +35,7 @@ COIN_TYPE_VOLATILITY = {
 
 RESET_DEFAULTS = {
     "mode": "tutorial",
+    "mode_selector": "초보자",
     "tutorial_step": 0,
     "step0_completed": False,
     "show_user_manual": False,
@@ -108,6 +109,10 @@ RESET_DEFAULTS = {
     "arbitrage_threshold": 2.0,
     "min_depth_ratio": 0.3,
     "show_upbit_baseline": False,
+    "enable_confidence": False,
+    "confidence_runs": 300,
+    "confidence_uncertainty": 10.0,
+    "confidence_mape": 15.0,
     "krw_per_usd": 1300,
     "marketing_dashboard_url": "http://localhost:5173"
 }
@@ -1373,7 +1378,8 @@ else:
         "모드 선택",
         options=["초보자", "전문가"],
         index=0 if st.session_state.get("mode") == "tutorial" else 1,
-        help="초보자는 핵심 7개만, 전문가는 상세 설정까지 봅니다."
+        help="초보자는 핵심 7개만, 전문가는 상세 설정까지 봅니다.",
+        key="mode_selector"
     )
     st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
     is_expert = st.session_state["mode"] == "expert"
@@ -1673,7 +1679,8 @@ if is_expert and current_step > 0:
         "계약 시나리오 선택",
         options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
         index=0,
-        help="기본은 사용자 조정이며, 다른 옵션은 계약/역산 기준으로 자동 적용됩니다."
+        help="기본은 사용자 조정이며, 다른 옵션은 계약/역산 기준으로 자동 적용됩니다.",
+        key="contract_mode"
     )
 
     st.sidebar.subheader("🎯 $5.00 달성 목표 시나리오")
@@ -2529,7 +2536,8 @@ if is_expert and current_step > 0:
     enable_confidence = st.sidebar.checkbox(
         "신뢰도 계산 활성화",
         value=False,
-        help="입력값에 불확실성을 부여해 여러 번 시뮬레이션하고, 기준 추이와 유사한 비율을 신뢰도로 계산합니다."
+        help="입력값에 불확실성을 부여해 여러 번 시뮬레이션하고, 기준 추이와 유사한 비율을 신뢰도로 계산합니다.",
+        key="enable_confidence"
     )
     confidence_runs = st.sidebar.slider(
         "시뮬레이션 횟수",
@@ -2537,7 +2545,8 @@ if is_expert and current_step > 0:
         max_value=1000,
         value=300,
         step=50,
-        help="횟수가 많을수록 안정적이지만 계산 시간이 늘어납니다."
+        help="횟수가 많을수록 안정적이지만 계산 시간이 늘어납니다.",
+        key="confidence_runs"
     )
     confidence_uncertainty = st.sidebar.slider(
         "입력값 불확실성(±%)",
@@ -2545,7 +2554,8 @@ if is_expert and current_step > 0:
         max_value=30.0,
         value=10.0,
         step=1.0,
-        help="주요 입력값에 랜덤 변동을 주는 범위입니다."
+        help="주요 입력값에 랜덤 변동을 주는 범위입니다.",
+        key="confidence_uncertainty"
     )
     confidence_mape = st.sidebar.slider(
         "허용 변동폭(평균 오차, %)",
@@ -2553,7 +2563,8 @@ if is_expert and current_step > 0:
         max_value=30.0,
         value=15.0,
         step=1.0,
-        help="기준 추이와 평균 오차가 이 값 이하인 시뮬레이션의 비율을 신뢰도로 계산합니다."
+        help="기준 추이와 평균 오차가 이 값 이하인 시뮬레이션의 비율을 신뢰도로 계산합니다.",
+        key="confidence_mape"
     )
 
     st.sidebar.markdown("---")
