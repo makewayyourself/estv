@@ -1237,33 +1237,33 @@ if use_phase_inflow:
         help="대기 수요가 상장 후 며칠에 걸쳐 분산 방출되는지 설정합니다."
     )
 
-    phase2_days = min(phase2_days, total_inflow_days)
-    prelisting_days = min(prelisting_days, total_inflow_days)
-    prelisting_release_days = max(1, min(prelisting_release_days, total_inflow_days))
-    prelisting_daily = base_daily_user_buy * prelisting_multiplier
-    prelisting_total = prelisting_daily * prelisting_days
-    phase2_daily = base_daily_user_buy * phase2_multiplier
-    phase2_total = phase2_daily * phase2_days
-    remaining_total = max(total_inflow_money - prelisting_total - phase2_total, 0.0)
-    remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
-    phase3_daily = remaining_total / remaining_days
+phase2_days = min(phase2_days, total_inflow_days)
+prelisting_days = min(prelisting_days, total_inflow_days)
+prelisting_release_days = max(1, min(prelisting_release_days, total_inflow_days))
+prelisting_daily = base_daily_user_buy * prelisting_multiplier
+prelisting_total = prelisting_daily * prelisting_days
+phase2_daily = base_daily_user_buy * phase2_multiplier
+phase2_total = phase2_daily * phase2_days
+remaining_total = max(total_inflow_money - prelisting_total - phase2_total, 0.0)
+remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
+phase3_daily = remaining_total / remaining_days
 
-    daily_user_buy_schedule = []
-    for d in range(total_days):
-        if d < total_inflow_days:
-            if use_phase_inflow:
-                if d < prelisting_days:
-                    daily_user_buy_schedule.append(0.0)
-                elif d < prelisting_days + phase2_days:
-                    release_day = d - prelisting_days
-                    release_ratio = min((release_day + 1) / prelisting_release_days, 1.0)
-                    daily_user_buy_schedule.append(phase2_daily + (prelisting_daily * release_ratio))
-                else:
-                    daily_user_buy_schedule.append(phase3_daily)
+daily_user_buy_schedule = []
+for d in range(total_days):
+    if d < total_inflow_days:
+        if use_phase_inflow:
+            if d < prelisting_days:
+                daily_user_buy_schedule.append(0.0)
+            elif d < prelisting_days + phase2_days:
+                release_day = d - prelisting_days
+                release_ratio = min((release_day + 1) / prelisting_release_days, 1.0)
+                daily_user_buy_schedule.append(phase2_daily + (prelisting_daily * release_ratio))
             else:
-                daily_user_buy_schedule.append(base_daily_user_buy)
+                daily_user_buy_schedule.append(phase3_daily)
         else:
-            daily_user_buy_schedule.append(0.0)
+            daily_user_buy_schedule.append(base_daily_user_buy)
+    else:
+        daily_user_buy_schedule.append(0.0)
 
 inflow_expander.info(f"""
 📊 **유입 분석 결과**
