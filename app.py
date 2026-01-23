@@ -854,6 +854,43 @@ def run_sim_with_cache(inputs):
     return _run_sim_cached(inputs_json)
 
 
+def build_reset_result(inputs, total_days):
+    zero_series = [0.0] * max(1, int(total_days))
+    empty_log = {
+        "day": [],
+        "price": [],
+        "reason_code": [],
+        "action_needed": [],
+        "reason": [],
+        "action": [],
+        "sentiment_index": [],
+        "sell_pressure_vol": [],
+        "buy_power_vol": [],
+        "liquidity_depth_ratio": [],
+        "marketing_trigger": [],
+        "whale_sell_volume": [],
+        "normal_buy_volume": [],
+        "sell_sources": [],
+        "sell_source_text": [],
+        "action_amount_usdt": [],
+        "action_message": []
+    }
+    return {
+        "inputs": inputs,
+        "final_price": 0.0,
+        "roi": 0.0,
+        "status": "RESET",
+        "legal_check": True,
+        "risk_logs": [],
+        "price_trend": zero_series,
+        "daily_price_trend": zero_series,
+        "daily_events": [],
+        "action_logs": [],
+        "burned_total": 0.0,
+        "simulation_log": empty_log
+    }
+
+
 @st.cache_data(show_spinner=False)
 def _run_confidence_cached(inputs_json, runs, noise_pct, mape_threshold):
     base_inputs = json.loads(inputs_json)
@@ -989,8 +1026,11 @@ with top_controls[0]:
     st.button(manual_button_label, on_click=toggle_user_manual)
 with top_controls[1]:
     if st.button("🔄 전체 초기화"):
+        st.cache_data.clear()
         for k in list(st.session_state.keys()):
             del st.session_state[k]
+        st.session_state["reset_triggered"] = True
+        st.session_state["show_user_manual"] = False
         st.rerun()
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
@@ -2513,25 +2553,31 @@ inputs = {
     'enable_triggers': use_triggers
 }
 adjusted_inputs, contract_notes = apply_contract_inputs(inputs, contract_mode)
-result = run_sim_with_cache(adjusted_inputs)
-upbit_baseline_result = None
-if show_upbit_baseline:
-    upbit_monthly_buy = 3_500_000_000 / max(krw_per_usd, 1)
-    upbit_inputs = dict(inputs)
-    upbit_inputs.update({
-        "initial_circulating_percent": 45.0,
-        "unbonding_days": 14,
-        "sell_pressure_ratio": 0.15,
-        "monthly_buy_volume": upbit_monthly_buy,
-        "base_monthly_buy_volume": upbit_monthly_buy,
-        "daily_user_buy_schedule": [upbit_monthly_buy / 30] * total_days,
-        "use_marketing_contract_scenario": False,
-        "use_master_plan": False,
-        "campaigns": [],
-        "triggers": [],
-        "enable_triggers": False
-    })
-    upbit_baseline_result = run_sim_with_cache(upbit_inputs)
+reset_triggered = bool(st.session_state.get("reset_triggered", False))
+if reset_triggered:
+    result = build_reset_result(adjusted_inputs, total_days)
+    upbit_baseline_result = None
+    st.session_state["reset_triggered"] = False
+else:
+    result = run_sim_with_cache(adjusted_inputs)
+    upbit_baseline_result = None
+    if show_upbit_baseline:
+        upbit_monthly_buy = 3_500_000_000 / max(krw_per_usd, 1)
+        upbit_inputs = dict(inputs)
+        upbit_inputs.update({
+            "initial_circulating_percent": 45.0,
+            "unbonding_days": 14,
+            "sell_pressure_ratio": 0.15,
+            "monthly_buy_volume": upbit_monthly_buy,
+            "base_monthly_buy_volume": upbit_monthly_buy,
+            "daily_user_buy_schedule": [upbit_monthly_buy / 30] * total_days,
+            "use_marketing_contract_scenario": False,
+            "use_master_plan": False,
+            "campaigns": [],
+            "triggers": [],
+            "enable_triggers": False
+        })
+        upbit_baseline_result = run_sim_with_cache(upbit_inputs)
 
 # 결과 표시 (대시보드)
 col1, col2, col3, col4 = st.columns(4)
@@ -2546,7 +2592,7 @@ col4.metric("경고 발생 횟수", f"{len(result['risk_logs'])} 회")
 if contract_notes:
     st.info("계약 적용: " + ", ".join(contract_notes))
 
-if enable_confidence:
+if enable_confidence and not reset_triggered:
     confidence_result = run_confidence_with_cache(
         adjusted_inputs,
         confidence_runs,
