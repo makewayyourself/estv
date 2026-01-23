@@ -1085,7 +1085,7 @@ else:
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
 if "tutorial_step" not in st.session_state:
-    st.session_state["tutorial_step"] = 0
+    st.session_state["tutorial_step"] = 1
 mode = st.sidebar.radio(
     "모드 선택",
     options=["초보자", "전문가"],
@@ -1095,6 +1095,8 @@ mode = st.sidebar.radio(
 st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
 is_expert = mode == "전문가"
 is_tutorial = not is_expert
+if is_tutorial and st.session_state.get("tutorial_step", 1) < 1:
+    st.session_state["tutorial_step"] = 1
 def toggle_user_manual():
     st.session_state["show_user_manual"] = not st.session_state.get("show_user_manual", False)
 
@@ -1161,8 +1163,8 @@ if is_tutorial:
         "- 나머지(오더북/회전율/캡/심리 등)는 안정적인 기본값으로 자동 적용됩니다."
     )
     total_steps = 6
-    current_step = int(st.session_state.get("tutorial_step", 0))
-    current_step = max(0, min(total_steps - 1, current_step))
+    current_step = int(st.session_state.get("tutorial_step", 1))
+    current_step = max(1, min(total_steps - 1, current_step))
     st.session_state["tutorial_step"] = current_step
     st.sidebar.progress((current_step + 1) / total_steps)
     st.sidebar.caption(f"Step {current_step} / {total_steps - 1}")
