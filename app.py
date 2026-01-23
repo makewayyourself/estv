@@ -54,6 +54,27 @@ def apply_fomo_buy(base_buy, current_price, prev_price, config):
     return base_buy
 
 
+def create_ramp_schedule(target_users, ramp_months, total_months, avg_ticket):
+    daily_schedule = []
+    days_per_month = 30
+    total_days = max(1, int(total_months * days_per_month))
+    safe_ramp = max(1, int(ramp_months))
+    safe_target = max(0.0, float(target_users))
+    safe_ticket = max(0.0, float(avg_ticket))
+
+    for day in range(total_days):
+        current_month = day / days_per_month
+        if current_month < safe_ramp:
+            growth_factor = (current_month + 1) / safe_ramp
+            monthly_users = safe_target * growth_factor
+        else:
+            monthly_users = safe_target
+        daily_usd = (monthly_users * safe_ticket) / days_per_month
+        daily_schedule.append(daily_usd)
+
+    return daily_schedule
+
+
 def build_optimized_inputs(base_inputs, sim_log):
     adjusted = dict(base_inputs)
     notes = []
@@ -879,10 +900,11 @@ if st.session_state.get("apply_upbit_baseline"):
 st.sidebar.markdown("---")
 if is_tutorial:
     st.sidebar.info(
-        "🔰 튜토리얼 모드에서는 핵심 7개만 설정합니다.\n"
-        "1) 목표 가격 2) 계약 시나리오 3) 초기 유통량 4) 언본딩 기간\n"
-        "5) 전환율 6) 평균 매수액 7) 월간 바이백 예산\n"
-        "나머지 값(오더북/회전율/캡/심리 등)은 기본 안전값으로 자동 설정됩니다."
+        "🔰 초보자 모드 시작 안내\n"
+        "- 진행 순서: 목표 → 공급 → 수요 → 시장 → 방어\n"
+        "- 핵심 7개만 설정: 목표 가격, 계약 시나리오, 초기 유통량, "
+        "언본딩 기간, 전환율, 평균 매수액, 월간 바이백 예산\n"
+        "- 나머지(오더북/회전율/캡/심리 등)는 안정적인 기본값으로 자동 적용됩니다."
     )
     total_steps = 5
     current_step = int(st.session_state.get("tutorial_step", 1))
@@ -1063,8 +1085,9 @@ if is_tutorial:
     krw_per_usd = 1300
 else:
     st.sidebar.info(
-        "⚙️ 전문가 모드에서는 모든 설정을 직접 조정합니다.\n"
-        "공급/수요/시장 구조/방어 정책/분석 도구까지 세부 튜닝이 가능합니다."
+        "⚙️ 전문가 모드 안내\n"
+        "- 모든 변수를 직접 조정합니다.\n"
+        "- 공급/수요/시장 구조/방어 정책/분석 도구까지 세부 튜닝 가능합니다."
     )
     st.sidebar.header("📜 계약 시나리오")
     contract_mode = st.sidebar.radio(
@@ -1323,6 +1346,48 @@ else:
         help="신규 유입 1인당 평균 매수 금액입니다. 클수록 월간 추가 매수세가 증가합니다."
     )
 
+    enable_dual_pipeline = inflow_expander.checkbox(
+        "듀얼 파이프라인 유입 사용",
+        value=False,
+        key="enable_dual_pipeline",
+        help="기존 회원/신규 회원 유입을 서로 다른 속도로 선형 증가시키는 방식입니다."
+    )
+    migration_target = 50_000
+    migration_ramp_months = 3
+    acquisition_target = 10_000
+    acquisition_ramp_months = 12
+    if enable_dual_pipeline:
+        migration_target = inflow_expander.number_input(
+            "기존 회원 목표(명/월)",
+            min_value=0,
+            value=50_000,
+            step=1000,
+            key="migration_target"
+        )
+        migration_ramp_months = inflow_expander.slider(
+            "기존 회원 도달 기간(개월)",
+            min_value=1,
+            max_value=12,
+            value=3,
+            step=1,
+            key="migration_ramp_months"
+        )
+        acquisition_target = inflow_expander.number_input(
+            "신규 회원 목표(명/월)",
+            min_value=0,
+            value=10_000,
+            step=1000,
+            key="acquisition_target"
+        )
+        acquisition_ramp_months = inflow_expander.slider(
+            "신규 회원 도달 기간(개월)",
+            min_value=1,
+            max_value=24,
+            value=12,
+            step=1,
+            key="acquisition_ramp_months"
+        )
+
     onboarding_months = 12
     total_new_buyers = estv_total_users * (conversion_rate / 100.0)
     total_inflow_money = total_new_buyers * avg_ticket
@@ -1388,35 +1453,62 @@ else:
             help="대기 수요가 상장 후 며칠에 걸쳐 분산 방출되는지 설정합니다."
         )
 
-    phase2_days = min(phase2_days, total_inflow_days)
-    prelisting_days = min(prelisting_days, total_inflow_days)
-    prelisting_release_days = max(1, min(prelisting_release_days, total_inflow_days))
-    prelisting_daily = base_daily_user_buy * prelisting_multiplier
-    prelisting_total = prelisting_daily * prelisting_days
-    phase2_daily = base_daily_user_buy * phase2_multiplier
-    phase2_total = phase2_daily * phase2_days
-    remaining_total = max(total_inflow_money - prelisting_total - phase2_total, 0.0)
-    remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
-    phase3_daily = remaining_total / remaining_days
+    total_sim_months = simulation_months
+    if enable_dual_pipeline:
+        schedule_migration = create_ramp_schedule(
+            migration_target, migration_ramp_months, total_sim_months, avg_ticket
+        )
+        schedule_acquisition = create_ramp_schedule(
+            acquisition_target, acquisition_ramp_months, total_sim_months, avg_ticket
+        )
+        final_daily_schedule = [
+            a + b for a, b in zip(schedule_migration, schedule_acquisition)
+        ]
+        daily_user_buy_schedule = final_daily_schedule[:total_days]
+        total_inflow_days = max(1, len(daily_user_buy_schedule))
+        total_inflow_money = float(sum(daily_user_buy_schedule))
+        monthly_user_buy_volume = float(sum(daily_user_buy_schedule[:min(30, total_inflow_days)]))
+        base_daily_user_buy = monthly_user_buy_volume / 30.0
+        use_phase_inflow = False
+    else:
+        phase2_days = min(phase2_days, total_inflow_days)
+        prelisting_days = min(prelisting_days, total_inflow_days)
+        prelisting_release_days = max(1, min(prelisting_release_days, total_inflow_days))
+        prelisting_daily = base_daily_user_buy * prelisting_multiplier
+        prelisting_total = prelisting_daily * prelisting_days
+        phase2_daily = base_daily_user_buy * phase2_multiplier
+        phase2_total = phase2_daily * phase2_days
+        remaining_total = max(total_inflow_money - prelisting_total - phase2_total, 0.0)
+        remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
+        phase3_daily = remaining_total / remaining_days
 
-    daily_user_buy_schedule = []
-    for d in range(total_days):
-        if d < total_inflow_days:
-            if use_phase_inflow:
-                if d < prelisting_days:
-                    daily_user_buy_schedule.append(0.0)
-                elif d < prelisting_days + phase2_days:
-                    release_day = d - prelisting_days
-                    release_ratio = min((release_day + 1) / prelisting_release_days, 1.0)
-                    daily_user_buy_schedule.append(phase2_daily + (prelisting_daily * release_ratio))
+        daily_user_buy_schedule = []
+        for d in range(total_days):
+            if d < total_inflow_days:
+                if use_phase_inflow:
+                    if d < prelisting_days:
+                        daily_user_buy_schedule.append(0.0)
+                    elif d < prelisting_days + phase2_days:
+                        release_day = d - prelisting_days
+                        release_ratio = min((release_day + 1) / prelisting_release_days, 1.0)
+                        daily_user_buy_schedule.append(phase2_daily + (prelisting_daily * release_ratio))
+                    else:
+                        daily_user_buy_schedule.append(phase3_daily)
                 else:
-                    daily_user_buy_schedule.append(phase3_daily)
+                    daily_user_buy_schedule.append(base_daily_user_buy)
             else:
-                daily_user_buy_schedule.append(base_daily_user_buy)
-        else:
-            daily_user_buy_schedule.append(0.0)
+                daily_user_buy_schedule.append(0.0)
 
-    inflow_expander.info(f"""
+    if enable_dual_pipeline:
+        inflow_expander.info(
+            "📊 **유입 분석 결과 (듀얼 파이프라인)**\n"
+            f"- 기존 회원 목표: {int(migration_target):,}명/월 (도달 {migration_ramp_months}개월)\n"
+            f"- 신규 회원 목표: {int(acquisition_target):,}명/월 (도달 {acquisition_ramp_months}개월)\n"
+            f"- **월간 추가 매수세(첫 달 기준): +${int(monthly_user_buy_volume):,}**"
+        )
+        inflow_expander.caption("듀얼 파이프라인 사용 시 Phase 유입 스케줄은 적용되지 않습니다.")
+    else:
+        inflow_expander.info(f"""
 📊 **유입 분석 결과**
 - 신규 유입 인원: {int(total_new_buyers):,}명
 - 총 매수 대기 자금: ${int(total_inflow_money):,}
