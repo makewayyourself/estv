@@ -1940,7 +1940,11 @@ if go is not None:
             ))
 
         narrative_annotations = []
-        whale_threshold = 1_000_000
+        whale_volumes = log.get("whale_sell_volume", [])
+        if whale_volumes:
+            whale_threshold = max(1_000_000, float(np.percentile(whale_volumes, 90)))
+        else:
+            whale_threshold = 1_000_000
         max_log_len = min(
             len(log.get("sentiment_index", [])),
             len(log.get("whale_sell_volume", [])),
@@ -1950,35 +1954,52 @@ if go is not None:
             len(log.get("normal_buy_volume", []))
         )
         max_idx = min(len(series), max_log_len)
-        for i in range(1, max_idx):
-            prev_price = series[i - 1]
-            if prev_price <= 0:
-                continue
-            price_change = (series[i] - prev_price) / prev_price
-            sentiment = log["sentiment_index"][i]
-            whale_sell = log["whale_sell_volume"][i]
-            liquidity_depth = log["liquidity_depth_ratio"][i]
-            marketing_trigger = log["marketing_trigger"][i]
-            buy_volume = log["buy_power_vol"][i]
-            normal_buy = max(log["normal_buy_volume"][i], 1e-9)
-            tag = None
-            if price_change <= -0.05 and sentiment < 0.8:
-                tag = "📉 공포 투매 (Panic Sell)"
-            elif price_change <= -0.05 and whale_sell > whale_threshold:
-                tag = "🐋 고래 덤핑 (Whale Dump)"
-            elif price_change <= -0.03 and liquidity_depth < 0.5:
-                tag = "💧 유동성 고갈 (Slippage Spike)"
-            elif price_change >= 0.05 and marketing_trigger:
-                tag = "🚀 마케팅 효과 (Campaign)"
-            elif price_change >= 0.05 and buy_volume > normal_buy * 2:
-                tag = "🔥 FOMO 유입"
-            if tag:
-                narrative_annotations.append({
-                    "day": i,
-                    "price": series[i],
-                    "tag": tag,
-                    "score": abs(price_change)
-                })
+        def collect_annotations(drop_thresh, rise_thresh, depth_thresh, fomo_multiplier):
+            items = []
+            for i in range(1, max_idx):
+                prev_price = series[i - 1]
+                if prev_price <= 0:
+                    continue
+                price_change = (series[i] - prev_price) / prev_price
+                sentiment = log["sentiment_index"][i]
+                whale_sell = log["whale_sell_volume"][i]
+                liquidity_depth = log["liquidity_depth_ratio"][i]
+                marketing_trigger = log["marketing_trigger"][i]
+                buy_volume = log["buy_power_vol"][i]
+                normal_buy = max(log["normal_buy_volume"][i], 1e-9)
+                tag = None
+                if price_change <= -drop_thresh and sentiment < 0.8:
+                    tag = "📉 공포 투매 (Panic Sell)"
+                elif price_change <= -drop_thresh and whale_sell > whale_threshold:
+                    tag = "🐋 고래 덤핑 (Whale Dump)"
+                elif price_change <= -0.03 and liquidity_depth < depth_thresh:
+                    tag = "💧 유동성 고갈 (Slippage Spike)"
+                elif price_change >= rise_thresh and marketing_trigger:
+                    tag = "🚀 마케팅 효과 (Campaign)"
+                elif price_change >= rise_thresh and buy_volume > normal_buy * fomo_multiplier:
+                    tag = "🔥 FOMO 유입"
+                if tag:
+                    items.append({
+                        "day": i,
+                        "price": series[i],
+                        "tag": tag,
+                        "score": abs(price_change)
+                    })
+            return items
+
+        narrative_annotations = collect_annotations(
+            drop_thresh=0.05,
+            rise_thresh=0.05,
+            depth_thresh=0.5,
+            fomo_multiplier=2.0
+        )
+        if not narrative_annotations:
+            narrative_annotations = collect_annotations(
+                drop_thresh=0.03,
+                rise_thresh=0.03,
+                depth_thresh=0.7,
+                fomo_multiplier=1.5
+            )
         narrative_annotations = sorted(narrative_annotations, key=lambda x: x["score"], reverse=True)[:12]
         if narrative_annotations:
             y_offset = max(series) * 0.05
@@ -1996,6 +2017,9 @@ if go is not None:
                     bgcolor="rgba(255,255,255,0.8)",
                     bordercolor="rgba(0,0,0,0.2)"
                 )
+            st.caption(f"스토리텔링 주석 {len(narrative_annotations)}개 표시됨")
+        else:
+            st.caption("스토리텔링 주석 조건에 맞는 구간이 없어 표시되지 않았습니다.")
 
     if len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
