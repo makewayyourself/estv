@@ -176,6 +176,10 @@ class TokenSimulationEngine:
 
         for day_index in range(total_days):
             prev_day_price = daily_price_history[-1]
+            if len(daily_price_history) >= 7:
+                ma_7 = float(np.mean(daily_price_history[-7:]))
+            else:
+                ma_7 = prev_day_price
             if price_model == "HYBRID" and day_index > 0 and day_index % steps_per_month == 0:
                 depth_usdt_1pct *= (1.0 + depth_growth_rate)
                 depth_usdt_2pct *= (1.0 + depth_growth_rate)
@@ -210,13 +214,6 @@ class TokenSimulationEngine:
             depth_ratio = 1.0
             if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
                 depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
-            if price_model in ["CEX", "HYBRID"]:
-                depth_usdt_1pct = adjust_depth_by_volatility(depth_usdt_1pct, daily_price_history, market_cfg)
-                depth_usdt_2pct = adjust_depth_by_volatility(depth_usdt_2pct, daily_price_history, market_cfg)
-            if day_index < len(initial_investor_sell_usdt_schedule) and current_price > private_sale_price:
-                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
-                if extra_sell_usdt > 0:
-                    remaining_initial_sell += extra_sell_usdt / current_price
             if current_price > high_price:
                 high_price = current_price
 
@@ -282,6 +279,7 @@ class TokenSimulationEngine:
                 buyback_usdt_delta += c.get("buyback_usdt_delta", 0.0)
                 max_sell_token_ratio_delta += c.get("max_sell_token_ratio_delta", 0.0)
 
+            # Step 2: 변수 동적 조정
             base_sell_ratio = inputs['sell_pressure_ratio']
             dynamic_sell_ratio = calculate_dynamic_sell_pressure(
                 base_sell_ratio,
@@ -289,11 +287,19 @@ class TokenSimulationEngine:
                 daily_price_history,
                 market_cfg
             )
+            if price_model in ["CEX", "HYBRID"]:
+                depth_usdt_1pct = adjust_depth_by_volatility(depth_usdt_1pct, daily_price_history, market_cfg)
+                depth_usdt_2pct = adjust_depth_by_volatility(depth_usdt_2pct, daily_price_history, market_cfg)
             effective_sell_pressure = max(0.0, dynamic_sell_ratio - sell_suppression_delta)
             sell_ratio_scale = 1.0
             if base_sell_ratio > 0:
                 sell_ratio_scale = effective_sell_pressure / base_sell_ratio
             step_sell = remaining_sell * sell_ratio_scale
+            # Step 3: 물량 결정
+            if day_index < len(initial_investor_sell_usdt_schedule) and current_price > private_sale_price:
+                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
+                if extra_sell_usdt > 0:
+                    remaining_initial_sell += extra_sell_usdt / current_price
             investor_sell = get_investor_decision(
                 remaining_initial_sell * initial_investor_sell_ratio,
                 current_price,
@@ -339,16 +345,6 @@ class TokenSimulationEngine:
             prev_step_price = current_price
 
             total_sell = step_sell + step_turnover_sell
-            arb_buy_usdt = 0.0
-            arb_sell_token = 0.0
-            if price_model in ["CEX", "HYBRID"] and abs(price_change_ratio) >= arbitrage_threshold:
-                deviation = min(abs(price_change_ratio), 0.2)
-                if price_change_ratio > 0:
-                    arb_sell_token = pool_token * min(0.02, deviation)
-                else:
-                    arb_buy_usdt = pool_usdt * min(0.02, deviation)
-            step_buy += arb_buy_usdt
-            total_sell += arb_sell_token
             effective_max_sell_ratio = max(0.0, max_sell_token_ratio - max_sell_token_ratio_delta)
             if effective_max_sell_ratio > 0:
                 sell_cap = pool_token * effective_max_sell_ratio
@@ -358,6 +354,7 @@ class TokenSimulationEngine:
                 buy_cap = pool_usdt * max_buy_usdt_ratio
                 step_buy = min(step_buy, buy_cap)
 
+            # Step 4: 거래 체결
             token_out = 0.0
             if price_model in ["CEX", "HYBRID"]:
                 pool_token, pool_usdt, _ = self._apply_orderbook_trade(
@@ -375,8 +372,21 @@ class TokenSimulationEngine:
                 pool_usdt += (step_buy + step_turnover_buy)
                 token_out = pool_token - (k_constant / pool_usdt)
                 pool_token -= token_out
-            
+
             current_price = pool_usdt / pool_token
+            # Step 5: 차익거래 체크 (CEX/HYBRID)
+            if price_model in ["CEX", "HYBRID"]:
+                amm_price = k_constant / max(pool_token * pool_token, 1e-9)
+                deviation = abs(current_price - amm_price) / max(amm_price, 1e-9)
+                if deviation >= arbitrage_threshold:
+                    pool_usdt = max(k_constant / max(pool_token, 1e-9), 1e-9)
+                    current_price = pool_usdt / pool_token
+                    action_logs.append({
+                        "day": day_index + 1,
+                        "action": "차익거래 스왑",
+                        "reason": f"CEX-DEX 괴리 {deviation*100:.2f}%"
+                    })
+
             if price_model in ["CEX", "HYBRID"]:
                 token_out = (step_buy + step_turnover_buy) / max(current_price, 1e-9)
             trade_volume_tokens = total_sell + token_out
