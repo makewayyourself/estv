@@ -1085,7 +1085,7 @@ else:
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
 if "tutorial_step" not in st.session_state:
-    st.session_state["tutorial_step"] = 1
+    st.session_state["tutorial_step"] = 0
 mode = st.sidebar.radio(
     "모드 선택",
     options=["초보자", "전문가"],
@@ -1100,6 +1100,10 @@ def toggle_user_manual():
 
 manual_button_label = "📘 사용설명서 닫기" if st.session_state.get("show_user_manual") else "📘 사용설명서 열기"
 st.sidebar.button(manual_button_label, on_click=toggle_user_manual)
+if st.sidebar.button("🔄 전체 프로그램 초기화"):
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
+    st.rerun()
 
 if st.session_state.get("apply_target_scenario"):
     target_payload = {
@@ -1151,19 +1155,27 @@ st.sidebar.markdown("---")
 if is_tutorial:
     st.sidebar.info(
         "🔰 초보자 모드 시작 안내\n"
-        "- 진행 순서: 목표 → 공급 → 수요 → 시장 → 방어\n"
+        "- 진행 순서: 프로젝트 기본 → 목표 → 공급 → 수요 → 시장 → 방어\n"
         "- 핵심 7개만 설정: 목표 가격, 계약 시나리오, 초기 유통량, "
         "언본딩 기간, 전환율, 평균 매수액, 월간 바이백 예산\n"
         "- 나머지(오더북/회전율/캡/심리 등)는 안정적인 기본값으로 자동 적용됩니다."
     )
-    total_steps = 5
-    current_step = int(st.session_state.get("tutorial_step", 1))
-    current_step = max(1, min(total_steps, current_step))
+    total_steps = 6
+    current_step = int(st.session_state.get("tutorial_step", 0))
+    current_step = max(0, min(total_steps - 1, current_step))
     st.session_state["tutorial_step"] = current_step
-    st.sidebar.progress(current_step / total_steps)
-    st.sidebar.caption(f"Step {current_step} / {total_steps}")
+    st.sidebar.progress((current_step + 1) / total_steps)
+    st.sidebar.caption(f"Step {current_step} / {total_steps - 1}")
 
-    if current_step == 1:
+    if current_step == 0:
+        st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
+        st.sidebar.info(
+            "상장 심사에서 가장 먼저 보는 기본 요건입니다. "
+            "정량(유통/언락)과 정성(Audit/법률/백서)을 먼저 체크합니다."
+        )
+        st.sidebar.caption("필수 서류가 미준비면 심사 접수 자체가 불가능합니다.")
+        st.sidebar.button("⏭️ Step 0 건너뛰기", on_click=lambda: st.session_state.__setitem__("tutorial_step", 1))
+    elif current_step == 1:
         st.sidebar.subheader("🎯 Step 1. 목표 설정")
         st.sidebar.info(
             "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
@@ -1248,11 +1260,11 @@ if is_tutorial:
 
     nav_cols = st.sidebar.columns(2)
     with nav_cols[0]:
-        if st.button("⬅ 이전", disabled=current_step == 1):
+        if st.button("⬅ 이전", disabled=current_step == 0):
             st.session_state["tutorial_step"] = current_step - 1
             st.rerun()
     with nav_cols[1]:
-        if st.button("다음 ➡", disabled=current_step == total_steps):
+        if st.button("다음 ➡", disabled=current_step == total_steps - 1):
             st.session_state["tutorial_step"] = current_step + 1
             st.rerun()
 
