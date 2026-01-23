@@ -293,4 +293,196 @@ daily_price_history.append(price)
 
 ---
 
-필요하면 이 문서를 `app.py` 코드와 1:1 대응되는 **수식 기반 상세버전**으로도 확장해 줄게요.*** End Patch"}와 continuation tool call? Mist. Need valid JSON. I used apply_patch with JSON but included raw patch. Should call apply_patch with FREEFORM. Let's redo. This tool not in parallel. Return patch. Need proper. Let's call apply_patch properly. (No JSON). Let's do. Make sure file path. We'll reissue. We'll ignore previous; tool didn't run? It did not because invalid format? Actually I used JSON wrapper incorrectly. Must call apply_patch. Let's do now.```
+## 12) 수식 기반 상세 버전 (코드 1:1 대응)
+
+아래는 `app.py`의 계산 흐름을 수식 형태로 정리한 상세 버전입니다.
+
+### 12-1. 시간 인덱스/분할
+
+- `steps_per_month` = 30 또는 7 (월 내 분할 단위)
+- `total_days` = `simulation_days`
+- `month_index = floor(day_index / steps_per_month) + 1`
+
+### 12-2. 초기 풀 설정
+
+```
+initial_supply = TOTAL_SUPPLY * (initial_circulating_percent / 100)
+pool_token = max(initial_supply * 0.2, 1e-9)
+pool_usdt = pool_token * LISTING_PRICE
+k_constant = pool_token * pool_usdt   # AMM일 때 사용
+price = pool_usdt / pool_token
+```
+
+### 12-3. 월별 언락 → 일 분해
+
+```
+monthly_unlock = sum(allocation_i(month_index))
+daily_unlock = monthly_unlock / steps_per_month
+```
+
+초기 투자자 락업 물량은 분리 계산:
+
+```
+monthly_initial_unlock = allocation_initial(month_index)
+daily_initial_unlock = monthly_initial_unlock / steps_per_month
+```
+
+언본딩 반영:
+
+```
+target_day = day_index + unbonding_days
+sell_queue[target_day] += daily_unlock * sell_pressure_ratio
+sell_queue[target_day] += daily_initial_unlock * initial_investor_sell_ratio
+```
+
+### 12-4. 일별 매수/매도 기본값
+
+```
+remaining_sell = sell_queue[day_index]
+remaining_buy = base_monthly_buy_volume
+
+base_daily_buy = remaining_buy / steps_per_month
+# base_daily_buy_schedule가 있으면 해당 값으로 대체
+daily_user_buy = daily_user_buy_schedule[day_index]
+step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
+```
+
+회전율(신규 유입의 재매수/재매도):
+
+```
+turnover_sell = monthly_buy_volume * turnover_ratio * (1 - turnover_buy_share)
+turnover_buy  = monthly_buy_volume * turnover_ratio * turnover_buy_share
+
+step_turnover_sell = turnover_sell / steps_per_month
+step_turnover_buy  = turnover_buy  / steps_per_month
+```
+
+초기 투자자 추가 매도액:
+
+```
+extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
+extra_sell_token = extra_sell_usdt / price
+remaining_sell += extra_sell_token
+```
+
+### 12-5. 캠페인/트리거 보정
+
+```
+effective_sell_pressure = max(0, sell_pressure_ratio - sell_suppression_delta)
+sell_ratio_scale = 1.0
+if sell_pressure_ratio > 0:
+    sell_ratio_scale = effective_sell_pressure / sell_pressure_ratio
+step_sell = remaining_sell * sell_ratio_scale
+```
+
+마케팅 덤핑(옵션):
+
+```
+if use_marketing_contract_scenario and price >= 0.10:
+    dump_today = marketing_remaining * 0.005
+    marketing_remaining -= dump_today
+    step_sell += dump_today
+```
+
+최종 매도량:
+
+```
+total_sell = step_sell + step_turnover_sell
+```
+
+### 12-6. 매수/매도 캡 적용
+
+```
+effective_max_sell_ratio = max(0, max_sell_token_ratio - max_sell_token_ratio_delta)
+sell_cap = pool_token * effective_max_sell_ratio
+buy_cap  = pool_usdt * max_buy_usdt_ratio
+
+total_sell = min(total_sell, sell_cap)
+step_buy = min(step_buy, buy_cap)
+```
+
+### 12-7. 가격 모델별 업데이트
+
+**AMM 모델**
+
+```
+total_buy = step_buy + step_turnover_buy
+
+pool_token += total_sell
+usdt_out = pool_usdt - (k_constant / pool_token)
+pool_usdt -= usdt_out
+pool_usdt += total_buy
+token_out = pool_token - (k_constant / pool_usdt)
+pool_token -= token_out
+
+price = pool_usdt / pool_token
+```
+
+**CEX 모델**
+
+```
+buy_impact  = impact_for_usdt(total_buy)
+sell_impact = impact_for_usdt(total_sell * price)
+price_after = price * (1 + buy_impact - sell_impact)
+
+buy_token_out = total_buy / price_after
+sell_usdt_out = total_sell * price_after
+
+pool_usdt = pool_usdt + total_buy - sell_usdt_out
+pool_token = pool_token + total_sell - buy_token_out
+pool_usdt = pool_token * price_after
+price = pool_usdt / pool_token
+```
+
+**HYBRID 모델**
+
+```
+if day_index % steps_per_month == 0:
+    depth_usdt_1pct *= (1 + depth_growth_rate)
+    depth_usdt_2pct *= (1 + depth_growth_rate)
+```
+
+### 12-8. 소각/바이백
+
+```
+if price_model in ["CEX", "HYBRID"]:
+    token_out = total_buy / price
+
+trade_volume_tokens = total_sell + token_out
+burn_tokens = trade_volume_tokens * (burn_fee_rate + burn_rate_delta)
+
+pool_token = max(pool_token - burn_tokens, 1e-9)
+k_constant = pool_token * pool_usdt
+```
+
+바이백:
+
+```
+total_buyback = monthly_buyback_usdt + (buyback_usdt_delta * steps_per_month)
+step_buyback = total_buyback / steps_per_month
+
+if price_model in ["CEX", "HYBRID"]:
+    pool_usdt += step_buyback
+    pool_token -= (step_buyback / price)
+else:
+    pool_usdt += step_buyback
+    token_out_buyback = pool_token - (k_constant / pool_usdt)
+    pool_token -= token_out_buyback
+```
+
+### 12-9. LP 성장
+
+```
+if new_price > prev_step_price:
+    add_usdt = pool_usdt * (lp_growth_rate / steps_per_month)
+    add_token = add_usdt / new_price
+    pool_usdt += add_usdt
+    pool_token += add_token
+    k_constant = pool_token * pool_usdt
+```
+
+### 12-10. 가격 기록
+
+```
+daily_price_history.append(price)
+```
