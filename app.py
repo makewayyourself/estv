@@ -2048,24 +2048,29 @@ if is_expert and current_step > 0:
     campaigns = []
     triggers = []
 
-if st.session_state.get("contract_mode_applied") != contract_mode:
-    if contract_mode == "기존 계약서":
-        krw_rate = st.session_state.get("krw_per_usd", 1300)
-        st.session_state.update({
-            "input_supply": 10.0,
-            "input_unbonding": 0,
-            "input_sell_ratio": 15,
-            "input_buy_volume": int(3_500_000_000 / max(krw_rate, 1)),
-            "scenario_preset": "직접 입력",
-            "simulation_unit": "일",
-            "simulation_value": 30,
-            "price_model": "CEX",
-            "depth_usdt_1pct": 300_000,
-            "depth_usdt_2pct": 800_000,
-            "depth_growth_rate": 0.0
-        })
-    st.session_state["contract_mode_applied"] = contract_mode
-if use_master_plan:
+contract_mode = st.session_state.get("contract_mode", "사용자 조정")
+use_master_plan = bool(st.session_state.get("use_master_plan", False))
+
+if st.session_state.get("step0_completed", False):
+    if st.session_state.get("contract_mode_applied") != contract_mode:
+        if contract_mode == "기존 계약서":
+            krw_rate = st.session_state.get("krw_per_usd", 1300)
+            st.session_state.update({
+                "input_supply": 10.0,
+                "input_unbonding": 0,
+                "input_sell_ratio": 15,
+                "input_buy_volume": int(3_500_000_000 / max(krw_rate, 1)),
+                "scenario_preset": "직접 입력",
+                "simulation_unit": "일",
+                "simulation_value": 30,
+                "price_model": "CEX",
+                "depth_usdt_1pct": 300_000,
+                "depth_usdt_2pct": 800_000,
+                "depth_growth_rate": 0.0
+            })
+        st.session_state["contract_mode_applied"] = contract_mode
+
+if st.session_state.get("step0_completed", False) and use_master_plan:
     phase2_start = prelisting_days
     phase2_end = min(prelisting_days + phase2_days, total_days)
     campaigns.extend([
