@@ -811,13 +811,19 @@ if legal_supply > 3.0:
     st.sidebar.error("🚨 [Legal Check] 초기 유통량 3% 초과")
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
+if "mode" not in st.session_state:
+    st.session_state["mode"] = "tutorial"
+if "tutorial_step" not in st.session_state:
+    st.session_state["tutorial_step"] = 1
 mode = st.sidebar.radio(
     "모드 선택",
     options=["초보자", "전문가"],
     index=0,
     help="초보자는 핵심 3개만, 전문가는 상세 설정까지 봅니다."
 )
+st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
 is_expert = mode == "전문가"
+is_tutorial = not is_expert
 def toggle_user_manual():
     st.session_state["show_user_manual"] = not st.session_state.get("show_user_manual", False)
 
