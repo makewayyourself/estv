@@ -60,6 +60,8 @@ RESET_DEFAULTS = {
     "scenario_preset": "직접 입력",
     "conversion_rate": 0.10,
     "avg_ticket": 100.0,
+    "use_buy_inflow_pattern": False,
+    "pattern_month4_avg_krw": 50,
     "enable_dual_pipeline": False,
     "migration_target": 50_000,
     "migration_ramp_months": 3,
@@ -92,6 +94,20 @@ RESET_DEFAULTS = {
     "buyback_daily": 0,
     "monthly_buyback_usdt": 0,
     "burn_fee_rate": 0.3,
+    "initial_investor_lock_months": 12,
+    "initial_investor_locked_tokens": 0.0,
+    "initial_investor_vesting_months": 12,
+    "initial_investor_release_percent": 10.0,
+    "initial_investor_release_interval": 1,
+    "initial_investor_sell_ratio": 50,
+    "initial_investor_monthly_sell_usdt": 0.0,
+    "panic_sensitivity": 1.5,
+    "fomo_sensitivity": 1.2,
+    "private_sale_price": 0.05,
+    "profit_taking_multiple": 5.0,
+    "arbitrage_threshold": 2.0,
+    "min_depth_ratio": 0.3,
+    "show_upbit_baseline": False,
     "krw_per_usd": 1300,
     "marketing_dashboard_url": "http://localhost:5173"
 }
@@ -1723,14 +1739,16 @@ if is_expert and current_step > 0:
         max_value=60,
         value=12,
         step=1,
-        help="초기 투자자 물량이 시장에 풀리기 전까지 묶이는 기간입니다."
+        help="초기 투자자 물량이 시장에 풀리기 전까지 묶이는 기간입니다.",
+        key="initial_investor_lock_months"
     )
     initial_investor_locked_tokens = investor_expander.number_input(
         "3-2. 락업 물량 (토큰 수)",
         min_value=0.0,
         value=0.0,
         step=1_000_000.0,
-        help="초기 투자자에게 배정된 락업 토큰 수량입니다. 0이면 미적용됩니다."
+        help="초기 투자자에게 배정된 락업 토큰 수량입니다. 0이면 미적용됩니다.",
+        key="initial_investor_locked_tokens"
     )
     initial_investor_vesting_months = investor_expander.slider(
         "3-3. 베스팅 기간 (개월)",
@@ -1738,7 +1756,8 @@ if is_expert and current_step > 0:
         max_value=60,
         value=12,
         step=1,
-        help="락업 종료 후 몇 개월에 걸쳐 해제할지 선택합니다."
+        help="락업 종료 후 몇 개월에 걸쳐 해제할지 선택합니다.",
+        key="initial_investor_vesting_months"
     )
     initial_investor_release_percent = investor_expander.slider(
         "3-4. 월별 해제 비율 (%)",
@@ -1746,7 +1765,8 @@ if is_expert and current_step > 0:
         max_value=100.0,
         value=10.0,
         step=1.0,
-        help="락업 물량 중 매월 해제되는 비율입니다. 설정값에 따라 실제 베스팅 기간이 자동 보정됩니다."
+        help="락업 물량 중 매월 해제되는 비율입니다. 설정값에 따라 실제 베스팅 기간이 자동 보정됩니다.",
+        key="initial_investor_release_percent"
     )
     initial_investor_release_interval = investor_expander.slider(
         "3-5. 해제 주기 (개월)",
@@ -1754,7 +1774,8 @@ if is_expert and current_step > 0:
         max_value=12,
         value=1,
         step=1,
-        help="해제 주기를 설정합니다. 예: 3개월이면 분기 단위로 해제됩니다."
+        help="해제 주기를 설정합니다. 예: 3개월이면 분기 단위로 해제됩니다.",
+        key="initial_investor_release_interval"
     )
     initial_investor_sell_ratio = investor_expander.slider(
         "3-6. 초기 투자자 해제 매도율 (%)",
@@ -1762,14 +1783,16 @@ if is_expert and current_step > 0:
         max_value=100,
         value=50,
         step=5,
-        help="초기 투자자 해제 물량 중 실제로 매도되는 비율입니다."
+        help="초기 투자자 해제 물량 중 실제로 매도되는 비율입니다.",
+        key="initial_investor_sell_ratio"
     )
     initial_investor_monthly_sell_usdt = investor_expander.number_input(
         "3-7. 초기 투자자 월간 판매 금액 ($)",
         min_value=0.0,
         value=0.0,
         step=50_000.0,
-        help="락업 해제 기간 동안 월간 추가 매도 금액(USDT 기준)을 반영합니다."
+        help="락업 해제 기간 동안 월간 추가 매도 금액(USDT 기준)을 반영합니다.",
+        key="initial_investor_monthly_sell_usdt"
     )
 
     TOTAL_SUPPLY = float(total_supply_input)
@@ -1800,7 +1823,8 @@ if is_expert and current_step > 0:
     use_buy_inflow_pattern = inflow_expander.checkbox(
         "월간 매수 유입 시계열 패턴 사용",
         value=False,
-        help="월별 매수 유입을 패턴(초기 급증→조정→안정)으로 반영합니다."
+        help="월별 매수 유입을 패턴(초기 급증→조정→안정)으로 반영합니다.",
+        key="use_buy_inflow_pattern"
     )
     pattern_month4_avg_krw = inflow_expander.slider(
         "월 4+ 평균 유입(억 KRW)",
@@ -1808,7 +1832,8 @@ if is_expert and current_step > 0:
         max_value=60,
         value=50,
         step=5,
-        help="월 4 이후 장기 평균 유입 규모(억 원)입니다."
+        help="월 4 이후 장기 평균 유입 규모(억 원)입니다.",
+        key="pattern_month4_avg_krw"
     )
     simulation_unit = inflow_expander.selectbox(
         "4-1. 시뮬레이션 기간 단위",
@@ -2316,7 +2341,8 @@ if is_expert and current_step > 0:
         max_value=3.0,
         value=1.5,
         step=0.1,
-        help="가격 하락 시 매도 압력을 증폭시키는 강도입니다."
+        help="가격 하락 시 매도 압력을 증폭시키는 강도입니다.",
+        key="panic_sensitivity"
     )
     fomo_sensitivity = sentiment_expander.slider(
         "FOMO 민감도",
@@ -2324,13 +2350,15 @@ if is_expert and current_step > 0:
         max_value=2.0,
         value=1.2,
         step=0.1,
-        help="가격 상승 시 추격 매수를 증폭시키는 강도입니다."
+        help="가격 상승 시 추격 매수를 증폭시키는 강도입니다.",
+        key="fomo_sensitivity"
     )
     private_sale_price = sentiment_expander.number_input(
         "초기 투자자 평단가($)",
         value=0.05,
         step=0.01,
-        help="초기 투자자의 평균 매입 단가입니다. 이 가격 이하에서는 매도가 둔화됩니다."
+        help="초기 투자자의 평균 매입 단가입니다. 이 가격 이하에서는 매도가 둔화됩니다.",
+        key="private_sale_price"
     )
     profit_taking_multiple = sentiment_expander.slider(
         "이익실현 목표 배수",
@@ -2338,7 +2366,8 @@ if is_expert and current_step > 0:
         max_value=10.0,
         value=5.0,
         step=0.5,
-        help="초기 투자자가 평단가 대비 몇 배 상승 시 이익실현 매도를 강화할지 설정합니다."
+        help="초기 투자자가 평단가 대비 몇 배 상승 시 이익실현 매도를 강화할지 설정합니다.",
+        key="profit_taking_multiple"
     )
     arbitrage_threshold = sentiment_expander.slider(
         "차익거래 임계값(%)",
@@ -2347,7 +2376,8 @@ if is_expert and current_step > 0:
         value=2.0,
         step=0.5,
         help="가격 변동률이 이 값을 넘으면 차익거래 유입을 가정합니다.",
-        format="%.1f%%"
+        format="%.1f%%",
+        key="arbitrage_threshold"
     )
     min_depth_ratio = sentiment_expander.slider(
         "패닉 시 오더북 깊이 하한",
@@ -2355,7 +2385,8 @@ if is_expert and current_step > 0:
         max_value=1.0,
         value=0.3,
         step=0.05,
-        help="패닉 국면에서 오더북 깊이가 줄어드는 최소 비율입니다."
+        help="패닉 국면에서 오더북 깊이가 줄어드는 최소 비율입니다.",
+        key="min_depth_ratio"
     )
 
     market_sentiment_config = {
@@ -2530,7 +2561,8 @@ if is_expert and current_step > 0:
     show_upbit_baseline = st.sidebar.checkbox(
         "Upbit 평균 그래프 표시",
         value=False,
-        help="한국 주요 거래소의 평균 추정치를 기준으로 그래프를 비교 표시합니다."
+        help="한국 주요 거래소의 평균 추정치를 기준으로 그래프를 비교 표시합니다.",
+        key="show_upbit_baseline"
     )
     def apply_upbit_baseline_clicked():
         st.session_state["apply_upbit_baseline"] = True
