@@ -1885,15 +1885,15 @@ if go is not None:
     st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
 else:
     st.info("툴팁 표시를 위해 plotly가 필요합니다. `pip install plotly` 후 다시 실행해 주세요.")
-fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(series, label='ESTV Price ($)', color='blue' if result['legal_check'] else 'red')
-ax.axhline(y=0.5, color='gray', linestyle=':', label='Listing Price ($0.50)')
+    ax.axhline(y=0.5, color='gray', linestyle=':', label='Listing Price ($0.50)')
     ax.set_xlabel("Day")
-ax.set_ylabel("Price")
-ax.legend()
+    ax.set_ylabel("Price")
+    ax.legend()
     ax.set_yticks([i * 0.25 for i in range(int(max(series) / 0.25) + 2)])
-ax.grid(True, alpha=0.3)
-st.pyplot(fig)
+    ax.grid(True, alpha=0.3)
+    st.pyplot(fig)
 
 if len(series) > 2:
     diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
