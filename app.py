@@ -50,6 +50,10 @@ RESET_DEFAULTS = {
     "optimized_inputs": None,
     "optimized_notes": None,
     "recommended_notes": None,
+    "reverse_target_price": 5.0,
+    "reverse_basis": "전환율 조정",
+    "reverse_volatility_mode": "완화",
+    "reverse_auto_price_model": True,
     "project_symbol": "ESTV",
     "project_total_supply": 1_000_000_000,
     "project_pre_circulated": 0.0,
@@ -1108,6 +1112,25 @@ if st.session_state.get("show_user_manual"):
 
 # 사이드바: 사용자 입력 컨트롤
 step0_visible = st.session_state.get("tutorial_step", 0) == 0 and not st.session_state.get("step0_completed", False)
+def should_show_kyc_warnings():
+    kyc_keys = [
+        "project_symbol",
+        "project_total_supply",
+        "project_pre_circulated",
+        "project_unlocked",
+        "project_holders",
+        "target_tier",
+        "project_type",
+        "audit_status",
+        "concentration_ratio",
+        "has_legal_opinion",
+        "has_whitepaper"
+    ]
+    for key in kyc_keys:
+        if st.session_state.get(key, RESET_DEFAULTS.get(key)) != RESET_DEFAULTS.get(key):
+            return True
+    return False
+
 legal_supply = st.session_state.get("input_supply", 3.0)
 if legal_supply > 3.0 and step0_visible:
     st.sidebar.error("🚨 [Legal Check] 초기 유통량 3% 초과")
@@ -1255,55 +1278,57 @@ if step0_visible:
         "has_legal_opinion": has_legal_opinion,
         "has_whitepaper": has_whitepaper
     }
-    for warn in check_comprehensive_red_flags(red_flag_inputs):
-        if warn["level"] == "CRITICAL":
-            st.sidebar.error(warn["msg"])
-        elif warn["level"] == "DANGER":
-            st.sidebar.warning(warn["msg"])
+    show_kyc_alerts = st.session_state.get("step0_completed", False) or should_show_kyc_warnings()
+    if show_kyc_alerts:
+        for warn in check_comprehensive_red_flags(red_flag_inputs):
+            if warn["level"] == "CRITICAL":
+                st.sidebar.error(warn["msg"])
+            elif warn["level"] == "DANGER":
+                st.sidebar.warning(warn["msg"])
+            else:
+                st.sidebar.warning(warn["msg"])
+
+        score = 100.0
+        if pre_circ_ratio > 10:
+            score -= (pre_circ_ratio - 10) * 1.0
+        unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
+        if unlock_ratio > 20:
+            score -= (unlock_ratio - 20) * 2.0
+        holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
+        score -= (100 - holder_score) * 0.2
+        if audit_status == "미진행":
+            score -= 30
+        if not has_legal_opinion:
+            score -= 30
+        if not has_whitepaper:
+            score -= 30
+        score = max(0.0, min(100.0, score))
+        if score >= 80:
+            grade = "양호"
+        elif score >= 60:
+            grade = "주의"
         else:
-            st.sidebar.warning(warn["msg"])
+            grade = "거절 위험"
+        scorecard_help = (
+            "거래소는 수수료보다 신뢰를 먼저 봅니다. 신뢰가 무너지면 뱅크런이 발생합니다.\n"
+            "즉시 거절되는 3대 리스크: 덤핑 구조(과도한 초기 유통/물량 집중), "
+            "유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
+            "내부 심사는 덤핑 테스트/유동성 스트레스 테스트로 진행되며 회복 불가 판정이면 거절·상폐됩니다.\n"
+            "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
+            "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
+        )
+        score_cols = st.sidebar.columns([5, 1])
+        score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
+        with score_cols[1].popover("?", use_container_width=True):
+            st.markdown(scorecard_help)
 
-    score = 100.0
-    if pre_circ_ratio > 10:
-        score -= (pre_circ_ratio - 10) * 1.0
-    unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
-    if unlock_ratio > 20:
-        score -= (unlock_ratio - 20) * 2.0
-    holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
-    score -= (100 - holder_score) * 0.2
-    if audit_status == "미진행":
-        score -= 30
-    if not has_legal_opinion:
-        score -= 30
-    if not has_whitepaper:
-        score -= 30
-    score = max(0.0, min(100.0, score))
-    if score >= 80:
-        grade = "양호"
-    elif score >= 60:
-        grade = "주의"
-    else:
-        grade = "거절 위험"
-    scorecard_help = (
-        "거래소는 수수료보다 신뢰를 먼저 봅니다. 신뢰가 무너지면 뱅크런이 발생합니다.\n"
-        "즉시 거절되는 3대 리스크: 덤핑 구조(과도한 초기 유통/물량 집중), "
-        "유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
-        "내부 심사는 덤핑 테스트/유동성 스트레스 테스트로 진행되며 회복 불가 판정이면 거절·상폐됩니다.\n"
-        "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
-        "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
-    )
-    score_cols = st.sidebar.columns([5, 1])
-    score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
-    with score_cols[1].popover("?", use_container_width=True):
-        st.markdown(scorecard_help)
-
-    score_msg = f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})"
-    if grade == "거절 위험":
-        st.sidebar.error(score_msg)
-    elif grade == "주의":
-        st.sidebar.warning(score_msg)
-    else:
-        st.sidebar.info(score_msg)
+        score_msg = f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})"
+        if grade == "거절 위험":
+            st.sidebar.error(score_msg)
+        elif grade == "주의":
+            st.sidebar.warning(score_msg)
+        else:
+            st.sidebar.info(score_msg)
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
@@ -2753,24 +2778,28 @@ with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract
         min_value=0.1,
         value=5.0,
         step=0.1,
-        help="목표 최종 가격을 입력하면 역산 로직이 필요한 유입/설정을 계산합니다."
+        help="목표 최종 가격을 입력하면 역산 로직이 필요한 유입/설정을 계산합니다.",
+        key="reverse_target_price"
     )
     reverse_basis = st.selectbox(
         "역산 기준",
         options=["전환율 조정", "평균 매수액 조정", "전환율+매수액 균등"],
         index=0,
-        help="목표가 달성을 위해 어떤 변수를 우선 조정할지 선택합니다."
+        help="목표가 달성을 위해 어떤 변수를 우선 조정할지 선택합니다.",
+        key="reverse_basis"
     )
     volatility_mode = st.selectbox(
         "변동성 적용 방식",
         options=["완화", "중립", "공격"],
         index=0,
-        help="목표가를 맞출 때 변동성을 줄이거나(완화), 유지(중립), 높이는(공격) 방향으로 설정합니다."
+        help="목표가를 맞출 때 변동성을 줄이거나(완화), 유지(중립), 높이는(공격) 방향으로 설정합니다.",
+        key="reverse_volatility_mode"
     )
     auto_price_model = st.checkbox(
         "가격 모델/오더북 자동 조정",
         value=True,
-        help="역산 계산 시 가격 모델과 오더북 깊이도 함께 조정합니다."
+        help="역산 계산 시 가격 모델과 오더북 깊이도 함께 조정합니다.",
+        key="reverse_auto_price_model"
     )
 
     if st.button("역산 계산"):
