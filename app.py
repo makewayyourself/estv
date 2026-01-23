@@ -2039,6 +2039,16 @@ if go is not None:
                 depth_thresh=0.7,
                 fomo_multiplier=1.5
             )
+        # Always annotate explicit PANIC_SELL events from log if present
+        for i in range(1, max_idx):
+            if "PANIC_SELL" in log.get("reason", [""])[i]:
+                narrative_annotations.append({
+                    "day": i,
+                    "price": series[i],
+                    "tag": "📉 공포 투매 (Panic Sell)",
+                    "score": 1.0
+                })
+
         narrative_annotations = sorted(narrative_annotations, key=lambda x: x["score"], reverse=True)[:12]
         if narrative_annotations:
             y_offset = max(series) * 0.05
