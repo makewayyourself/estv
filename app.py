@@ -1163,6 +1163,7 @@ current_step = max(0, min(total_steps - 1, current_step))
 if not st.session_state.get("step0_completed"):
     current_step = 0
 st.session_state["tutorial_step"] = current_step
+step0_preview = current_step == 0
 
 if current_step == 0:
     st.session_state["step0_completed"] = False
@@ -1183,7 +1184,6 @@ if current_step == 0:
         st.session_state["step0_completed"] = True
         st.session_state["tutorial_step"] = 1
         st.rerun()
-    st.stop()
 else:
     mode = st.sidebar.radio(
         "모드 선택",
@@ -1300,10 +1300,84 @@ else:
             st.session_state["tutorial_step"] = current_step + 1
             st.rerun()
 
-    if not st.session_state.get("step0_completed", False):
-        st.stop()
-
     # Tutorial defaults for hidden fields
+    contract_mode = st.session_state.get("contract_mode", "사용자 조정")
+    input_supply = st.session_state.get("input_supply", 3.0)
+    input_unbonding = st.session_state.get("input_unbonding", 30)
+    input_sell_ratio = st.session_state.get("input_sell_ratio", 30)
+    input_buy_volume = st.session_state.get("input_buy_volume", 200000)
+    conversion_rate = st.session_state.get("conversion_rate", 0.10)
+    avg_ticket = st.session_state.get("avg_ticket", 100.0)
+    simulation_unit = "월"
+    simulation_value = 1
+    total_days = 30
+    simulation_months = 1
+    onboarding_months = 12
+    krw_rate = 1300
+    use_buy_inflow_pattern = False
+    base_daily_buy_schedule = []
+    total_new_buyers = 160_000_000 * (conversion_rate / 100.0)
+    total_inflow_money = total_new_buyers * avg_ticket
+    monthly_user_buy_volume = total_inflow_money / onboarding_months
+    total_inflow_days = onboarding_months * 30
+    base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
+    daily_user_buy_schedule = [base_daily_user_buy if d < total_inflow_days else 0.0 for d in range(total_days)]
+    use_phase_inflow = False
+    phase2_days = 30
+    prelisting_days = 30
+    prelisting_release_days = 7
+    market_depth_level = st.session_state.get("market_depth_level", "보통")
+    depth_map = {
+        "약함": (300_000, 800_000),
+        "보통": (1_000_000, 3_000_000),
+        "강함": (3_000_000, 9_000_000)
+    }
+    depth_usdt_1pct, depth_usdt_2pct = depth_map[market_depth_level]
+    price_model = "CEX"
+    depth_growth_rate = 0.0
+    steps_per_month = 30
+    turnover_ratio = 5.0
+    turnover_buy_share = 50.0
+    lp_growth_rate = 1.0
+    max_buy_usdt_ratio = 5.0
+    max_sell_token_ratio = 5.0
+    use_master_plan = False
+    use_triggers = False
+    buy_verify_boost = 0.5
+    holding_suppress = 0.1
+    payburn_delta = 0.002
+    buyback_daily = 0.0
+    monthly_buyback_usdt = st.session_state.get("monthly_buyback_usdt", 0)
+    burn_fee_rate = st.session_state.get("burn_fee_rate", 0.3)
+    panic_sensitivity = 1.5
+    fomo_sensitivity = 1.2
+    private_sale_price = 0.05
+    profit_taking_multiple = 5.0
+    arbitrage_threshold = 2.0
+    min_depth_ratio = 0.3
+    market_sentiment_config = {
+        "panic_sensitivity": panic_sensitivity,
+        "fomo_sensitivity": fomo_sensitivity,
+        "private_sale_price": private_sale_price,
+        "profit_taking_multiple": profit_taking_multiple,
+        "arbitrage_threshold": arbitrage_threshold / 100.0,
+        "min_depth_ratio": min_depth_ratio
+    }
+    initial_investor_lock_months = 0
+    initial_investor_locked_tokens = 0.0
+    initial_investor_vesting_months = 0
+    initial_investor_release_percent = 10.0
+    initial_investor_release_interval = 1
+    initial_investor_sell_ratio = 0.0
+    initial_investor_monthly_sell_usdt = 0.0
+    derived_vesting_months = 1
+    initial_investor_locked_percent = 0.0
+    campaigns = []
+    triggers = []
+    enable_confidence = False
+    show_upbit_baseline = False
+    krw_per_usd = 1300
+if step0_preview:
     contract_mode = st.session_state.get("contract_mode", "사용자 조정")
     input_supply = st.session_state.get("input_supply", 3.0)
     input_unbonding = st.session_state.get("input_unbonding", 30)
