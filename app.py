@@ -129,6 +129,8 @@ class TokenSimulationEngine:
             "price": [],
             "reason_code": [],
             "action_needed": [],
+            "reason": [],
+            "action": [],
             "sentiment_index": [],
             "sell_pressure_vol": [],
             "buy_power_vol": [],
@@ -191,6 +193,13 @@ class TokenSimulationEngine:
         initial_investor_sell_usdt_schedule = inputs.get("initial_investor_sell_usdt_schedule", [])
 
         for day_index in range(total_days):
+            day_reasons = []
+            day_actions = []
+
+            def log_reason_action(reason, action):
+                day_reasons.append(reason)
+                day_actions.append(action)
+
             prev_day_price = daily_price_history[-1]
             if len(daily_price_history) >= 7:
                 ma_7 = float(np.mean(daily_price_history[-7:]))
@@ -349,6 +358,7 @@ class TokenSimulationEngine:
                     marketing_remaining = max(marketing_remaining - dump_today, 0.0)
                     step_sell += dump_today
                     marketing_dump_today = True
+                    log_reason_action("MARKETING_DUMP", "NEED_BUYBACK")
                     action_logs.append({
                         "day": day_index + 1,
                         "action": "마케팅 덤핑(지속)",
@@ -362,6 +372,7 @@ class TokenSimulationEngine:
                 initial_investor_remaining = max(initial_investor_remaining - profit_dump, 0.0)
                 step_sell += profit_dump
                 profit_dump_today = True
+                log_reason_action("PROFIT_TAKING", "NEED_BUYBACK")
                 action_logs.append({
                     "day": day_index + 1,
                     "action": "초기 투자자 이익실현",
@@ -418,6 +429,7 @@ class TokenSimulationEngine:
                     pool_usdt = max(pool_token * amm_price, 1e-9)
                     k_constant = pool_token * pool_usdt
                     current_price = pool_usdt / pool_token
+                    log_reason_action("ARBITRAGE_SWAP", "STABILIZE_PRICE")
                     action_logs.append({
                         "day": day_index + 1,
                         "action": "차익거래 스왑",
@@ -472,15 +484,23 @@ class TokenSimulationEngine:
                 action_needed = "MARKETING_OP"
             else:
                 action_needed = "NONE"
+            if panic_triggered:
+                log_reason_action("PANIC_SELL", "NEED_BUYBACK")
+            if fomo_triggered:
+                log_reason_action("FOMO_RALLY", "MARKETING_OP")
             sentiment_index = max(0.5, min(1.5, 1.0 + (price_change_ratio * fomo_sensitivity)))
             liquidity_depth_ratio = depth_ratio if price_model in ["CEX", "HYBRID"] else 1.0
             marketing_trigger = marketing_dump_today or (buy_multiplier > 1.0)
             whale_sell_volume = dump_today + profit_dump
+            if liquidity_depth_ratio < 0.5 and price_change_ratio < 0:
+                log_reason_action("LIQUIDITY_DRAIN", "ADD_LIQUIDITY")
 
             simulation_log["day"].append(day_index + 1)
             simulation_log["price"].append(new_price)
             simulation_log["reason_code"].append(reason_code)
             simulation_log["action_needed"].append(action_needed)
+            simulation_log["reason"].append(", ".join(day_reasons) if day_reasons else "NONE")
+            simulation_log["action"].append(", ".join(day_actions) if day_actions else "NONE")
             simulation_log["sentiment_index"].append(sentiment_index)
             simulation_log["sell_pressure_vol"].append(total_sell)
             simulation_log["buy_power_vol"].append(total_buy)
