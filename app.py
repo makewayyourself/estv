@@ -1123,7 +1123,8 @@ if step0_visible:
     symbol = st.sidebar.text_input(
         "코인 심볼",
         value=st.session_state.get("project_symbol", "ESTV"),
-        key="project_symbol"
+        key="project_symbol",
+        help="거래소에서 사용할 코인 심볼(티커)입니다."
     )
     total_supply_input = st.sidebar.number_input(
         "총 발행량 (Total Supply)",
@@ -1166,7 +1167,8 @@ if step0_visible:
             "DEX (Uniswap only) - Easy"
         ],
         index=1,
-        key="target_tier"
+        key="target_tier",
+        help="목표 거래소 등급에 따라 보유자/유통 기준이 달라집니다."
     )
     project_type = st.sidebar.selectbox(
         "프로젝트 유형",
@@ -1177,13 +1179,15 @@ if step0_visible:
             "Meme/Low Cap (밈/잡코인)"
         ],
         index=0,
-        key="project_type"
+        key="project_type",
+        help="프로젝트 유형에 따라 추천 변동성 기본값이 달라집니다."
     )
     audit_status = st.sidebar.selectbox(
         "보안 감사(Audit) 여부",
         ["완료 (Tier 1 - CertiK 등)", "완료 (Tier 2)", "진행 중", "미진행"],
         index=3,
-        key="audit_status"
+        key="audit_status",
+        help="감사 완료 여부는 상장 심사 핵심 체크 항목입니다."
     )
     concentration_ratio = st.sidebar.slider(
         "상위 10인 지갑 보유 비중 (%)",
@@ -1191,17 +1195,20 @@ if step0_visible:
         max_value=100.0,
         value=float(st.session_state.get("concentration_ratio", 0.0)),
         step=1.0,
-        key="concentration_ratio"
+        key="concentration_ratio",
+        help="지갑 집중도가 높을수록 리스크 경고가 강화됩니다."
     )
     has_legal_opinion = st.sidebar.checkbox(
         "증권성 검토 법률 의견서 보유",
         value=bool(st.session_state.get("has_legal_opinion", False)),
-        key="has_legal_opinion"
+        key="has_legal_opinion",
+        help="법률 의견서 미보유 시 상장 리스크가 커집니다."
     )
     has_whitepaper = st.sidebar.checkbox(
         "백서 및 유통량 계획표 완비",
         value=bool(st.session_state.get("has_whitepaper", False)),
-        key="has_whitepaper"
+        key="has_whitepaper",
+        help="백서/유통 계획이 없으면 심사 리스크가 커집니다."
     )
 else:
     symbol = st.session_state.get("project_symbol", "ESTV")
@@ -1403,12 +1410,20 @@ else:
                 "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
                 "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
             )
-            target_price = st.sidebar.number_input("목표 가격 ($)", min_value=0.1, value=5.0, step=0.1, key="tutorial_target_price")
+            target_price = st.sidebar.number_input(
+                "목표 가격 ($)",
+                min_value=0.1,
+                value=5.0,
+                step=0.1,
+                key="tutorial_target_price",
+                help="최종 목표 가격을 설정합니다."
+            )
             contract_mode = st.sidebar.selectbox(
                 "계약 시나리오",
                 options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
                 index=0,
-                key="contract_mode"
+                key="contract_mode",
+                help="선택한 계약 시나리오에 맞춰 주요 값이 자동 적용됩니다."
             )
         elif current_step == 2:
             st.sidebar.subheader("📉 Step 2. 공급 제한 (Risk 관리)")
@@ -1422,7 +1437,8 @@ else:
                 max_value=max(0.1, min(100.0, pre_circ_ratio)),
                 value=min(st.session_state.get("input_supply", 3.0), 10.0),
                 step=0.5,
-                key="input_supply"
+                key="input_supply",
+                help="초기 유통량이 높을수록 가격 방어가 어려워집니다."
             )
             if input_supply > 3.0:
                 st.sidebar.error("🚨 법적 리스크 발생: 초기 유통량은 3%를 초과할 수 없습니다.")
@@ -1432,7 +1448,8 @@ else:
                 max_value=60,
                 value=int(st.session_state.get("input_unbonding", 30)),
                 step=5,
-                key="input_unbonding"
+                key="input_unbonding",
+                help="언본딩 기간이 길수록 매도 지연 효과가 큽니다."
             )
             input_sell_ratio = st.session_state.get("input_sell_ratio", 30)
         elif current_step == 3:
@@ -1448,13 +1465,15 @@ else:
                 value=float(st.session_state.get("conversion_rate", 0.10)),
                 step=0.01,
                 format="%.2f%%",
-                key="conversion_rate"
+                key="conversion_rate",
+                help="기존 회원 중 실제 매수로 전환되는 비율입니다."
             )
             avg_ticket = st.sidebar.number_input(
                 "1인당 평균 매수액 ($)",
                 value=float(st.session_state.get("avg_ticket", 100.0)),
                 step=10.0,
-                key="avg_ticket"
+                key="avg_ticket",
+                help="회원 1명이 평균적으로 매수하는 금액입니다."
             )
             estv_total_users = 160_000_000
             calculated_inflow = (estv_total_users * (conversion_rate / 100.0) * avg_ticket) / 12.0
@@ -1476,7 +1495,8 @@ else:
                 "월간 바이백 예산($)",
                 value=int(st.session_state.get("monthly_buyback_usdt", 0)),
                 step=100000,
-                key="monthly_buyback_usdt"
+                key="monthly_buyback_usdt",
+                help="시장 방어를 위한 월간 바이백 예산입니다."
             )
             st.sidebar.button("🚀 시뮬레이션 결과 확인하기")
 
@@ -1919,7 +1939,8 @@ if is_expert and current_step > 0:
         options=list(preset_map.keys()),
         index=0,
         key="scenario_preset",
-        on_change=apply_preset
+        on_change=apply_preset,
+        help="전환율/객단가를 빠르게 설정하는 프리셋입니다."
     )
 
     conversion_rate = inflow_expander.slider(
@@ -1957,7 +1978,8 @@ if is_expert and current_step > 0:
             min_value=0,
             value=50_000,
             step=1000,
-            key="migration_target"
+            key="migration_target",
+            help="기존 회원 유입 목표치를 월 기준으로 설정합니다."
         )
         migration_ramp_months = inflow_expander.slider(
             "기존 회원 도달 기간(개월)",
@@ -1965,14 +1987,16 @@ if is_expert and current_step > 0:
             max_value=12,
             value=3,
             step=1,
-            key="migration_ramp_months"
+            key="migration_ramp_months",
+            help="기존 회원 유입 목표에 도달하는 기간입니다."
         )
         acquisition_target = inflow_expander.number_input(
             "신규 회원 목표(명/월)",
             min_value=0,
             value=10_000,
             step=1000,
-            key="acquisition_target"
+            key="acquisition_target",
+            help="신규 회원 유입 목표치를 월 기준으로 설정합니다."
         )
         acquisition_ramp_months = inflow_expander.slider(
             "신규 회원 도달 기간(개월)",
@@ -1980,7 +2004,8 @@ if is_expert and current_step > 0:
             max_value=24,
             value=12,
             step=1,
-            key="acquisition_ramp_months"
+            key="acquisition_ramp_months",
+            help="신규 회원 유입 목표에 도달하는 기간입니다."
         )
 
     onboarding_months = 12
@@ -2712,7 +2737,13 @@ if enable_confidence and not reset_triggered:
     st.caption("신뢰도는 입력값 불확실성 범위 내에서 기준 추이와 유사한 시뮬레이션 비율입니다.")
 
 with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract_mode == "역산목표가격")):
-    target_price = st.number_input("목표 최종 가격 ($)", min_value=0.1, value=5.0, step=0.1)
+    target_price = st.number_input(
+        "목표 최종 가격 ($)",
+        min_value=0.1,
+        value=5.0,
+        step=0.1,
+        help="목표 최종 가격을 입력하면 역산 로직이 필요한 유입/설정을 계산합니다."
+    )
     reverse_basis = st.selectbox(
         "역산 기준",
         options=["전환율 조정", "평균 매수액 조정", "전환율+매수액 균등"],
