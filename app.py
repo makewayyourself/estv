@@ -1665,6 +1665,7 @@ with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract
             "reverse_basis": reverse_basis,
             "volatility_mode": volatility_mode
         }
+        st.session_state["reverse_apply_pending"] = True
 
     reverse_result = st.session_state.get("reverse_result")
     if reverse_result:
@@ -1807,8 +1808,11 @@ with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract
                     "depth_growth_rate": max(1.0, depth_growth_rate)
                 })
 
-        st.session_state["reverse_apply_payload"] = apply_payload
-        st.session_state["apply_reverse_scenario"] = True
+        if st.session_state.get("reverse_apply_pending"):
+            st.session_state["reverse_apply_payload"] = apply_payload
+            st.session_state["apply_reverse_scenario"] = True
+            st.session_state["reverse_apply_pending"] = False
+            st.rerun()
 
 # 경고 메시지 박스
 if result['status'] == "ILLEGAL":
