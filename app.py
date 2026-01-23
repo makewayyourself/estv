@@ -54,7 +54,25 @@ def apply_fomo_buy(base_buy, current_price, prev_price, config):
     return base_buy
 
 
-def check_red_flags(total_supply, pre_circulated, unlocked, holders):
+def calculate_holder_score(holders, target_tier):
+    thresholds = {
+        "Tier 1": 10000,
+        "Tier 2": 3000,
+        "Tier 3": 500,
+        "DEX": 0
+    }
+    required = thresholds.get(target_tier, 500)
+    if target_tier == "DEX":
+        return 100, "DEX는 홀더 수 제한이 없습니다."
+    if holders >= required:
+        return 100, "✅ 합격 안정권입니다."
+    if holders >= required * 0.5:
+        score = int((holders / required) * 100)
+        return score, f"⚠️ 부족합니다. {target_tier} 기준 {required:,}명 이상 권장됩니다."
+    return 0, f"🚨 [광탈 확정] {target_tier} 최소 기준({required:,}명)에 턱없이 부족합니다."
+
+
+def check_red_flags(total_supply, pre_circulated, unlocked, target_tier, holders):
     warnings = []
     safe_supply = max(float(total_supply), 1.0)
     circ_ratio = (float(pre_circulated) / safe_supply) * 100.0
@@ -69,10 +87,16 @@ def check_red_flags(total_supply, pre_circulated, unlocked, holders):
             "level": "DANGER",
             "msg": f"💣 기유통 물량의 {unlock_ratio:.1f}%가 언락 상태입니다. 상장 직후 투매가 발생합니다."
         })
-    if int(holders) < 500:
+    holder_score, holder_msg = calculate_holder_score(int(holders), target_tier)
+    if holder_score < 50:
+        warnings.append({
+            "level": "CRITICAL",
+            "msg": holder_msg
+        })
+    elif holder_score < 100:
         warnings.append({
             "level": "WARNING",
-            "msg": "👻 홀더 수가 너무 적습니다 (<500명). 최소한의 커뮤니티 빌딩이 필요합니다."
+            "msg": holder_msg
         })
     return warnings
 
@@ -894,8 +918,20 @@ holders = st.sidebar.number_input(
     key="project_holders",
     help="현재 코인을 보유한 지갑 수입니다."
 )
+target_tier = st.sidebar.selectbox(
+    "목표로 하는 거래소 등급은 무엇입니까?",
+    options=[
+        "Tier 1 (Binance, Upbit, Coinbase) - Hell",
+        "Tier 2 (Bybit, Gate.io, KuCoin) - Hard",
+        "Tier 3 (Small CEX) - Normal",
+        "DEX (Uniswap only) - Easy"
+    ],
+    index=1,
+    key="target_tier"
+)
+target_tier_key = target_tier.split(" ")[0]
 pre_circ_ratio = (pre_circulated / total_supply_input * 100.0) if total_supply_input > 0 else 0.0
-for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, holders):
+for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, target_tier_key, holders):
     if warn["level"] == "CRITICAL":
         st.sidebar.error(warn["msg"])
     elif warn["level"] == "DANGER":
@@ -909,8 +945,8 @@ if pre_circ_ratio > 10:
 unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
 if unlock_ratio > 20:
     score -= (unlock_ratio - 20) * 2.0
-if holders < 1000:
-    score -= 20
+holder_score, holder_msg = calculate_holder_score(int(holders), target_tier_key)
+score -= (100 - holder_score) * 0.2
 score = max(0.0, min(100.0, score))
 if score >= 80:
     grade = "양호"
