@@ -1099,6 +1099,7 @@ if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
 if "tutorial_step" not in st.session_state:
     st.session_state["tutorial_step"] = 0
+prev_mode = st.session_state.get("mode")
 mode = st.sidebar.radio(
     "모드 선택",
     options=["초보자", "전문가"],
@@ -1108,6 +1109,8 @@ mode = st.sidebar.radio(
 st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
 is_expert = mode == "전문가"
 is_tutorial = not is_expert
+if prev_mode != st.session_state["mode"] and is_tutorial:
+    st.session_state["tutorial_step"] = 0
 
 if st.session_state.get("apply_target_scenario"):
     target_payload = {
