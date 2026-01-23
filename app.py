@@ -33,6 +33,69 @@ COIN_TYPE_VOLATILITY = {
 
 # NOTE: Streamlit Cloud redeploy trigger (no functional change)
 
+RESET_DEFAULTS = {
+    "mode": "tutorial",
+    "tutorial_step": 0,
+    "step0_completed": False,
+    "show_user_manual": False,
+    "project_symbol": "ESTV",
+    "project_total_supply": 1_000_000_000,
+    "project_pre_circulated": 0.0,
+    "project_unlocked": 0.0,
+    "project_holders": 0,
+    "target_tier": "Tier 2 (Bybit, Gate.io, KuCoin) - Hard",
+    "project_type": "New Listing (신규 상장)",
+    "audit_status": "미진행",
+    "concentration_ratio": 0.0,
+    "has_legal_opinion": False,
+    "has_whitepaper": False,
+    "tutorial_target_price": 5.0,
+    "contract_mode": "사용자 조정",
+    "input_supply": 3.0,
+    "input_unbonding": 30,
+    "input_sell_ratio": 30,
+    "input_buy_volume": 200000,
+    "simulation_unit": "월",
+    "simulation_value": 1,
+    "scenario_preset": "직접 입력",
+    "conversion_rate": 0.10,
+    "avg_ticket": 100.0,
+    "enable_dual_pipeline": False,
+    "migration_target": 50_000,
+    "migration_ramp_months": 3,
+    "acquisition_target": 10_000,
+    "acquisition_ramp_months": 12,
+    "use_phase_inflow": False,
+    "phase2_days": 30,
+    "phase2_multiplier": 2.0,
+    "prelisting_days": 30,
+    "prelisting_multiplier": 1.5,
+    "prelisting_release_days": 7,
+    "volume_volatility": COIN_TYPE_VOLATILITY["New Listing (신규 상장)"]["default"],
+    "volatility_project_type": "New Listing (신규 상장)",
+    "weekend_dip": True,
+    "price_model": "AMM",
+    "depth_usdt_1pct": 1_000_000,
+    "depth_usdt_2pct": 3_000_000,
+    "depth_growth_rate": 2.0,
+    "steps_per_month": 30,
+    "turnover_ratio": 5.0,
+    "turnover_buy_share": 50.0,
+    "lp_growth_rate": 1.0,
+    "max_buy_usdt_ratio": 5.0,
+    "max_sell_token_ratio": 5.0,
+    "use_master_plan": False,
+    "use_triggers": True,
+    "buy_verify_boost": 0.5,
+    "holding_suppress": 0.1,
+    "payburn_delta": 0.002,
+    "buyback_daily": 0,
+    "monthly_buyback_usdt": 0,
+    "burn_fee_rate": 0.3,
+    "krw_per_usd": 1300,
+    "marketing_dashboard_url": "http://localhost:5173"
+}
+
 # ==========================================
 # 1. 시뮬레이션 엔진 클래스 (핵심 로직)
 # ==========================================
@@ -1029,8 +1092,8 @@ with top_controls[1]:
         st.cache_data.clear()
         for k in list(st.session_state.keys()):
             del st.session_state[k]
+        st.session_state.update(RESET_DEFAULTS)
         st.session_state["reset_triggered"] = True
-        st.session_state["show_user_manual"] = False
         st.rerun()
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
