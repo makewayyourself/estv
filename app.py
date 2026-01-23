@@ -204,6 +204,7 @@ class TokenSimulationEngine:
         return pool_token, pool_usdt, price_after
 
     def run(self, inputs):
+        self.TOTAL_SUPPLY = float(inputs.get("total_supply", self.TOTAL_SUPPLY))
         steps_per_month = max(1, int(inputs.get('steps_per_month', 30)))
         total_days = int(inputs.get('simulation_days', steps_per_month * int(inputs.get('simulation_months', 24))))
         total_days = max(total_days, 1)
@@ -893,6 +894,7 @@ holders = st.sidebar.number_input(
     key="project_holders",
     help="현재 코인을 보유한 지갑 수입니다."
 )
+pre_circ_ratio = (pre_circulated / total_supply_input * 100.0) if total_supply_input > 0 else 0.0
 for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, holders):
     if warn["level"] == "CRITICAL":
         st.sidebar.error(warn["msg"])
@@ -900,6 +902,24 @@ for warn in check_red_flags(total_supply_input, pre_circulated, unlocked, holder
         st.sidebar.warning(warn["msg"])
     else:
         st.sidebar.warning(warn["msg"])
+
+score = 100.0
+if pre_circ_ratio > 10:
+    score -= (pre_circ_ratio - 10) * 1.0
+unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
+if unlock_ratio > 20:
+    score -= (unlock_ratio - 20) * 2.0
+if holders < 1000:
+    score -= 20
+score = max(0.0, min(100.0, score))
+if score >= 80:
+    grade = "양호"
+elif score >= 60:
+    grade = "주의"
+else:
+    grade = "거절 위험"
+st.sidebar.metric("상장 적합성 점수", f"{score:.0f} / 100")
+st.sidebar.info(f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})")
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
@@ -1004,7 +1024,7 @@ if is_tutorial:
         input_supply = st.sidebar.slider(
             "초기 유통량 (%)",
             min_value=0.0,
-            max_value=10.0,
+            max_value=max(0.1, min(100.0, pre_circ_ratio)),
             value=min(st.session_state.get("input_supply", 3.0), 10.0),
             step=0.5,
             key="input_supply"
@@ -1191,7 +1211,7 @@ else:
     input_supply = st.sidebar.slider(
         "1. 초기 유통량 (%)",
         min_value=0.0,
-        max_value=100.0,
+        max_value=max(0.1, min(100.0, pre_circ_ratio)),
         value=3.0,
         step=0.5,
         help="초기 유통되는 토큰 비율입니다. 높을수록 시장 유통 물량이 많아져 가격 방어가 어려울 수 있습니다.",
@@ -1278,7 +1298,7 @@ else:
         help="락업 해제 기간 동안 월간 추가 매도 금액(USDT 기준)을 반영합니다."
     )
 
-    TOTAL_SUPPLY = 1_000_000_000
+    TOTAL_SUPPLY = float(total_supply_input)
     initial_investor_locked_percent = (initial_investor_locked_tokens / TOTAL_SUPPLY) * 100.0 if initial_investor_locked_tokens > 0 else 0.0
     if initial_investor_locked_percent > 100.0:
         investor_expander.error("락업 물량이 총 공급량을 초과했습니다.")
@@ -2032,6 +2052,7 @@ if initial_investor_locked_tokens > 0 and initial_investor_locked_percent <= 100
 # 시뮬레이션 실행
 engine = TokenSimulationEngine()
 inputs = {
+    'total_supply': total_supply_input,
     'initial_circulating_percent': input_supply,
     'unbonding_days': input_unbonding,
     'sell_pressure_ratio': input_sell_ratio / 100.0,
