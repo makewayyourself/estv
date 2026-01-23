@@ -926,13 +926,10 @@ scorecard_help = (
     "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
     "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
 )
-scorecard_help_html = scorecard_help.replace("\n", "<br>")
-score_cols = st.sidebar.columns([3, 1])
-score_cols[0].markdown(
-    f"**상장 적합성 점수** <span title=\"{scorecard_help_html}\">ℹ️</span>",
-    unsafe_allow_html=True
-)
-score_cols[1].metric("", f"{score:.0f} / 100")
+score_cols = st.sidebar.columns([5, 1])
+score_cols[0].metric("상장 적합성 점수", f"{score:.0f} / 100")
+with score_cols[1].popover("?", use_container_width=True):
+    st.markdown(scorecard_help)
 st.sidebar.info(f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})")
 
 if "mode" not in st.session_state:
