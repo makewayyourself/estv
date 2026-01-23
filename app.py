@@ -1175,6 +1175,9 @@ if is_tutorial:
         )
         st.sidebar.caption("필수 서류가 미준비면 심사 접수 자체가 불가능합니다.")
         st.sidebar.button("⏭️ Step 0 건너뛰기", on_click=lambda: st.session_state.__setitem__("tutorial_step", 1))
+        if st.sidebar.button("다음 ➡"):
+            st.session_state["tutorial_step"] = 1
+            st.rerun()
     elif current_step == 1:
         st.sidebar.subheader("🎯 Step 1. 목표 설정")
         st.sidebar.info(
@@ -1258,15 +1261,16 @@ if is_tutorial:
         )
         st.sidebar.button("🚀 시뮬레이션 결과 확인하기")
 
-    nav_cols = st.sidebar.columns(2)
-    with nav_cols[0]:
-        if st.button("⬅ 이전", disabled=current_step == 0):
-            st.session_state["tutorial_step"] = current_step - 1
-            st.rerun()
-    with nav_cols[1]:
-        if st.button("다음 ➡", disabled=current_step == total_steps - 1):
-            st.session_state["tutorial_step"] = current_step + 1
-            st.rerun()
+    if current_step != 0:
+        nav_cols = st.sidebar.columns(2)
+        with nav_cols[0]:
+            if st.button("⬅ 이전", disabled=current_step == 0):
+                st.session_state["tutorial_step"] = current_step - 1
+                st.rerun()
+        with nav_cols[1]:
+            if st.button("다음 ➡", disabled=current_step == total_steps - 1):
+                st.session_state["tutorial_step"] = current_step + 1
+                st.rerun()
 
     # Tutorial defaults for hidden fields
     contract_mode = st.session_state.get("contract_mode", "사용자 조정")
