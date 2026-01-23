@@ -81,7 +81,7 @@ class TokenSimulationEngine:
         risk_log = []
         burned_total = 0.0
         action_logs = []
-
+        
         initial_supply = self.TOTAL_SUPPLY * (inputs['initial_circulating_percent'] / 100.0)
         pool_token = max(initial_supply * 0.2, 1e-9)
         pool_usdt = pool_token * self.LISTING_PRICE
@@ -89,6 +89,7 @@ class TokenSimulationEngine:
 
         delay_days = int(inputs['unbonding_days'])
         sell_queue = [0.0] * (total_days + delay_days + 5)
+        sell_queue_initial = [0.0] * (total_days + delay_days + 5)
 
         marketing_cost_basis = 0.05
         marketing_supply = 100_000_000
@@ -106,6 +107,13 @@ class TokenSimulationEngine:
         depth_usdt_1pct = inputs.get('depth_usdt_1pct', 1_000_000.0)
         depth_usdt_2pct = inputs.get('depth_usdt_2pct', 3_000_000.0)
         depth_growth_rate = inputs.get('depth_growth_rate', 0.0)
+        market_cfg = inputs.get('market_sentiment_config', {})
+        panic_sensitivity = market_cfg.get('panic_sensitivity', 1.5)
+        fomo_sensitivity = market_cfg.get('fomo_sensitivity', 1.2)
+        private_sale_price = market_cfg.get('private_sale_price', 0.05)
+        profit_taking_multiple = market_cfg.get('profit_taking_multiple', 5.0)
+        arbitrage_threshold = market_cfg.get('arbitrage_threshold', 0.02)
+        min_depth_ratio = market_cfg.get('min_depth_ratio', 0.3)
         campaigns = inputs.get('campaigns', [])
         triggers = inputs.get('triggers', [])
         enable_triggers = inputs.get('enable_triggers', False)
@@ -116,11 +124,15 @@ class TokenSimulationEngine:
         initial_investor_alloc = inputs.get("initial_investor_allocation")
         if initial_investor_alloc:
             allocations["Initial_Investors"] = initial_investor_alloc
+        initial_investor_remaining = 0.0
+        if initial_investor_alloc:
+            initial_investor_remaining = self.TOTAL_SUPPLY * initial_investor_alloc.get("percent", 0.0)
 
         initial_investor_sell_ratio = inputs.get("initial_investor_sell_ratio", inputs.get("sell_pressure_ratio", 0.0))
         initial_investor_sell_usdt_schedule = inputs.get("initial_investor_sell_usdt_schedule", [])
 
         for day_index in range(total_days):
+            prev_day_price = daily_price_history[-1]
             if price_model == "HYBRID" and day_index > 0 and day_index % steps_per_month == 0:
                 depth_usdt_1pct *= (1.0 + depth_growth_rate)
                 depth_usdt_2pct *= (1.0 + depth_growth_rate)
@@ -140,13 +152,10 @@ class TokenSimulationEngine:
             target_day = day_index + delay_days
             if target_day < len(sell_queue):
                 sell_queue[target_day] += daily_unlock * inputs['sell_pressure_ratio']
-                sell_queue[target_day] += daily_initial_unlock * initial_investor_sell_ratio
+                sell_queue_initial[target_day] += daily_initial_unlock * initial_investor_sell_ratio
 
             remaining_sell = sell_queue[day_index]
-            if day_index < len(initial_investor_sell_usdt_schedule):
-                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
-                if extra_sell_usdt > 0 and current_price > 0:
-                    remaining_sell += extra_sell_usdt / current_price
+            remaining_initial_sell = sell_queue_initial[day_index]
             remaining_buy = inputs['base_monthly_buy_volume']
             turnover_buy_share = inputs.get('turnover_buy_share', 0.5)
             turnover_sell_share = 1.0 - turnover_buy_share
@@ -154,6 +163,18 @@ class TokenSimulationEngine:
             remaining_turnover_buy = inputs['monthly_buy_volume'] * turnover_ratio * turnover_buy_share
 
             current_price = pool_usdt / pool_token
+            price_change_ratio = (current_price - prev_day_price) / max(prev_day_price, 1e-9)
+            panic_multiplier = 1.0 + (panic_sensitivity * max(0.0, -price_change_ratio))
+            panic_multiplier = min(3.0, panic_multiplier)
+            fomo_multiplier = 1.0 + (fomo_sensitivity * max(0.0, price_change_ratio))
+            fomo_multiplier = min(3.0, fomo_multiplier)
+            depth_ratio = 1.0
+            if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
+                depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
+            if day_index < len(initial_investor_sell_usdt_schedule) and current_price > private_sale_price:
+                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
+                if extra_sell_usdt > 0:
+                    remaining_initial_sell += extra_sell_usdt / current_price
             if current_price > high_price:
                 high_price = current_price
 
@@ -224,6 +245,10 @@ class TokenSimulationEngine:
             if inputs['sell_pressure_ratio'] > 0:
                 sell_ratio_scale = effective_sell_pressure / inputs['sell_pressure_ratio']
             step_sell = remaining_sell * sell_ratio_scale
+            initial_sell_scale = 1.0
+            if current_price <= private_sale_price:
+                initial_sell_scale = 0.0
+            step_sell += remaining_initial_sell * initial_sell_scale
             daily_user_buy = 0.0
             if day_index < len(daily_user_buy_schedule):
                 daily_user_buy = daily_user_buy_schedule[day_index]
@@ -234,6 +259,10 @@ class TokenSimulationEngine:
             step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
             step_turnover_sell = remaining_turnover_sell / steps_per_month
             step_turnover_buy = remaining_turnover_buy / steps_per_month
+            step_sell *= panic_multiplier
+            step_turnover_sell *= panic_multiplier
+            step_buy *= fomo_multiplier
+            step_turnover_buy *= fomo_multiplier
 
             if inputs.get('use_marketing_contract_scenario') and marketing_remaining > 0:
                 if current_price >= marketing_cost_basis * 2.0:
@@ -246,9 +275,29 @@ class TokenSimulationEngine:
                         "reason": f"가격 ${current_price:.2f} 도달, 잔여 {int(marketing_remaining):,}개"
                     })
 
+            if initial_investor_remaining > 0 and current_price >= private_sale_price * profit_taking_multiple:
+                profit_dump = initial_investor_remaining * 0.01
+                initial_investor_remaining = max(initial_investor_remaining - profit_dump, 0.0)
+                step_sell += profit_dump
+                action_logs.append({
+                    "day": day_index + 1,
+                    "action": "초기 투자자 이익실현",
+                    "reason": f"목표가 {profit_taking_multiple:.1f}x 도달, 잔여 {int(initial_investor_remaining):,}개"
+                })
+
             prev_step_price = current_price
 
             total_sell = step_sell + step_turnover_sell
+            arb_buy_usdt = 0.0
+            arb_sell_token = 0.0
+            if price_model in ["CEX", "HYBRID"] and abs(price_change_ratio) >= arbitrage_threshold:
+                deviation = min(abs(price_change_ratio), 0.2)
+                if price_change_ratio > 0:
+                    arb_sell_token = pool_token * min(0.02, deviation)
+                else:
+                    arb_buy_usdt = pool_usdt * min(0.02, deviation)
+            step_buy += arb_buy_usdt
+            total_sell += arb_sell_token
             effective_max_sell_ratio = max(0.0, max_sell_token_ratio - max_sell_token_ratio_delta)
             if effective_max_sell_ratio > 0:
                 sell_cap = pool_token * effective_max_sell_ratio
@@ -265,17 +314,17 @@ class TokenSimulationEngine:
                     pool_usdt,
                     buy_usdt=(step_buy + step_turnover_buy),
                     sell_token=total_sell,
-                    depth_usdt_1pct=depth_usdt_1pct,
-                    depth_usdt_2pct=depth_usdt_2pct
+                    depth_usdt_1pct=depth_usdt_1pct * depth_ratio,
+                    depth_usdt_2pct=depth_usdt_2pct * depth_ratio
                 )
             else:
                 pool_token += total_sell
-                usdt_out = pool_usdt - (k_constant / pool_token)
-                pool_usdt -= usdt_out
+            usdt_out = pool_usdt - (k_constant / pool_token)
+            pool_usdt -= usdt_out
                 pool_usdt += (step_buy + step_turnover_buy)
-                token_out = pool_token - (k_constant / pool_usdt)
-                pool_token -= token_out
-
+            token_out = pool_token - (k_constant / pool_usdt)
+            pool_token -= token_out
+            
             current_price = pool_usdt / pool_token
             if price_model in ["CEX", "HYBRID"]:
                 token_out = (step_buy + step_turnover_buy) / max(current_price, 1e-9)
@@ -311,13 +360,13 @@ class TokenSimulationEngine:
 
             daily_price_history.append(new_price)
             price_history.append(new_price)
-
+            
             current_drop = (new_price - self.LISTING_PRICE) / self.LISTING_PRICE * 100
             if current_drop < -20 and "Warning" not in [x['level'] for x in risk_log]:
                 risk_log.append({"month": month_index, "level": "Warning", "msg": f"가격 -20% 돌파 (${new_price:.2f})"})
             if current_drop < -50 and "Danger" not in [x['level'] for x in risk_log]:
                 risk_log.append({"month": month_index, "level": "Danger", "msg": f"가격 반토막 (${new_price:.2f})"})
-
+                
         final_price = daily_price_history[-1]
         roi = (final_price - self.LISTING_PRICE) / self.LISTING_PRICE * 100
         
@@ -1225,6 +1274,65 @@ max_sell_token_ratio = st.sidebar.slider(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.header("🧠 시장 심리/비선형")
+panic_sensitivity = st.sidebar.slider(
+    "패닉 민감도",
+    min_value=1.0,
+    max_value=3.0,
+    value=1.5,
+    step=0.1,
+    help="가격 하락 시 매도 압력을 증폭시키는 강도입니다."
+)
+fomo_sensitivity = st.sidebar.slider(
+    "FOMO 민감도",
+    min_value=1.0,
+    max_value=2.0,
+    value=1.2,
+    step=0.1,
+    help="가격 상승 시 추격 매수를 증폭시키는 강도입니다."
+)
+private_sale_price = st.sidebar.number_input(
+    "초기 투자자 평단가($)",
+    value=0.05,
+    step=0.01,
+    help="초기 투자자의 평균 매입 단가입니다. 이 가격 이하에서는 매도가 둔화됩니다."
+)
+profit_taking_multiple = st.sidebar.slider(
+    "이익실현 목표 배수",
+    min_value=1.0,
+    max_value=10.0,
+    value=5.0,
+    step=0.5,
+    help="초기 투자자가 평단가 대비 몇 배 상승 시 이익실현 매도를 강화할지 설정합니다."
+)
+arbitrage_threshold = st.sidebar.slider(
+    "차익거래 임계값(%)",
+    min_value=0.0,
+    max_value=10.0,
+    value=2.0,
+    step=0.5,
+    help="가격 변동률이 이 값을 넘으면 차익거래 유입을 가정합니다.",
+    format="%.1f%%"
+)
+min_depth_ratio = st.sidebar.slider(
+    "패닉 시 오더북 깊이 하한",
+    min_value=0.1,
+    max_value=1.0,
+    value=0.3,
+    step=0.05,
+    help="패닉 국면에서 오더북 깊이가 줄어드는 최소 비율입니다."
+)
+
+market_sentiment_config = {
+    "panic_sensitivity": panic_sensitivity,
+    "fomo_sensitivity": fomo_sensitivity,
+    "private_sale_price": private_sale_price,
+    "profit_taking_multiple": profit_taking_multiple,
+    "arbitrage_threshold": arbitrage_threshold / 100.0,
+    "min_depth_ratio": min_depth_ratio
+}
+
+st.sidebar.markdown("---")
 st.sidebar.header("🔥 소각/바이백 정책")
 burn_fee_rate = st.sidebar.slider(
     "거래 수수료 소각률(%)",
@@ -1325,6 +1433,7 @@ inputs = {
     'max_sell_token_ratio': max_sell_token_ratio / 100.0,
     'burn_fee_rate': burn_fee_rate / 100.0,
     'monthly_buyback_usdt': monthly_buyback_usdt,
+    'market_sentiment_config': market_sentiment_config,
     'initial_investor_allocation': initial_investor_allocation,
     'initial_investor_sell_ratio': initial_investor_sell_ratio / 100.0,
     'initial_investor_sell_usdt_schedule': initial_investor_sell_usdt_schedule,
@@ -1757,15 +1866,15 @@ if go is not None:
     st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
 else:
     st.info("툴팁 표시를 위해 plotly가 필요합니다. `pip install plotly` 후 다시 실행해 주세요.")
-    fig, ax = plt.subplots(figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(series, label='ESTV Price ($)', color='blue' if result['legal_check'] else 'red')
-    ax.axhline(y=0.5, color='gray', linestyle=':', label='Listing Price ($0.50)')
+ax.axhline(y=0.5, color='gray', linestyle=':', label='Listing Price ($0.50)')
     ax.set_xlabel("Day")
-    ax.set_ylabel("Price")
-    ax.legend()
+ax.set_ylabel("Price")
+ax.legend()
     ax.set_yticks([i * 0.25 for i in range(int(max(series) / 0.25) + 2)])
-    ax.grid(True, alpha=0.3)
-    st.pyplot(fig)
+ax.grid(True, alpha=0.3)
+st.pyplot(fig)
 
 if len(series) > 2:
     diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
