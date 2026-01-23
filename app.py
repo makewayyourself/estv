@@ -918,16 +918,22 @@ elif score >= 60:
     grade = "주의"
 else:
     grade = "거절 위험"
-st.sidebar.metric("상장 적합성 점수", f"{score:.0f} / 100")
+scorecard_help = (
+    "거래소는 수수료보다 신뢰를 먼저 봅니다. 신뢰가 무너지면 뱅크런이 발생합니다.\n"
+    "즉시 거절되는 3대 리스크: 덤핑 구조(과도한 초기 유통/물량 집중), "
+    "유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
+    "내부 심사는 덤핑 테스트/유동성 스트레스 테스트로 진행되며 회복 불가 판정이면 거절·상폐됩니다.\n"
+    "이 점수는 거절 위험의 사전 경고등입니다. 경고/위험 구간에서의 상장 신청은 사실상 거절 신청서입니다.\n"
+    "목표: Status: Stable + Legal Check: Pass 유지 후 그 설정값을 상장 서류에 반영."
+)
+scorecard_help_html = scorecard_help.replace("\n", "<br>")
+score_cols = st.sidebar.columns([3, 1])
+score_cols[0].markdown(
+    f"**상장 적합성 점수** <span title=\"{scorecard_help_html}\">ℹ️</span>",
+    unsafe_allow_html=True
+)
+score_cols[1].metric("", f"{score:.0f} / 100")
 st.sidebar.info(f"귀하의 프로젝트 상장 적합도는 [ {score:.0f}점 / 100점 ] 입니다. ({grade})")
-with st.sidebar.expander("Scorecard 도움말", expanded=False):
-    st.markdown(
-        "- 거래소는 **수수료보다 신뢰를 먼저 봅니다.** 신뢰가 무너지면 뱅크런이 발생하고 거래소는 문을 닫습니다.\n"
-        "- **즉시 거절되는 3대 리스크**: 덤핑 구조(과도한 초기 유통/물량 집중), 유동성 고갈(거래량·오더북 약함), 법적 리스크(증권성/AML).\n"
-        "- 내부 심사는 **덤핑 테스트**와 **유동성 스트레스 테스트**로 진행되며, 회복 불가 판정이면 상장은 즉시 거절·상폐됩니다.\n"
-        "- 이 점수는 **거절 위험의 사전 경고등**입니다. 경고/위험 구간에서의 상장 신청은 사실상 ‘거절 신청서’입니다.\n"
-        "- 목표: **Status: Stable**과 **Legal Check: Pass**가 유지되는 값만 제출하세요. 그 설정값이 곧 상장 서류의 핵심 근거입니다."
-    )
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "tutorial"
