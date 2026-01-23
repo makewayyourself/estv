@@ -124,6 +124,15 @@ class TokenSimulationEngine:
         risk_log = []
         burned_total = 0.0
         action_logs = []
+        simulation_log = {
+            "day": [],
+            "price": [],
+            "reason_code": [],
+            "action_needed": [],
+            "sentiment_index": [],
+            "sell_pressure_vol": [],
+            "buy_power_vol": []
+        }
         
         initial_supply = self.TOTAL_SUPPLY * (inputs['initial_circulating_percent'] / 100.0)
         pool_token = max(initial_supply * 0.2, 1e-9)
@@ -319,26 +328,32 @@ class TokenSimulationEngine:
             if day_index < len(base_daily_buy_schedule):
                 base_daily_buy = base_daily_buy_schedule[day_index]
             step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
+            base_step_buy = step_buy
             step_buy = apply_fomo_buy(step_buy, current_price, prev_day_price, market_cfg)
             step_turnover_sell = remaining_turnover_sell / steps_per_month
             step_turnover_buy = remaining_turnover_buy / steps_per_month
+            base_turnover_buy = step_turnover_buy
             step_turnover_buy = apply_fomo_buy(step_turnover_buy, current_price, prev_day_price, market_cfg)
 
+            marketing_dump_today = False
             if inputs.get('use_marketing_contract_scenario') and marketing_remaining > 0:
                 if current_price >= marketing_cost_basis * 2.0:
                     dump_today = marketing_remaining * 0.005
                     marketing_remaining = max(marketing_remaining - dump_today, 0.0)
                     step_sell += dump_today
+                    marketing_dump_today = True
                     action_logs.append({
                         "day": day_index + 1,
                         "action": "마케팅 덤핑(지속)",
                         "reason": f"가격 ${current_price:.2f} 도달, 잔여 {int(marketing_remaining):,}개"
                     })
 
+            profit_dump_today = False
             if initial_investor_remaining > 0 and current_price >= private_sale_price * profit_taking_multiple:
                 profit_dump = initial_investor_remaining * 0.01
                 initial_investor_remaining = max(initial_investor_remaining - profit_dump, 0.0)
                 step_sell += profit_dump
+                profit_dump_today = True
                 action_logs.append({
                     "day": day_index + 1,
                     "action": "초기 투자자 이익실현",
@@ -433,6 +448,32 @@ class TokenSimulationEngine:
                 new_price = pool_usdt / pool_token
                 k_constant = pool_token * pool_usdt
 
+            panic_triggered = dynamic_sell_ratio > base_sell_ratio * 1.1 and price_change_ratio < 0
+            fomo_triggered = (step_buy > base_step_buy) or (step_turnover_buy > base_turnover_buy)
+            if marketing_dump_today or profit_dump_today:
+                reason_code = "WHALE_DUMP"
+            elif panic_triggered:
+                reason_code = "PANIC_SELL"
+            elif fomo_triggered:
+                reason_code = "FOMO_RALLY"
+            else:
+                reason_code = "NORMAL"
+            if reason_code in ["PANIC_SELL", "WHALE_DUMP"]:
+                action_needed = "NEED_BUYBACK"
+            elif reason_code == "FOMO_RALLY":
+                action_needed = "MARKETING_OP"
+            else:
+                action_needed = "NONE"
+            sentiment_index = max(0.5, min(1.5, 1.0 + (price_change_ratio * fomo_sensitivity)))
+
+            simulation_log["day"].append(day_index + 1)
+            simulation_log["price"].append(new_price)
+            simulation_log["reason_code"].append(reason_code)
+            simulation_log["action_needed"].append(action_needed)
+            simulation_log["sentiment_index"].append(sentiment_index)
+            simulation_log["sell_pressure_vol"].append(total_sell)
+            simulation_log["buy_power_vol"].append(total_buy)
+
             daily_price_history.append(new_price)
             price_history.append(new_price)
             
@@ -465,7 +506,8 @@ class TokenSimulationEngine:
             "daily_price_trend": daily_price_history,
             "daily_events": daily_events,
             "action_logs": action_logs,
-            "burned_total": burned_total
+            "burned_total": burned_total,
+            "simulation_log": simulation_log
         }
 
 
@@ -1833,6 +1875,54 @@ if go is not None:
         name="Listing Price ($0.50)",
         line=dict(color="gray", dash="dot")
     ))
+
+    log = result.get("simulation_log")
+    if log:
+        reason_colors = {
+            "PANIC_SELL": "red",
+            "WHALE_DUMP": "orange",
+            "FOMO_RALLY": "green"
+        }
+        xai_days = []
+        xai_prices = []
+        xai_reason = []
+        xai_action = []
+        xai_sentiment = []
+        xai_sell = []
+        xai_buy = []
+        for i, reason in enumerate(log.get("reason_code", [])):
+            if reason == "NORMAL":
+                continue
+            xai_days.append(log["day"][i])
+            xai_prices.append(log["price"][i])
+            xai_reason.append(reason)
+            xai_action.append(log["action_needed"][i])
+            xai_sentiment.append(log["sentiment_index"][i])
+            xai_sell.append(log["sell_pressure_vol"][i])
+            xai_buy.append(log["buy_power_vol"][i])
+        if xai_days:
+            fig.add_trace(go.Scatter(
+                x=xai_days,
+                y=xai_prices,
+                mode="markers",
+                name="원인/대응",
+                marker=dict(
+                    color=[reason_colors.get(r, "gray") for r in xai_reason],
+                    size=9,
+                    symbol="circle-open"
+                ),
+                customdata=list(zip(xai_reason, xai_action, xai_sentiment, xai_sell, xai_buy)),
+                hovertemplate=(
+                    "Day %{x}<br>"
+                    "Price $%{y:.4f}<br>"
+                    "원인 %{customdata[0]}<br>"
+                    "대응 %{customdata[1]}<br>"
+                    "심리 지수 %{customdata[2]:.2f}<br>"
+                    "매도 압력 %{customdata[3]:,.0f}<br>"
+                    "매수 지지력 %{customdata[4]:,.0f}"
+                    "<extra></extra>"
+                )
+            ))
 
     if len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
