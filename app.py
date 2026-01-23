@@ -931,6 +931,19 @@ legal_supply = st.session_state.get("input_supply", 3.0)
 if legal_supply > 3.0:
     st.sidebar.error("🚨 [Legal Check] 초기 유통량 3% 초과")
 
+def toggle_user_manual():
+    st.session_state["show_user_manual"] = not st.session_state.get("show_user_manual", False)
+
+top_controls = st.sidebar.columns([1, 1])
+with top_controls[0]:
+    manual_button_label = "📘 사용설명서 닫기" if st.session_state.get("show_user_manual") else "📘 사용설명서 열기"
+    st.button(manual_button_label, on_click=toggle_user_manual)
+with top_controls[1]:
+    if st.button("🔄 전체 초기화"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+
 st.sidebar.header("🎯 시나리오 & 목표 설정")
 st.sidebar.subheader("📝 Step 0. 프로젝트 기본 정보")
 symbol = st.sidebar.text_input(
@@ -1095,15 +1108,6 @@ mode = st.sidebar.radio(
 st.session_state["mode"] = "tutorial" if mode == "초보자" else "expert"
 is_expert = mode == "전문가"
 is_tutorial = not is_expert
-def toggle_user_manual():
-    st.session_state["show_user_manual"] = not st.session_state.get("show_user_manual", False)
-
-manual_button_label = "📘 사용설명서 닫기" if st.session_state.get("show_user_manual") else "📘 사용설명서 열기"
-st.sidebar.button(manual_button_label, on_click=toggle_user_manual)
-if st.sidebar.button("🔄 전체 프로그램 초기화"):
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-    st.rerun()
 
 if st.session_state.get("apply_target_scenario"):
     target_payload = {
