@@ -1092,6 +1092,20 @@ def filter_recommended_settings(payload):
 # ==========================================
 st.set_page_config(page_title="ESTV 토큰 시뮬레이터", layout="wide")
 
+def hard_reset_session():
+    st.cache_data.clear()
+    keep_keys = {"hard_reset_pending"}
+    for k in list(st.session_state.keys()):
+        if k not in keep_keys:
+            del st.session_state[k]
+    st.session_state.update(RESET_DEFAULTS)
+    st.session_state["reset_triggered"] = True
+    st.session_state["hard_reset_pending"] = False
+
+if st.session_state.get("hard_reset_pending"):
+    hard_reset_session()
+    st.rerun()
+
 st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
 st.markdown(
     "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
@@ -1144,11 +1158,7 @@ with top_controls[0]:
     st.button(manual_button_label, on_click=toggle_user_manual)
 with top_controls[1]:
     if st.button("🔄 전체 초기화"):
-        st.cache_data.clear()
-        for k in list(st.session_state.keys()):
-            del st.session_state[k]
-        st.session_state.update(RESET_DEFAULTS)
-        st.session_state["reset_triggered"] = True
+        st.session_state["hard_reset_pending"] = True
         st.rerun()
 
 st.sidebar.header("🎯 시나리오 & 목표 설정")
