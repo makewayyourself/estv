@@ -112,6 +112,14 @@ class TokenSimulationEngine:
         triggered_flags = set()
         high_price = self.LISTING_PRICE
 
+        allocations = dict(self.base_allocations)
+        initial_investor_alloc = inputs.get("initial_investor_allocation")
+        if initial_investor_alloc:
+            allocations["Initial_Investors"] = initial_investor_alloc
+
+        initial_investor_sell_ratio = inputs.get("initial_investor_sell_ratio", inputs.get("sell_pressure_ratio", 0.0))
+        initial_investor_sell_usdt_schedule = inputs.get("initial_investor_sell_usdt_schedule", [])
+
         for day_index in range(total_days):
             if price_model == "HYBRID" and day_index > 0 and day_index % steps_per_month == 0:
                 depth_usdt_1pct *= (1.0 + depth_growth_rate)
@@ -119,15 +127,26 @@ class TokenSimulationEngine:
 
             month_index = (day_index // steps_per_month) + 1
             monthly_new_unlock = 0
-            for name, algo in self.base_allocations.items():
-                monthly_new_unlock += self._calculate_monthly_unlock(algo, month_index)
+            monthly_initial_unlock = 0
+            for name, algo in allocations.items():
+                unlock_amount = self._calculate_monthly_unlock(algo, month_index)
+                if name == "Initial_Investors":
+                    monthly_initial_unlock += unlock_amount
+                else:
+                    monthly_new_unlock += unlock_amount
 
             daily_unlock = monthly_new_unlock / steps_per_month
+            daily_initial_unlock = monthly_initial_unlock / steps_per_month
             target_day = day_index + delay_days
             if target_day < len(sell_queue):
                 sell_queue[target_day] += daily_unlock * inputs['sell_pressure_ratio']
+                sell_queue[target_day] += daily_initial_unlock * initial_investor_sell_ratio
 
             remaining_sell = sell_queue[day_index]
+            if day_index < len(initial_investor_sell_usdt_schedule):
+                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
+                if extra_sell_usdt > 0 and current_price > 0:
+                    remaining_sell += extra_sell_usdt / current_price
             remaining_buy = inputs['base_monthly_buy_volume']
             turnover_buy_share = inputs.get('turnover_buy_share', 0.5)
             turnover_sell_share = 1.0 - turnover_buy_share
@@ -585,6 +604,79 @@ input_sell_ratio = st.sidebar.slider(
     help="락업 해제 물량 중 실제로 매도되는 비율입니다. 높을수록 가격 하방 압력이 커집니다.",
     key="input_sell_ratio"
 )
+
+st.sidebar.markdown("---")
+st.sidebar.header("🔒 초기 투자자 락업/베스팅")
+initial_investor_lock_months = st.sidebar.slider(
+    "3-1. 초기 투자자 락업 기간 (개월)",
+    min_value=0,
+    max_value=60,
+    value=12,
+    step=1,
+    help="초기 투자자 물량이 시장에 풀리기 전까지 묶이는 기간입니다."
+)
+initial_investor_locked_tokens = st.sidebar.number_input(
+    "3-2. 락업 물량 (토큰 수)",
+    min_value=0.0,
+    value=0.0,
+    step=1_000_000.0,
+    help="초기 투자자에게 배정된 락업 토큰 수량입니다. 0이면 미적용됩니다."
+)
+initial_investor_vesting_months = st.sidebar.slider(
+    "3-3. 베스팅 기간 (개월)",
+    min_value=0,
+    max_value=60,
+    value=12,
+    step=1,
+    help="락업 종료 후 몇 개월에 걸쳐 해제할지 선택합니다."
+)
+initial_investor_release_percent = st.sidebar.slider(
+    "3-4. 월별 해제 비율 (%)",
+    min_value=1.0,
+    max_value=100.0,
+    value=10.0,
+    step=1.0,
+    help="락업 물량 중 매월 해제되는 비율입니다. 설정값에 따라 실제 베스팅 기간이 자동 보정됩니다."
+)
+initial_investor_release_interval = st.sidebar.slider(
+    "3-5. 해제 주기 (개월)",
+    min_value=1,
+    max_value=12,
+    value=1,
+    step=1,
+    help="해제 주기를 설정합니다. 예: 3개월이면 분기 단위로 해제됩니다."
+)
+initial_investor_sell_ratio = st.sidebar.slider(
+    "3-6. 초기 투자자 해제 매도율 (%)",
+    min_value=0,
+    max_value=100,
+    value=50,
+    step=5,
+    help="초기 투자자 해제 물량 중 실제로 매도되는 비율입니다."
+)
+initial_investor_monthly_sell_usdt = st.sidebar.number_input(
+    "3-7. 초기 투자자 월간 판매 금액 ($)",
+    min_value=0.0,
+    value=0.0,
+    step=50_000.0,
+    help="락업 해제 기간 동안 월간 추가 매도 금액(USDT 기준)을 반영합니다."
+)
+
+TOTAL_SUPPLY = 1_000_000_000
+initial_investor_locked_percent = (initial_investor_locked_tokens / TOTAL_SUPPLY) * 100.0 if initial_investor_locked_tokens > 0 else 0.0
+if initial_investor_locked_percent > 100.0:
+    st.sidebar.error("락업 물량이 총 공급량을 초과했습니다.")
+
+derived_vesting_months = max(1, int(math.ceil(100.0 / max(initial_investor_release_percent, 1.0))))
+if initial_investor_vesting_months > 0 and initial_investor_vesting_months != derived_vesting_months:
+    st.sidebar.info(f"월별 해제 비율 기준으로 베스팅 기간이 {derived_vesting_months}개월로 보정됩니다.")
+if initial_investor_locked_tokens > 0:
+    estimated_lock_value = initial_investor_locked_tokens * 0.50
+    st.sidebar.caption(
+        f"락업 물량: {int(initial_investor_locked_tokens):,}개 "
+        f"(총 공급의 {initial_investor_locked_percent:.2f}%) / "
+        f"예상 평가액: ${estimated_lock_value:,.0f}"
+    )
 input_buy_volume = st.sidebar.number_input(
     "4. 월간 매수 유입 자금 ($)",
     value=200000,
@@ -1193,6 +1285,25 @@ def apply_target_scenario():
 
 st.sidebar.button("목표 시나리오 적용", on_click=apply_target_scenario)
 
+# 초기 투자자 락업/베스팅 적용 값 구성
+initial_investor_allocation = None
+initial_investor_sell_usdt_schedule = [0.0] * total_days
+if initial_investor_locked_tokens > 0 and initial_investor_locked_percent <= 100.0:
+    vesting_months_used = 0 if initial_investor_vesting_months == 0 else derived_vesting_months
+    initial_investor_allocation = {
+        "percent": max(0.0, min(1.0, initial_investor_locked_tokens / TOTAL_SUPPLY)),
+        "cliff": int(initial_investor_lock_months),
+        "vesting": int(vesting_months_used),
+        "interval": int(initial_investor_release_interval),
+    }
+    if initial_investor_monthly_sell_usdt > 0:
+        lock_days = int(initial_investor_lock_months * steps_per_month)
+        vesting_days = max(1, int(vesting_months_used * steps_per_month)) if vesting_months_used > 0 else 1
+        daily_sell_usdt = initial_investor_monthly_sell_usdt / max(steps_per_month, 1)
+        end_day = min(lock_days + vesting_days, total_days)
+        for d in range(lock_days, end_day):
+            initial_investor_sell_usdt_schedule[d] = daily_sell_usdt
+
 # 시뮬레이션 실행
 engine = TokenSimulationEngine()
 inputs = {
@@ -1214,6 +1325,9 @@ inputs = {
     'max_sell_token_ratio': max_sell_token_ratio / 100.0,
     'burn_fee_rate': burn_fee_rate / 100.0,
     'monthly_buyback_usdt': monthly_buyback_usdt,
+    'initial_investor_allocation': initial_investor_allocation,
+    'initial_investor_sell_ratio': initial_investor_sell_ratio / 100.0,
+    'initial_investor_sell_usdt_schedule': initial_investor_sell_usdt_schedule,
     'price_model': price_model,
     'depth_usdt_1pct': depth_usdt_1pct,
     'depth_usdt_2pct': depth_usdt_2pct,
