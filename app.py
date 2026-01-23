@@ -129,6 +129,9 @@ class TokenSimulationEngine:
         pool_token = max(initial_supply * 0.2, 1e-9)
         pool_usdt = pool_token * self.LISTING_PRICE
         k_constant = pool_token * pool_usdt
+        amm_pool_token = pool_token
+        amm_pool_usdt = pool_usdt
+        amm_k = k_constant
 
         delay_days = int(inputs['unbonding_days'])
         sell_queue = [0.0] * (total_days + delay_days + 5)
@@ -354,13 +357,24 @@ class TokenSimulationEngine:
                 buy_cap = pool_usdt * max_buy_usdt_ratio
                 step_buy = min(step_buy, buy_cap)
 
+            total_buy = step_buy + step_turnover_buy
+            # Shadow AMM price for arbitrage reference
+            amm_pool_token += total_sell
+            amm_usdt_out = amm_pool_usdt - (amm_k / max(amm_pool_token, 1e-9))
+            amm_pool_usdt -= amm_usdt_out
+            amm_pool_usdt += total_buy
+            amm_token_out = amm_pool_token - (amm_k / max(amm_pool_usdt, 1e-9))
+            amm_pool_token -= amm_token_out
+            amm_price = amm_pool_usdt / max(amm_pool_token, 1e-9)
+            amm_k = amm_pool_token * amm_pool_usdt
+
             # Step 4: 거래 체결
             token_out = 0.0
             if price_model in ["CEX", "HYBRID"]:
                 pool_token, pool_usdt, _ = self._apply_orderbook_trade(
                     pool_token,
                     pool_usdt,
-                    buy_usdt=(step_buy + step_turnover_buy),
+                    buy_usdt=total_buy,
                     sell_token=total_sell,
                     depth_usdt_1pct=depth_usdt_1pct * depth_ratio,
                     depth_usdt_2pct=depth_usdt_2pct * depth_ratio
@@ -369,17 +383,17 @@ class TokenSimulationEngine:
                 pool_token += total_sell
                 usdt_out = pool_usdt - (k_constant / pool_token)
                 pool_usdt -= usdt_out
-                pool_usdt += (step_buy + step_turnover_buy)
+                pool_usdt += total_buy
                 token_out = pool_token - (k_constant / pool_usdt)
                 pool_token -= token_out
 
             current_price = pool_usdt / pool_token
             # Step 5: 차익거래 체크 (CEX/HYBRID)
             if price_model in ["CEX", "HYBRID"]:
-                amm_price = k_constant / max(pool_token * pool_token, 1e-9)
                 deviation = abs(current_price - amm_price) / max(amm_price, 1e-9)
                 if deviation >= arbitrage_threshold:
-                    pool_usdt = max(k_constant / max(pool_token, 1e-9), 1e-9)
+                    pool_usdt = max(pool_token * amm_price, 1e-9)
+                    k_constant = pool_token * pool_usdt
                     current_price = pool_usdt / pool_token
                     action_logs.append({
                         "day": day_index + 1,
