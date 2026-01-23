@@ -1271,13 +1271,13 @@ inflow_expander.info(f"""
 - 총 매수 대기 자금: ${int(total_inflow_money):,}
 - **월간 추가 매수세: +${int(monthly_user_buy_volume):,}**
 """)
-    if use_phase_inflow:
-        inflow_expander.caption(
-            f"Phase 1 대기(상장 전 {prelisting_days}일): 유입 대기 → "
-            f"상장 직후 {prelisting_release_days}일 완화 방출 / "
-            f"상장 직후 일 ${int(phase2_daily + prelisting_daily):,} 유입 / "
-            f"Phase 3 이후: 일 ${int(phase3_daily):,} 유입"
-        )
+if use_phase_inflow:
+    inflow_expander.caption(
+        f"Phase 1 대기(상장 전 {prelisting_days}일): 유입 대기 → "
+        f"상장 직후 {prelisting_release_days}일 완화 방출 / "
+        f"상장 직후 일 ${int(phase2_daily + prelisting_daily):,} 유입 / "
+        f"Phase 3 이후: 일 ${int(phase3_daily):,} 유입"
+    )
 
 st.sidebar.markdown("---")
 st.sidebar.header("🏗️ 시장 구조/유동성")
