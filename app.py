@@ -37,6 +37,15 @@ def get_investor_decision(daily_unlock, current_price, config):
     return daily_unlock
 
 
+def adjust_depth_by_volatility(base_depth, price_history, config):
+    if len(price_history) < 3:
+        return base_depth
+    recent_volatility = float(np.std(price_history[-3:])) / max(price_history[-1], 1e-9)
+    depth_multiplier = 1 / (1 + (recent_volatility * 10))
+    final_multiplier = max(depth_multiplier, config.get('min_depth_ratio', 0.3))
+    return base_depth * final_multiplier
+
+
 class TokenSimulationEngine:
     def __init__(self):
         self.TOTAL_SUPPLY = 1_000_000_000
@@ -195,6 +204,9 @@ class TokenSimulationEngine:
             depth_ratio = 1.0
             if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
                 depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
+            if price_model in ["CEX", "HYBRID"]:
+                depth_usdt_1pct = adjust_depth_by_volatility(depth_usdt_1pct, daily_price_history, market_cfg)
+                depth_usdt_2pct = adjust_depth_by_volatility(depth_usdt_2pct, daily_price_history, market_cfg)
             if day_index < len(initial_investor_sell_usdt_schedule) and current_price > private_sale_price:
                 extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
                 if extra_sell_usdt > 0:
