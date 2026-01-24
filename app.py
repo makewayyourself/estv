@@ -65,7 +65,9 @@ RESET_DEFAULTS = {
     "concentration_ratio": 0.0,
     "has_legal_opinion": False,
     "has_whitepaper": False,
-    "tutorial_target_price": 5.0,
+    "target_price_preset": "사용자 조정",
+    "tutorial_target_price": 0.0,
+    "expert_target_price_display": 0.0,
     "contract_mode": "사용자 조정",
     "input_supply": 3.0,
     "input_unbonding": 30,
@@ -1456,13 +1458,31 @@ else:
                 "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
                 "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
             )
+            def apply_target_preset():
+                preset = st.session_state.get("target_price_preset", "사용자 조정")
+                if preset == "$5.00 목표":
+                    st.session_state["tutorial_target_price"] = 5.0
+                    st.session_state["apply_target_scenario"] = True
+                else:
+                    st.session_state["tutorial_target_price"] = 0.0
+                    st.session_state["apply_target_scenario"] = False
+
+            target_preset = st.sidebar.selectbox(
+                "목표가격 선택",
+                options=["사용자 조정", "$5.00 목표"],
+                index=0,
+                key="target_price_preset",
+                on_change=apply_target_preset,
+                help="목표가격을 선택하면 기본 설정이 자동 적용됩니다."
+            )
             target_price = st.sidebar.number_input(
                 "목표 가격 ($)",
-                min_value=0.1,
-                value=5.0,
+                min_value=0.0,
+                value=float(st.session_state.get("tutorial_target_price", 0.0)),
                 step=0.1,
                 key="tutorial_target_price",
-                help="최종 목표 가격을 설정합니다."
+                help="선택한 목표가격을 확인합니다.",
+                disabled=(target_preset == "사용자 조정")
             )
             contract_mode = st.sidebar.selectbox(
                 "계약 시나리오",
@@ -1747,6 +1767,33 @@ if is_expert and current_step > 0:
         index=0,
         help="기본은 사용자 조정이며, 다른 옵션은 계약/역산 기준으로 자동 적용됩니다.",
         key="contract_mode"
+    )
+
+    def apply_target_preset_expert():
+        preset = st.session_state.get("target_price_preset", "사용자 조정")
+        if preset == "$5.00 목표":
+            st.session_state["tutorial_target_price"] = 5.0
+            st.session_state["apply_target_scenario"] = True
+        else:
+            st.session_state["tutorial_target_price"] = 0.0
+            st.session_state["apply_target_scenario"] = False
+
+    target_preset_expert = st.sidebar.selectbox(
+        "목표가격 선택",
+        options=["사용자 조정", "$5.00 목표"],
+        index=0,
+        key="target_price_preset",
+        on_change=apply_target_preset_expert,
+        help="목표가격을 선택하면 기본 설정이 자동 적용됩니다."
+    )
+    st.sidebar.number_input(
+        "목표 가격 ($)",
+        min_value=0.0,
+        value=float(st.session_state.get("tutorial_target_price", 0.0)),
+        step=0.1,
+        key="expert_target_price_display",
+        help="선택한 목표가격을 확인합니다.",
+        disabled=(target_preset_expert == "사용자 조정")
     )
 
     st.sidebar.subheader("🎯 $5.00 달성 목표 시나리오")
