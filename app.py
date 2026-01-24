@@ -67,6 +67,7 @@ RESET_DEFAULTS = {
     "project_total_supply": 1_000_000_000,
     "project_pre_circulated": 0.0,
     "project_unlocked": 0.0,
+    "project_unlocked_vesting": 0,
     "project_holders": 0,
     "target_tier": "Tier 2 (Bybit, Gate.io, KuCoin) - Hard",
     "project_type": "New Listing (신규 상장)",
@@ -208,6 +209,7 @@ def check_comprehensive_red_flags(inputs):
     safe_supply = max(float(inputs.get("total_supply", 1.0)), 1.0)
     pre_circulated = float(inputs.get("pre_circulated", 0.0))
     unlocked = float(inputs.get("unlocked", 0.0))
+    unlocked_vesting_months = int(inputs.get("unlocked_vesting_months", 0))
     holders = int(inputs.get("holders", 0))
     target_tier = inputs.get("target_tier", "Tier 3")
     circ_ratio = (pre_circulated / safe_supply) * 100.0
@@ -217,10 +219,18 @@ def check_comprehensive_red_flags(inputs):
             "msg": f"🚨 초기 유통량({circ_ratio:.1f}%) 과다! 거래소는 15% 미만을 선호합니다."
         })
     unlock_ratio = (unlocked / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
-    if unlock_ratio > 50:
+    vesting_months = max(1, unlocked_vesting_months)
+    effective_monthly_dump = unlocked / vesting_months
+    monthly_dump_ratio = (effective_monthly_dump / pre_circulated * 100.0) if pre_circulated > 0 else 0.0
+    if unlocked_vesting_months == 0 and unlock_ratio > 20:
         warnings.append({
             "level": "DANGER",
-            "msg": f"💣 기유통 물량의 {unlock_ratio:.1f}%가 언락 상태입니다. 상장 직후 투매가 발생합니다."
+            "msg": f"💣 오버행 경고: 기유통 물량의 {unlock_ratio:.1f}%가 '즉시 매도' 가능 상태입니다. 급락 위험이 매우 큽니다."
+        })
+    elif unlocked_vesting_months > 0 and monthly_dump_ratio > 10:
+        warnings.append({
+            "level": "WARNING",
+            "msg": f"⚠️ 매도 압력 주의: 언락 물량이 매월 유통량의 {monthly_dump_ratio:.1f}%씩 쏟아집니다. (기간: {vesting_months}개월)"
         })
     holder_score, holder_msg = calculate_holder_score(holders, target_tier)
     if holder_score < 50:
@@ -452,6 +462,7 @@ class TokenSimulationEngine:
         delay_days = int(inputs['unbonding_days'])
         sell_queue = [0.0] * (total_days + delay_days + 5)
         sell_queue_initial = [0.0] * (total_days + delay_days + 5)
+        unlocked_queue = [0.0] * total_days
 
         marketing_cost_basis = 0.05
         marketing_supply = 100_000_000
@@ -465,6 +476,8 @@ class TokenSimulationEngine:
         step_lp_growth_rate = lp_growth_rate / steps_per_month
         burn_fee_rate = inputs.get('burn_fee_rate', 0.0)
         monthly_buyback_usdt = inputs.get('monthly_buyback_usdt', 0.0)
+        unlocked_amount = float(inputs.get("unlocked", 0.0))
+        unlocked_vesting_months = int(inputs.get("unlocked_vesting_months", 0))
         price_model = inputs.get('price_model', "AMM")
         depth_usdt_1pct = inputs.get('depth_usdt_1pct', 1_000_000.0)
         depth_usdt_2pct = inputs.get('depth_usdt_2pct', 3_000_000.0)
@@ -493,6 +506,15 @@ class TokenSimulationEngine:
 
         initial_investor_sell_ratio = inputs.get("initial_investor_sell_ratio", inputs.get("sell_pressure_ratio", 0.0))
         initial_investor_sell_usdt_schedule = inputs.get("initial_investor_sell_usdt_schedule", [])
+
+        if unlocked_amount > 0:
+            if unlocked_vesting_months <= 0:
+                unlocked_queue[0] += unlocked_amount
+            else:
+                vesting_days = max(1, int(unlocked_vesting_months * steps_per_month))
+                daily_unlocked = unlocked_amount / vesting_days
+                for d in range(min(total_days, vesting_days)):
+                    unlocked_queue[d] += daily_unlocked
 
         for day_index in range(total_days):
             day_reasons = []
@@ -528,7 +550,8 @@ class TokenSimulationEngine:
                 sell_queue[target_day] += daily_unlock * inputs['sell_pressure_ratio']
                 sell_queue_initial[target_day] += daily_initial_unlock
 
-            remaining_sell = sell_queue[day_index]
+            unlocked_sell_today = unlocked_queue[day_index] if day_index < len(unlocked_queue) else 0.0
+            remaining_sell = sell_queue[day_index] + unlocked_sell_today
             remaining_initial_sell = sell_queue_initial[day_index]
             remaining_buy = inputs['base_monthly_buy_volume']
             turnover_buy_share = inputs.get('turnover_buy_share', 0.5)
@@ -697,7 +720,8 @@ class TokenSimulationEngine:
                 "investor_unlock": max(investor_sell, 0.0),
                 "marketing_dump": max(dump_today, 0.0),
                 "turnover_sell": max(step_turnover_sell, 0.0),
-                "panic_sell": max(panic_extra, 0.0)
+                "panic_sell": max(panic_extra, 0.0),
+                "unlocked_overhang": max(unlocked_sell_today, 0.0)
             }
             source_total = sum(sell_sources.values())
             if source_total > 0 and total_sell < raw_total_sell:
@@ -1163,6 +1187,7 @@ def should_show_kyc_warnings():
         "project_total_supply",
         "project_pre_circulated",
         "project_unlocked",
+        "project_unlocked_vesting",
         "project_holders",
         "target_tier",
         "project_type",
@@ -1224,6 +1249,15 @@ if step0_visible:
         step=1_000_000.0,
         key="project_unlocked",
         help="현재 유통량 중 즉시 매도 가능한 물량입니다."
+    )
+    unlocked_vesting_months = st.sidebar.number_input(
+        "언락 물량 해제 기간 (개월)",
+        min_value=0,
+        max_value=60,
+        value=int(st.session_state.get("project_unlocked_vesting", 0)),
+        step=1,
+        key="project_unlocked_vesting",
+        help="해당 언락 물량이 시장에 전량 매도되기까지 걸리는 예상 기간입니다. 0이면 즉시 매도로 간주합니다."
     )
     holders = st.sidebar.number_input(
         "보유자 수 (Holders)",
@@ -1290,6 +1324,7 @@ else:
     total_supply_input = float(st.session_state.get("project_total_supply", 1_000_000_000))
     pre_circulated = float(st.session_state.get("project_pre_circulated", 0.0))
     unlocked = float(st.session_state.get("project_unlocked", 0.0))
+    unlocked_vesting_months = int(st.session_state.get("project_unlocked_vesting", 0))
     holders = int(st.session_state.get("project_holders", 0))
     target_tier = st.session_state.get("target_tier", "Tier 2 (Bybit, Gate.io, KuCoin) - Hard")
     project_type = st.session_state.get("project_type", "New Listing (신규 상장)")
@@ -1311,6 +1346,7 @@ if step0_visible:
         "total_supply": total_supply_input,
         "pre_circulated": pre_circulated,
         "unlocked": unlocked,
+        "unlocked_vesting_months": unlocked_vesting_months,
         "target_tier": target_tier_key,
         "holders": holders,
         "project_type": project_type,
@@ -2834,6 +2870,9 @@ engine = TokenSimulationEngine()
 inputs = {
     'target_tier': target_tier_key,
     'total_supply': total_supply_input,
+    'pre_circulated': pre_circulated,
+    'unlocked': unlocked,
+    'unlocked_vesting_months': unlocked_vesting_months,
     'initial_circulating_percent': input_supply,
     'unbonding_days': input_unbonding,
     'sell_pressure_ratio': input_sell_ratio / 100.0,
@@ -3665,7 +3704,8 @@ if go is not None:
                     "investor_unlock": "초기 투자자 물량",
                     "marketing_dump": "마케팅 물량",
                     "turnover_sell": "회전율 매도",
-                    "panic_sell": "심리 매도"
+                    "panic_sell": "심리 매도",
+                    "unlocked_overhang": "언락 오버행"
                 }
                 action_label = {
                     "NEED_BUYBACK": "바이백/매수 방어",
