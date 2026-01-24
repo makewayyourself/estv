@@ -603,6 +603,10 @@ class TokenSimulationEngine:
         enable_triggers = inputs.get('enable_triggers', False)
         triggered_flags = set()
         high_price = self.LISTING_PRICE
+        kpi_target = float(inputs.get("kpi_target_price", 0.8))
+        kpi_warning_triggered = False
+        kpi_breach_day = None
+        kpi_breach_price = None
 
         allocations = dict(self.base_allocations)
         initial_investor_alloc = inputs.get("initial_investor_allocation")
@@ -668,6 +672,10 @@ class TokenSimulationEngine:
             remaining_turnover_buy = inputs['monthly_buy_volume'] * turnover_ratio * turnover_buy_share
 
             current_price = pool_usdt / pool_token
+            if current_price < kpi_target and not kpi_warning_triggered:
+                kpi_warning_triggered = True
+                kpi_breach_day = day_index + 1
+                kpi_breach_price = current_price
             price_change_ratio = (current_price - prev_day_price) / max(prev_day_price, 1e-9)
             depth_ratio = 1.0
             if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
@@ -1061,7 +1069,10 @@ class TokenSimulationEngine:
             "daily_events": daily_events,
             "action_logs": action_logs,
             "burned_total": burned_total,
-            "simulation_log": simulation_log
+            "simulation_log": simulation_log,
+            "kpi_warning_triggered": kpi_warning_triggered,
+            "kpi_breach_day": kpi_breach_day,
+            "kpi_breach_price": kpi_breach_price
         }
 
 
@@ -1325,26 +1336,67 @@ def resolve_korean_fonts():
 
 def generate_insight_text(result, inputs):
     score = result.get("final_score", 0)
+    liquidity = float(inputs.get("depth_usdt_1pct", 0))
+    target_price = float(inputs.get("target_price", inputs.get("reverse_target_price", 0)))
+
+    score_messages = {
+        "high": [
+            "전반적인 토크노믹스 설계가 매우 견고하며, Tier 1 심사 기준을 상회합니다.",
+            "심사 통과 가능성이 높습니다. 다만 과열 구간 관리가 중요합니다."
+        ],
+        "mid": [
+            "상장은 가능하나, 상장 후 1개월 내 가격 변동성 리스크가 큽니다.",
+            "핵심 지표는 통과선이지만 유동성/수요 보강이 필요합니다."
+        ],
+        "low": [
+            "현재 구조로는 상장 심사 탈락이 확정적입니다. 전면 재설계가 요구됩니다.",
+            "리스크가 과도합니다. 즉시 구조 개선 없이는 상장 불가 수준입니다."
+        ]
+    }
     if score >= 80:
         grade = "S (즉시 상장 가능)"
-        summary = "전반적인 토크노믹스 설계가 매우 견고하며, Tier 1 거래소 심사 기준을 상회합니다."
+        summary = score_messages["high"][0]
     elif score >= 60:
         grade = "B (보완 필요)"
-        summary = "상장은 가능하나, 상장 후 1개월 내 가격 변동성 리스크가 큽니다. 유동성 보강이 필수적입니다."
+        summary = score_messages["mid"][0]
     else:
         grade = "D (상장 불가)"
-        summary = "현재 구조로는 상장 심사 탈락이 확정적입니다. 전면적인 토크노믹스 재설계가 요구됩니다."
+        summary = score_messages["low"][0]
 
-    liquidity = inputs.get("depth_usdt_1pct", 0)
+    liquidity_messages = {
+        "low": [
+            f"현재 오더북 두께(${(liquidity / 1000):.1f}k)는 방어 불가 수준입니다. 이대로면 상장 폐지 리스크가 큽니다.",
+            "유동성이 지나치게 얕습니다. 즉시 $200k 이상으로 보강하지 않으면 급락이 반복됩니다."
+        ],
+        "mid": [
+            "오더북 깊이가 기준선은 넘지만, 대규모 매도 방어에는 부족합니다.",
+            "현재 유동성은 방어선 수준입니다. 상장 직후 2배 이상의 보강이 필요합니다."
+        ],
+        "high": [
+            "유동성은 충분하지만 자본 효율성이 떨어질 수 있습니다. 운영 비용과 효과를 점검하세요.",
+            "오더북이 과도하게 두꺼워졌습니다. 효율적 재배분으로 ROI를 최적화하세요."
+        ]
+    }
     if liquidity < 100000:
-        liq_msg = (
-            f"현재 오더북 두께(${(liquidity / 1000):.1f}k)는 '두부 방어력'입니다. "
-            "최소 $200k까지 증액하지 않으면 세력의 먹잇감이 됩니다."
-        )
+        liq_msg = liquidity_messages["low"][0]
+    elif liquidity < 300000:
+        liq_msg = liquidity_messages["mid"][0]
     else:
-        liq_msg = "오더북 두께는 양호하며, 일반적인 매도 공격을 방어할 수 있는 수준입니다."
+        liq_msg = liquidity_messages["high"][0]
 
-    return grade, summary, liq_msg
+    target_messages = {
+        "low": "목표가가 낮아 안전성은 높지만, 투자자 모멘텀 확보가 어렵습니다.",
+        "mid": "목표가가 현실적입니다. 공급 통제와 유입 계획을 유지하세요.",
+        "high": "목표가가 높아졌습니다. 유동성/매수 유입을 과감히 증액해야 합니다."
+    }
+    if target_price <= 1.0:
+        target_msg = target_messages["low"]
+    elif target_price <= 5.0:
+        target_msg = target_messages["mid"]
+    else:
+        target_msg = target_messages["high"]
+
+    return grade, summary, liq_msg + "\n" + target_msg
 
 
 class AdvancedReport(FPDF):
