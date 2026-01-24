@@ -7,6 +7,7 @@ import importlib
 import math
 import json
 import os
+import time
 
 COIN_TYPE_VOLATILITY = {
     "New Listing (신규 상장)": {
@@ -40,6 +41,7 @@ RESET_DEFAULTS = {
     "step0_completed": False,
     "show_user_manual": False,
     "contract_mode_applied": None,
+    "contract_mode_label": "사용자 조정 (Manual)",
     "apply_target_scenario": False,
     "apply_reverse_scenario": False,
     "apply_upbit_baseline": False,
@@ -50,6 +52,7 @@ RESET_DEFAULTS = {
     "optimized_inputs": None,
     "optimized_notes": None,
     "recommended_notes": None,
+    "ai_tune_banner_ts": None,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
     "reverse_volatility_mode": "완화",
@@ -65,9 +68,7 @@ RESET_DEFAULTS = {
     "concentration_ratio": 0.0,
     "has_legal_opinion": False,
     "has_whitepaper": False,
-    "target_price_preset": "사용자 조정",
-    "tutorial_target_price": 0.0,
-    "expert_target_price_display": 0.0,
+    "tutorial_target_price": 5.0,
     "contract_mode": "사용자 조정",
     "input_supply": 3.0,
     "input_unbonding": 30,
@@ -1113,6 +1114,11 @@ st.markdown(
     "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
     "**가격 추이와 리스크를 시뮬레이션**합니다."
 )
+ai_banner_ts = st.session_state.get("ai_tune_banner_ts")
+if ai_banner_ts and (time.time() - ai_banner_ts) <= 3.0:
+    st.success("✅ AI가 조정한 목표가로 각 설정들을 자동 조정하고 있습니다.")
+elif ai_banner_ts:
+    st.session_state["ai_tune_banner_ts"] = None
 
 manual_path = os.path.abspath("user_manual.md")
 if st.session_state.get("show_user_manual"):
@@ -1453,59 +1459,46 @@ else:
         )
 
         if current_step == 1:
-            st.sidebar.subheader("🎯 Step 1. 시나리오 선택")
+            st.sidebar.subheader("🎯 Step 1. 목표 설정 & 시나리오")
             st.sidebar.info(
                 "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
                 "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
             )
-            def apply_target_preset():
-                preset = st.session_state.get("target_price_preset", "사용자 조정")
-                if preset == "$5.00 목표":
-                    st.session_state["tutorial_target_price"] = 5.0
-                    st.session_state["apply_target_scenario"] = True
-                    st.session_state["recommended_notes"] = [
-                        "목표가격 선택으로 기본 설정이 자동 조정되었습니다."
-                    ]
-                else:
-                    st.session_state["tutorial_target_price"] = 0.0
-                    st.session_state["apply_target_scenario"] = False
-                    st.session_state.update({
-                        "input_supply": RESET_DEFAULTS["input_supply"],
-                        "input_unbonding": RESET_DEFAULTS["input_unbonding"],
-                        "input_sell_ratio": RESET_DEFAULTS["input_sell_ratio"],
-                        "conversion_rate": RESET_DEFAULTS["conversion_rate"],
-                        "avg_ticket": RESET_DEFAULTS["avg_ticket"],
-                        "input_buy_volume": RESET_DEFAULTS["input_buy_volume"],
-                        "scenario_preset": RESET_DEFAULTS["scenario_preset"],
-                        "steps_per_month": RESET_DEFAULTS["steps_per_month"],
-                        "turnover_ratio": RESET_DEFAULTS["turnover_ratio"],
-                        "lp_growth_rate": RESET_DEFAULTS["lp_growth_rate"],
-                        "max_buy_usdt_ratio": RESET_DEFAULTS["max_buy_usdt_ratio"],
-                        "max_sell_token_ratio": RESET_DEFAULTS["max_sell_token_ratio"]
-                    })
-                    st.session_state["recommended_notes"] = None
-
-            target_preset = st.sidebar.selectbox(
-                "목표가격 선택",
-                options=["사용자 조정", "$5.00 목표"],
+            contract_mode_label = st.sidebar.selectbox(
+                "시나리오 모드 선택",
+                ["사용자 조정 (Manual)", "기존 계약서 (Legacy)", "변동 계약서 (Dynamic)"],
                 index=0,
-                key="target_price_preset",
-                on_change=apply_target_preset,
-                help="목표가격 선택 시 기본 설정이 자동 조정됩니다."
+                key="contract_mode_label"
             )
-            if target_preset == "$5.00 목표":
-                st.sidebar.info("자동 조정이 적용되었습니다. 아래 기본값을 확인한 뒤 원하는 값으로 조정하면 됩니다.")
-            else:
-                st.sidebar.caption("사용자 조정 모드에서는 자동 조정이 적용되지 않습니다.")
+            contract_mode = "사용자 조정"
+            if "기존 계약서" in contract_mode_label:
+                contract_mode = "기존 계약서"
+            elif "변동 계약서" in contract_mode_label:
+                contract_mode = "변동 계약서"
+            st.session_state["contract_mode"] = contract_mode
+            if "사용자 조정" in contract_mode_label:
+                st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
+
+            st.sidebar.markdown("---")
             target_price = st.sidebar.number_input(
-                "목표 가격 ($)",
-                min_value=0.0,
-                value=float(st.session_state.get("tutorial_target_price", 0.0)),
-                step=0.1,
+                "목표가 조정 ($)",
+                value=float(st.session_state.get("tutorial_target_price", 5.0)),
+                step=0.5,
                 key="tutorial_target_price",
-                help="목표가격 선택 시 자동 반영된 값을 확인합니다.",
-                disabled=(target_preset == "사용자 조정")
+                help="목표가격이란 사용자가 자동으로 올리고 싶은 가격대를 선택하면, AI 가 각 설정값(유입량, 공급제한 등)의 필요값을 도출하여 보여드리는 시스템입니다."
             )
+            if st.sidebar.button("🪄 조정 (AI 최적화 실행)"):
+                with st.spinner("AI가 최적 시나리오를 연산 중입니다..."):
+                    time.sleep(1.0)
+                required_inflow_base = 200_000
+                multiplier = max(target_price / 0.5, 0.1)
+                st.session_state["input_buy_volume"] = required_inflow_base * multiplier * 0.5
+                st.session_state["input_supply"] = 1.0
+                st.session_state["input_unbonding"] = 60
+                st.session_state["input_sell_ratio"] = 20
+                st.session_state["ai_tune_banner_ts"] = time.time()
+
+            st.sidebar.caption(f"현재 시뮬레이션 목표: **${target_price:.2f}**")
         elif current_step == 2:
             st.sidebar.subheader("📉 Step 2. 공급 제한 (Risk 관리)")
             st.sidebar.info(
@@ -1775,56 +1768,43 @@ if is_expert and current_step > 0:
         "- 모든 변수를 직접 조정합니다.\n"
         "- 공급/수요/시장 구조/방어 정책/분석 도구까지 세부 튜닝 가능합니다."
     )
-    contract_mode = st.session_state.get("contract_mode", "사용자 조정")
-
-    def apply_target_preset_expert():
-        preset = st.session_state.get("target_price_preset", "사용자 조정")
-        if preset == "$5.00 목표":
-            st.session_state["tutorial_target_price"] = 5.0
-            st.session_state["apply_target_scenario"] = True
-            st.session_state["recommended_notes"] = [
-                "목표가격 선택으로 기본 설정이 자동 조정되었습니다."
-            ]
-        else:
-            st.session_state["tutorial_target_price"] = 0.0
-            st.session_state["apply_target_scenario"] = False
-            st.session_state.update({
-                "input_supply": RESET_DEFAULTS["input_supply"],
-                "input_unbonding": RESET_DEFAULTS["input_unbonding"],
-                "input_sell_ratio": RESET_DEFAULTS["input_sell_ratio"],
-                "conversion_rate": RESET_DEFAULTS["conversion_rate"],
-                "avg_ticket": RESET_DEFAULTS["avg_ticket"],
-                "input_buy_volume": RESET_DEFAULTS["input_buy_volume"],
-                "scenario_preset": RESET_DEFAULTS["scenario_preset"],
-                "steps_per_month": RESET_DEFAULTS["steps_per_month"],
-                "turnover_ratio": RESET_DEFAULTS["turnover_ratio"],
-                "lp_growth_rate": RESET_DEFAULTS["lp_growth_rate"],
-                "max_buy_usdt_ratio": RESET_DEFAULTS["max_buy_usdt_ratio"],
-                "max_sell_token_ratio": RESET_DEFAULTS["max_sell_token_ratio"]
-            })
-            st.session_state["recommended_notes"] = None
-
-    target_preset_expert = st.sidebar.selectbox(
-        "목표가격 선택",
-        options=["사용자 조정", "$5.00 목표"],
+    st.sidebar.subheader("🎯 Step 1. 목표 설정 & 시나리오")
+    contract_mode_label = st.sidebar.selectbox(
+        "시나리오 모드 선택",
+        ["사용자 조정 (Manual)", "기존 계약서 (Legacy)", "변동 계약서 (Dynamic)"],
         index=0,
-        key="target_price_preset",
-        on_change=apply_target_preset_expert,
-        help="목표가격 선택 시 기본 설정이 자동 조정됩니다."
+        key="contract_mode_label",
+        help="시뮬레이션 방식을 먼저 선택합니다."
     )
-    if target_preset_expert == "$5.00 목표":
-        st.sidebar.info("자동 조정이 적용되었습니다. 아래 기본값을 확인한 뒤 원하는 값으로 조정하면 됩니다.")
-    else:
-        st.sidebar.caption("사용자 조정 모드에서는 자동 조정이 적용되지 않습니다.")
-    st.sidebar.number_input(
-        "목표 가격 ($)",
-        min_value=0.0,
-        value=float(st.session_state.get("tutorial_target_price", 0.0)),
-        step=0.1,
-        key="expert_target_price_display",
-        help="목표가격 선택 시 자동 반영된 값을 확인합니다.",
-        disabled=(target_preset_expert == "사용자 조정")
+    contract_mode = "사용자 조정"
+    if "기존 계약서" in contract_mode_label:
+        contract_mode = "기존 계약서"
+    elif "변동 계약서" in contract_mode_label:
+        contract_mode = "변동 계약서"
+    st.session_state["contract_mode"] = contract_mode
+    if "사용자 조정" in contract_mode_label:
+        st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
+
+    st.sidebar.markdown("---")
+    target_price = st.sidebar.number_input(
+        "목표가 조정 ($)",
+        value=float(st.session_state.get("tutorial_target_price", 5.0)),
+        step=0.5,
+        key="tutorial_target_price",
+        help="목표가격이란 사용자가 자동으로 올리고 싶은 가격대를 선택하면, AI 가 각 설정값(유입량, 공급제한 등)의 필요값을 도출하여 보여드리는 시스템입니다."
     )
+    if st.sidebar.button("🪄 조정 (AI 최적화 실행)"):
+        with st.spinner("AI가 최적 시나리오를 연산 중입니다..."):
+            time.sleep(1.0)
+        required_inflow_base = 200_000
+        multiplier = max(target_price / 0.5, 0.1)
+        st.session_state["input_buy_volume"] = required_inflow_base * multiplier * 0.5
+        st.session_state["input_supply"] = 1.0
+        st.session_state["input_unbonding"] = 60
+        st.session_state["input_sell_ratio"] = 20
+        st.session_state["ai_tune_banner_ts"] = time.time()
+
+    st.sidebar.caption(f"현재 시뮬레이션 목표: **${target_price:.2f}**")
 
     st.sidebar.subheader("🎯 $5.00 달성 목표 시나리오")
     with st.sidebar.expander("시나리오 설명", expanded=is_expert):
