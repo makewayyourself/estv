@@ -52,6 +52,7 @@ RESET_DEFAULTS = {
     "optimized_inputs": None,
     "optimized_notes": None,
     "recommended_notes": None,
+    "ai_strategy_report": None,
     "ai_tune_banner_ts": None,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
@@ -1067,6 +1068,51 @@ def run_confidence_with_cache(inputs, runs, noise_pct, mape_threshold):
 def filter_recommended_settings(payload):
     return dict(payload), []
 
+
+def generate_strategy_guide(current_price, target_price, period_months, suggested_inflow, suggested_supply):
+    required_growth = (target_price - current_price) / current_price
+    monthly_intensity = required_growth / period_months
+
+    strategy_title = ""
+    tactics = []
+
+    if monthly_intensity < 0.5:
+        strategy_title = "🌱 [Level 1] 오가닉 성장 전략 (Organic Growth)"
+        tactics = [
+            "**커뮤니티 결속:** 디스코드/텔레그램 AMA를 주 1회 개최하여 홀더 신뢰를 쌓으세요.",
+            "**콘텐츠 마케팅:** 블로그와 유튜브를 통해 프로젝트의 기술적 진보를 알리세요.",
+            "**공급 관리:** 별도의 강제 락업보다는 스테이킹 리워드(APR 5~10%)로 자발적 보유를 유도하세요."
+        ]
+    elif monthly_intensity < 2.0:
+        strategy_title = "🚀 [Level 2] 부스팅 전략 (Aggressive Boosting)"
+        tactics = [
+            f"**자금 집중:** 월 **${suggested_inflow:,.0f}** 규모의 유입을 위해 유료 광고(Ads) 집행이 필수입니다.",
+            "**인플루언서(KOL):** Tier 2급 유튜버/인플루언서 3명 이상과 계약하여 화제성을 만드세요.",
+            "**이벤트:** 거래소와 연계한 '순매수 이벤트'나 '트레이딩 대회'를 개최하세요."
+        ]
+    else:
+        strategy_title = "🔥 [Level 3] 공급 쇼크 전략 (Supply Shock Operation)"
+        tactics = [
+            f"**극단적 락업:** 현재 유통량인 {suggested_supply:.1f}%를 제외한 **모든 물량을 재단이 회수/락업**해야 합니다.",
+            "**시장가 매수:** MM 팀을 통해 매도벽을 강제로 뚫어버리는 **'시장가 매수(Market Buy)'**가 필요합니다.",
+            "**뉴스 호재:** '대형 파트너십'이나 '메인넷 런칭'급의 초대형 호재 없이는 이 가격 유지가 불가능합니다."
+        ]
+
+    guide_text = f"""
+### {strategy_title}
+사장님, **{period_months}개월 내 ${target_price}** 달성을 위한 AI 전략 제안입니다.
+
+#### 📋 실행 과제 (Action Items)
+1. {tactics[0]}
+2. {tactics[1]}
+3. {tactics[2]}
+
+#### ⚙️ 시스템 자동 조정 내역
+* **자금 투입:** 월 ${suggested_inflow:,.0f} 로 상향
+* **유통량 제한:** {suggested_supply:.1f}% 로 축소
+"""
+    return guide_text
+
 # ==========================================
 # 2. Streamlit UI 구성
 # ==========================================
@@ -1469,6 +1515,22 @@ else:
                     st.session_state["input_supply"] = 1.0
                     st.session_state["input_unbonding"] = 60
                     st.session_state["input_sell_ratio"] = 20
+                    simulation_unit = st.session_state.get("simulation_unit", "월")
+                    simulation_value = int(st.session_state.get("simulation_value", 1))
+                    if simulation_unit == "일":
+                        period_months = max(1, int(math.ceil(simulation_value / 30)))
+                    elif simulation_unit == "년":
+                        period_months = max(1, simulation_value * 12)
+                    else:
+                        period_months = max(1, simulation_value)
+                    guide_msg = generate_strategy_guide(
+                        current_price=0.5,
+                        target_price=target_price,
+                        period_months=period_months,
+                        suggested_inflow=st.session_state["input_buy_volume"],
+                        suggested_supply=st.session_state["input_supply"]
+                    )
+                    st.session_state["ai_strategy_report"] = guide_msg
                     st.session_state["ai_tune_banner_ts"] = time.time()
 
                 st.sidebar.caption(f"현재 시뮬레이션 목표: **${target_price:.2f}**")
@@ -1771,6 +1833,22 @@ if is_expert and current_step > 0:
             st.session_state["input_supply"] = 1.0
             st.session_state["input_unbonding"] = 60
             st.session_state["input_sell_ratio"] = 20
+            simulation_unit = st.session_state.get("simulation_unit", "월")
+            simulation_value = int(st.session_state.get("simulation_value", 1))
+            if simulation_unit == "일":
+                period_months = max(1, int(math.ceil(simulation_value / 30)))
+            elif simulation_unit == "년":
+                period_months = max(1, simulation_value * 12)
+            else:
+                period_months = max(1, simulation_value)
+            guide_msg = generate_strategy_guide(
+                current_price=0.5,
+                target_price=target_price,
+                period_months=period_months,
+                suggested_inflow=st.session_state["input_buy_volume"],
+                suggested_supply=st.session_state["input_supply"]
+            )
+            st.session_state["ai_strategy_report"] = guide_msg
             st.session_state["ai_tune_banner_ts"] = time.time()
 
         st.sidebar.caption(f"현재 시뮬레이션 목표: **${target_price:.2f}**")
@@ -2775,10 +2853,14 @@ col3.metric("법적 리스크", "통과" if result['legal_check'] else "위반(I
 col4.metric("경고 발생 횟수", f"{len(result['risk_logs'])} 회")
 if contract_notes:
     st.info("계약 적용: " + ", ".join(contract_notes))
+ai_strategy_report = st.session_state.get("ai_strategy_report")
+if ai_strategy_report:
+    with st.expander("🧭 AI 전략 가이드", expanded=True):
+        st.markdown(ai_strategy_report)
 
 if enable_confidence and not reset_triggered:
     confidence_result = run_confidence_with_cache(
-        adjusted_inputs,
+        inputs,
         confidence_runs,
         confidence_uncertainty / 100.0,
         confidence_mape
