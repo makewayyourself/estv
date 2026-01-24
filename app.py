@@ -9,6 +9,8 @@ import json
 import os
 import time
 
+RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
+
 COIN_TYPE_VOLATILITY = {
     "New Listing (신규 상장)": {
         "default": 1.6,
@@ -55,6 +57,8 @@ RESET_DEFAULTS = {
     "ai_strategy_report": None,
     "ai_tune_banner_ts": None,
     "simulation_active": False,
+    "simulation_active_requested": False,
+    "simulation_active_force": False,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
     "reverse_volatility_mode": "완화",
@@ -1603,7 +1607,11 @@ else:
                 key="monthly_buyback_usdt",
                 help="시장 방어를 위한 월간 바이백 예산입니다."
             )
-            st.sidebar.button("🚀 시뮬레이션 결과 확인하기")
+            if st.sidebar.button(RUN_SIM_BUTTON_LABEL):
+                st.session_state["simulation_active"] = True
+                st.session_state["simulation_active_requested"] = True
+                st.session_state["simulation_active_force"] = True
+                st.rerun()
 
     nav_cols = st.sidebar.columns(2)
     with nav_cols[0]:
@@ -2754,14 +2762,23 @@ if is_expert and current_step > 0:
 
     st.sidebar.markdown("---")
     apply_btn = st.sidebar.button(
-        "🚀 시나리오 적용 및 시뮬레이션",
+        RUN_SIM_BUTTON_LABEL,
         type="primary",
         use_container_width=True
     )
     if apply_btn:
         st.session_state["simulation_active"] = True
+        st.session_state["simulation_active_requested"] = True
+        st.session_state["simulation_active_force"] = True
+        st.rerun()
 
 # 메인 화면 로직 분기
+if st.session_state.get("simulation_active_requested"):
+    st.session_state["simulation_active"] = True
+    st.session_state["simulation_active_requested"] = False
+if st.session_state.get("simulation_active_force") and not st.session_state.get("simulation_active", False):
+    st.session_state["simulation_active"] = True
+    st.session_state["simulation_active_force"] = False
 if not st.session_state.get("simulation_active", False):
     st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
     st.markdown(
@@ -2776,7 +2793,7 @@ if not st.session_state.get("simulation_active", False):
     st.info(
         "### 👋 시뮬레이션 준비 완료\n"
         "좌측 사이드바에서 **목표, 공급, 수요, 시장 변수**를 설정하세요.\n"
-        "설정이 완료되면 하단의 **[🚀 시나리오 적용 및 시뮬레이션]** 버튼을 눌러 결과를 확인하세요."
+        f"설정이 완료되면 하단의 **[{RUN_SIM_BUTTON_LABEL}]** 버튼을 눌러 결과를 확인하세요."
     )
     st.subheader("📈 가격 변동 추이 (대기 중)")
     empty_chart_data = pd.DataFrame(
