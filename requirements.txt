@@ -1,3 +1,4 @@
+
 streamlit
 pandas
 numpy
@@ -5,3 +6,4 @@ matplotlib
 plotly
 fpdf
 openai
+python-dotenv
