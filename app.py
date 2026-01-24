@@ -1453,7 +1453,7 @@ else:
         )
 
         if current_step == 1:
-            st.sidebar.subheader("🎯 Step 1. 목표 설정")
+            st.sidebar.subheader("🎯 Step 1. 시나리오 선택")
             st.sidebar.info(
                 "시뮬레이션의 기준을 정합니다. 목표가가 높을수록 "
                 "공급 통제(유통량/언본딩)와 수요 견인(전환율/객단가)이 더 중요해집니다."
@@ -1463,9 +1463,27 @@ else:
                 if preset == "$5.00 목표":
                     st.session_state["tutorial_target_price"] = 5.0
                     st.session_state["apply_target_scenario"] = True
+                    st.session_state["recommended_notes"] = [
+                        "목표가격 선택으로 기본 설정이 자동 조정되었습니다."
+                    ]
                 else:
                     st.session_state["tutorial_target_price"] = 0.0
                     st.session_state["apply_target_scenario"] = False
+                    st.session_state.update({
+                        "input_supply": RESET_DEFAULTS["input_supply"],
+                        "input_unbonding": RESET_DEFAULTS["input_unbonding"],
+                        "input_sell_ratio": RESET_DEFAULTS["input_sell_ratio"],
+                        "conversion_rate": RESET_DEFAULTS["conversion_rate"],
+                        "avg_ticket": RESET_DEFAULTS["avg_ticket"],
+                        "input_buy_volume": RESET_DEFAULTS["input_buy_volume"],
+                        "scenario_preset": RESET_DEFAULTS["scenario_preset"],
+                        "steps_per_month": RESET_DEFAULTS["steps_per_month"],
+                        "turnover_ratio": RESET_DEFAULTS["turnover_ratio"],
+                        "lp_growth_rate": RESET_DEFAULTS["lp_growth_rate"],
+                        "max_buy_usdt_ratio": RESET_DEFAULTS["max_buy_usdt_ratio"],
+                        "max_sell_token_ratio": RESET_DEFAULTS["max_sell_token_ratio"]
+                    })
+                    st.session_state["recommended_notes"] = None
 
             target_preset = st.sidebar.selectbox(
                 "목표가격 선택",
@@ -1473,15 +1491,19 @@ else:
                 index=0,
                 key="target_price_preset",
                 on_change=apply_target_preset,
-                help="목표가격을 선택하면 기본 설정이 자동 적용됩니다."
+                help="목표가격 선택 시 기본 설정이 자동 조정됩니다."
             )
+            if target_preset == "$5.00 목표":
+                st.sidebar.info("자동 조정이 적용되었습니다. 아래 기본값을 확인한 뒤 원하는 값으로 조정하면 됩니다.")
+            else:
+                st.sidebar.caption("사용자 조정 모드에서는 자동 조정이 적용되지 않습니다.")
             target_price = st.sidebar.number_input(
                 "목표 가격 ($)",
                 min_value=0.0,
                 value=float(st.session_state.get("tutorial_target_price", 0.0)),
                 step=0.1,
                 key="tutorial_target_price",
-                help="선택한 목표가격을 확인합니다.",
+                help="목표가격 선택 시 자동 반영된 값을 확인합니다.",
                 disabled=(target_preset == "사용자 조정")
             )
             contract_mode = st.sidebar.selectbox(
@@ -1774,9 +1796,27 @@ if is_expert and current_step > 0:
         if preset == "$5.00 목표":
             st.session_state["tutorial_target_price"] = 5.0
             st.session_state["apply_target_scenario"] = True
+            st.session_state["recommended_notes"] = [
+                "목표가격 선택으로 기본 설정이 자동 조정되었습니다."
+            ]
         else:
             st.session_state["tutorial_target_price"] = 0.0
             st.session_state["apply_target_scenario"] = False
+            st.session_state.update({
+                "input_supply": RESET_DEFAULTS["input_supply"],
+                "input_unbonding": RESET_DEFAULTS["input_unbonding"],
+                "input_sell_ratio": RESET_DEFAULTS["input_sell_ratio"],
+                "conversion_rate": RESET_DEFAULTS["conversion_rate"],
+                "avg_ticket": RESET_DEFAULTS["avg_ticket"],
+                "input_buy_volume": RESET_DEFAULTS["input_buy_volume"],
+                "scenario_preset": RESET_DEFAULTS["scenario_preset"],
+                "steps_per_month": RESET_DEFAULTS["steps_per_month"],
+                "turnover_ratio": RESET_DEFAULTS["turnover_ratio"],
+                "lp_growth_rate": RESET_DEFAULTS["lp_growth_rate"],
+                "max_buy_usdt_ratio": RESET_DEFAULTS["max_buy_usdt_ratio"],
+                "max_sell_token_ratio": RESET_DEFAULTS["max_sell_token_ratio"]
+            })
+            st.session_state["recommended_notes"] = None
 
     target_preset_expert = st.sidebar.selectbox(
         "목표가격 선택",
@@ -1784,15 +1824,19 @@ if is_expert and current_step > 0:
         index=0,
         key="target_price_preset",
         on_change=apply_target_preset_expert,
-        help="목표가격을 선택하면 기본 설정이 자동 적용됩니다."
+        help="목표가격 선택 시 기본 설정이 자동 조정됩니다."
     )
+    if target_preset_expert == "$5.00 목표":
+        st.sidebar.info("자동 조정이 적용되었습니다. 아래 기본값을 확인한 뒤 원하는 값으로 조정하면 됩니다.")
+    else:
+        st.sidebar.caption("사용자 조정 모드에서는 자동 조정이 적용되지 않습니다.")
     st.sidebar.number_input(
         "목표 가격 ($)",
         min_value=0.0,
         value=float(st.session_state.get("tutorial_target_price", 0.0)),
         step=0.1,
         key="expert_target_price_display",
-        help="선택한 목표가격을 확인합니다.",
+        help="목표가격 선택 시 자동 반영된 값을 확인합니다.",
         disabled=(target_preset_expert == "사용자 조정")
     )
 
