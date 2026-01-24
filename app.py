@@ -8,6 +8,7 @@ import math
 import json
 import os
 import time
+from fpdf import FPDF
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
 
@@ -126,7 +127,6 @@ RESET_DEFAULTS = {
     "initial_investor_release_percent": 10.0,
     "initial_investor_release_interval": 1,
     "initial_investor_sell_ratio": 50,
-    "initial_investor_monthly_sell_usdt": 0.0,
     "panic_sensitivity": 1.5,
     "fomo_sensitivity": 1.2,
     "private_sale_price": 0.05,
@@ -1142,6 +1142,125 @@ def generate_strategy_guide(current_price, target_price, period_months, suggeste
 """
     return guide_text
 
+
+def generate_strategic_imperative(inputs, series):
+    depth_1pct = float(inputs.get("depth_usdt_1pct", 0.0))
+    init_circ = float(inputs.get("initial_circulating_percent", 0.0))
+    unbonding_days = int(inputs.get("unbonding_days", 0))
+    monthly_buy = float(inputs.get("monthly_buy_volume", 0.0))
+    target_tier = inputs.get("target_tier", "Tier 3")
+
+    if depth_1pct < 500_000:
+        return {
+            "title": "합격 조건: 오더북 깊이 $500k 이상 확보",
+            "content": (
+                "상장 심사 통과를 위해 **1% 구간 오더북 유동성**을 최소 $500k 이상으로 확보하세요. "
+                "유동성 방어가 확보되면 초기 급락과 슬리피지를 크게 줄일 수 있습니다."
+            )
+        }
+    if init_circ > 5.0:
+        return {
+            "title": "합격 조건: 초기 유통량 5% 이하로 조정",
+            "content": (
+                "상장 직후 과도한 유통 물량은 즉각적인 차익 실현을 유발합니다. "
+                "**초기 유통량을 5% 이하**로 제한해 가격 방어력을 확보하세요."
+            )
+        }
+    if unbonding_days < 30:
+        return {
+            "title": "합격 조건: 언본딩 30일 이상 확보",
+            "content": (
+                "언본딩 기간이 짧으면 단기 매도 압력이 집중됩니다. "
+                "**언본딩 30일 이상** 확보가 안정적 가격 형성에 필수입니다."
+            )
+        }
+    if monthly_buy < 500_000:
+        return {
+            "title": "합격 조건: 월간 매수 유입 $500k 이상 확보",
+            "content": (
+                "심사 통과를 위해 월간 매수 유입이 최소 $500k 이상 필요합니다. "
+                "유입이 늘수록 유동성 방어와 가격 안정성이 개선됩니다."
+            )
+        }
+    if series and max(series) < 0.6:
+        return {
+            "title": "합격 조건: 가격 안정 구간 유지",
+            "content": (
+                "목표 거래소 등급("
+                f"{target_tier}) 기준으로 가격 안정 구간을 유지해야 합니다. "
+                "캠페인/유동성 정책을 유지해 추세적 하락을 방지하세요."
+            )
+        }
+    return {
+        "title": "합격 조건: 현재 구조 유지 및 확장",
+        "content": (
+            "핵심 리스크 지표가 안정 범위에 있습니다. "
+            "현재 구조를 유지하면서 유입·유동성을 점진적으로 강화하세요."
+        )
+    }
+
+
+class StrategicReportPDF(FPDF):
+    def header(self):
+        self.set_font("Arial", "B", 15)
+        self.cell(0, 10, "ESTV Strategic Listing Report", 0, 1, "C")
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Arial", "I", 8)
+        self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
+
+    def chapter_title(self, title):
+        self.set_font("Arial", "B", 12)
+        self.set_fill_color(200, 220, 255)
+        self.cell(0, 10, title, 0, 1, "L", 1)
+        self.ln(4)
+
+    def chapter_body(self, body):
+        self.set_font("Arial", "", 11)
+        self.multi_cell(0, 10, body)
+        self.ln()
+
+
+def create_downloadable_report(inputs, series, score, imperative, target_price):
+    pdf = StrategicReportPDF()
+    pdf.add_page()
+
+    max_price = max(series) if series else 0.0
+    worst_day = "N/A"
+    if series and len(series) > 2:
+        diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
+        min_idx = diffs.index(min(diffs))
+        worst_day = f"Day {min_idx + 1}"
+
+    pdf.chapter_title(f"1. Diagnostic Summary (Score: {int(score)}/100)")
+    summary_text = (
+        f"Target Listing Tier: {inputs.get('target_tier', 'N/A')}\n"
+        f"Target Price: ${target_price:,.2f}\n"
+        f"Max Simulated Price: ${max_price:,.2f}\n\n"
+        f"Listing Probability: {'High' if score >= 80 else 'Medium' if score >= 60 else 'Low'}"
+    )
+    pdf.chapter_body(summary_text)
+
+    pdf.chapter_title("2. Strategic Mandates (Must-Do Actions)")
+    mandate_text = (
+        f"Title: {imperative['title']}\n\n"
+        f"{imperative['content'].replace('**', '').strip()}\n\n"
+        "* This action is mandatory for listing approval."
+    )
+    pdf.chapter_body(mandate_text)
+
+    pdf.chapter_title("3. Key Financial Projections")
+    data_text = (
+        f"- Initial Liquidity Required: ${inputs.get('depth_usdt_1pct', 0) * 2:,.0f} (Estimated)\n"
+        f"- Monthly Buy Inflow: ${inputs.get('monthly_buy_volume', 0):,.0f}\n"
+        f"- Max Drawdown Risk: {worst_day}"
+    )
+    pdf.chapter_body(data_text)
+
+    return pdf.output(dest="S").encode("latin-1", "replace")
+
 # ==========================================
 # 2. Streamlit UI 구성
 # ==========================================
@@ -1380,6 +1499,7 @@ if step0_visible:
         if not has_whitepaper:
             score -= 30
         score = max(0.0, min(100.0, score))
+        st.session_state["listing_score"] = score
         if score >= 80:
             grade = "양호"
         elif score >= 60:
@@ -1740,7 +1860,6 @@ else:
     initial_investor_release_percent = 10.0
     initial_investor_release_interval = 1
     initial_investor_sell_ratio = 0.0
-    initial_investor_monthly_sell_usdt = 0.0
     derived_vesting_months = 1
     initial_investor_locked_percent = 0.0
     campaigns = []
@@ -1829,7 +1948,6 @@ if step0_preview:
     initial_investor_release_percent = 10.0
     initial_investor_release_interval = 1
     initial_investor_sell_ratio = 0.0
-    initial_investor_monthly_sell_usdt = 0.0
     derived_vesting_months = 1
     initial_investor_locked_percent = 0.0
     campaigns = []
@@ -2000,16 +2118,8 @@ if is_expert and current_step > 0:
         max_value=100,
         value=50,
         step=5,
-        help="초기 투자자 해제 물량 중 실제로 매도되는 비율입니다.",
+        help="언락된 물량 중 실제로 매도되는 비율입니다. 공격적일수록 높게 설정하세요.",
         key="initial_investor_sell_ratio"
-    )
-    initial_investor_monthly_sell_usdt = investor_expander.number_input(
-        "3-7. 초기 투자자 월간 판매 금액 ($)",
-        min_value=0.0,
-        value=0.0,
-        step=50_000.0,
-        help="락업 해제 기간 동안 월간 추가 매도 금액(USDT 기준)을 반영합니다.",
-        key="initial_investor_monthly_sell_usdt"
     )
 
     TOTAL_SUPPLY = float(total_supply_input)
@@ -2022,6 +2132,27 @@ if is_expert and current_step > 0:
         investor_expander.info(f"월별 해제 비율 기준으로 베스팅 기간이 {derived_vesting_months}개월로 보정됩니다.")
     if initial_investor_locked_tokens > 0:
         estimated_lock_value = initial_investor_locked_tokens * 0.50
+        vesting_months_used = derived_vesting_months if initial_investor_vesting_months > 0 else 1
+        safe_months = max(1, vesting_months_used)
+        monthly_unlock_theoretical = initial_investor_locked_tokens / safe_months
+        final_monthly_sell = monthly_unlock_theoretical * (initial_investor_sell_ratio / 100.0)
+        st.session_state["calculated_monthly_sell_pressure"] = final_monthly_sell
+
+        investor_expander.markdown("---")
+        investor_expander.subheader("📉 매도 압력 자동 산출 (Auto-Calculated)")
+        c1, c2 = investor_expander.columns(2)
+        c1.metric(
+            label="월간 언락 물량 (Max)",
+            value=f"{monthly_unlock_theoretical:,.0f} 개",
+            help="베스팅 스케줄에 따라 매월 풀리는 최대 물량입니다."
+        )
+        c2.metric(
+            label="실제 예상 매도 압력",
+            value=f"{final_monthly_sell:,.0f} 개",
+            delta=f"매도율 {initial_investor_sell_ratio:.0f}% 적용",
+            delta_color="inverse",
+            help="시뮬레이션에 반영되는 월간 매도 수량입니다."
+        )
         investor_expander.caption(
             f"락업 물량: {int(initial_investor_locked_tokens):,}개 "
             f"(총 공급의 {initial_investor_locked_percent:.2f}%) / "
@@ -2857,13 +2988,6 @@ if initial_investor_locked_tokens > 0 and initial_investor_locked_percent <= 100
         "vesting": int(vesting_months_used),
         "interval": int(initial_investor_release_interval),
     }
-    if initial_investor_monthly_sell_usdt > 0:
-        lock_days = int(initial_investor_lock_months * steps_per_month)
-        vesting_days = max(1, int(vesting_months_used * steps_per_month)) if vesting_months_used > 0 else 1
-        daily_sell_usdt = initial_investor_monthly_sell_usdt / max(steps_per_month, 1)
-        end_day = min(lock_days + vesting_days, total_days)
-        for d in range(lock_days, end_day):
-            initial_investor_sell_usdt_schedule[d] = daily_sell_usdt
 
 # 시뮬레이션 실행
 engine = TokenSimulationEngine()
@@ -3784,34 +3908,68 @@ if len(series) > 2:
     diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
     min_idx = diffs.index(min(diffs))
     drop_day = min_idx + 1
+
     reasons = []
+
+    # A. 마케팅 덤핑 체크
     for event in result.get("daily_events", []):
         if event["type"] == "MarketingDump" and abs(event["day"] - drop_day) <= 2:
-            reasons.append("마케팅 덤핑 발생 영향")
+            reasons.append("마케팅 덤핑(물량 투하) 발생")
             break
+
+    # B. 초기 투자자 락업 해제 체크 (Cliff)
+    investor_cliff_months = inputs.get('initial_investor_allocation', {}).get('cliff', 12)
+    investor_cliff_days = investor_cliff_months * 30
+    if drop_day >= investor_cliff_days and drop_day <= investor_cliff_days + 7:
+        reasons.append(f"초기 투자자 락업 해제(D+{investor_cliff_days}) 물량 출회")
+
+    # C. Day 1~7 초기 급락
+    if drop_day <= 7:
+        if inputs["initial_circulating_percent"] > 5.0:
+            reasons.append("초기 유통량 과다(5% 초과)로 인한 차익 실현")
+        elif inputs["depth_usdt_1pct"] < 500_000:
+            reasons.append("초기 오더북 유동성 부족(슬리피지 심화)")
+        elif inputs["turnover_ratio"] > 0.1:
+            reasons.append("신규 유입자의 높은 단타 회전율(Panic Sell)")
+        else:
+            reasons.append("매수세 부족 대비 초기 유통 물량 매도 우위")
+
+    # D. 스테이킹/언본딩 이후 매도
     unbonding_days = inputs.get("unbonding_days", 0)
-    cliff_days = [
-        alloc["cliff"] * inputs["steps_per_month"]
-        for alloc in engine.base_allocations.values()
-        if alloc.get("cliff", 0) > 0
-    ]
-    cliff_sell_days = [d + unbonding_days for d in cliff_days]
-    if cliff_sell_days and any(drop_day >= d and abs(drop_day - d) <= inputs["steps_per_month"] // 2 for d in cliff_sell_days):
-        reasons.append("클리프 해제 이후 언본딩 경과 매도 증가")
-    if inputs["sell_pressure_ratio"] > 0.3 and drop_day >= unbonding_days:
-        reasons.append("락업 해제 매도율이 높음(언본딩 이후)")
-    if inputs["turnover_ratio"] > 0:
-        reasons.append("신규 유입 회전율로 추가 매도 발생")
+    if drop_day > unbonding_days + 30 and drop_day > 7:
+        reasons.append("스테이킹/보상 물량 언본딩 이후 매도 압력")
+
+    # E. 심리적 요인
+    log = result.get("simulation_log", {})
+    if log:
+        idx = drop_day - 1
+        if idx < len(log.get("reason_code", [])):
+            code = log["reason_code"][idx]
+            if code == "PANIC_SELL":
+                reasons.append("시장 심리 악화로 인한 공포 투매(Panic Sell)")
+            elif code == "WHALE_DUMP":
+                reasons.append("고래(대량 보유자)의 일시적 덤핑")
+
+    reasons = list(set(reasons))
     if not reasons:
-        reasons.append("유동성 대비 거래량이 커 가격 민감도가 높음")
+        reasons.append("매수세 실종 및 자연스러운 차익 실현 매물 소화")
 
     source_note = ""
-    log = result.get("simulation_log", {})
     if log:
         src_list = log.get("sell_source_text", [])
         if drop_day - 1 < len(src_list):
-            source_note = f" (출처: {src_list[drop_day - 1]})"
-    st.info(f"가장 큰 급락은 Day {drop_day}에 발생. 원인 추정: " + ", ".join(reasons) + source_note)
+            raw_text = src_list[drop_day - 1]
+            clean_text = raw_text.replace("investor_unlock", "투자자 물량") \
+                                 .replace("marketing_dump", "마케팅 물량") \
+                                 .replace("turnover_sell", "신규 단타 매도") \
+                                 .replace("panic_sell", "심리적 투매")
+            source_note = f" (상세 비중: {clean_text.split(': ')[-1]})"
+
+    st.info(
+        f"📉 **최대 급락 발생일: Day {drop_day}**\n"
+        f"- **주요 원인:** {', '.join(reasons)}\n"
+        f"- **매도 구성:** {source_note}"
+    )
 
 # 로그 테이블
 if result['risk_logs']:
@@ -3820,3 +3978,17 @@ if result['risk_logs']:
 if result.get("action_logs"):
     st.subheader("📌 캠페인 액션 로그")
     st.table(pd.DataFrame(result["action_logs"]))
+
+# 전략 리포트 다운로드
+if st.session_state.get("simulation_active", False):
+    listing_score = float(st.session_state.get("listing_score", 0.0))
+    target_price_value = float(st.session_state.get("tutorial_target_price", 0.0))
+    imperative = generate_strategic_imperative(inputs, series)
+    pdf_bytes = create_downloadable_report(inputs, series, listing_score, imperative, target_price_value)
+    st.download_button(
+        label="📥 전략 리포트 다운로드 (PDF)",
+        data=pdf_bytes,
+        file_name="ESTV_Listing_Strategy_Report.pdf",
+        mime="application/pdf",
+        help="상장 심사 제출용 근거 자료 및 상세 전략이 포함된 리포트입니다."
+    )
