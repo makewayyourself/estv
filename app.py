@@ -2780,7 +2780,7 @@ if st.session_state.get("simulation_active_force") and not st.session_state.get(
     st.session_state["simulation_active"] = True
     st.session_state["simulation_active_force"] = False
 if not st.session_state.get("simulation_active", False):
-    st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
+    st.title(f"📊 {st.session_state.get('project_symbol', 'ESTV')} 토큰 상장 리스크 & 수급 시뮬레이터")
     st.markdown(
         "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
         "**가격 추이와 리스크를 시뮬레이션**합니다."
@@ -2804,7 +2804,7 @@ if not st.session_state.get("simulation_active", False):
     st.stop()
 
 # 시뮬레이션 결과 화면
-st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
+st.title(f"📊 {st.session_state.get('project_symbol', 'ESTV')} 토큰 상장 리스크 & 수급 시뮬레이터")
 st.markdown(
     "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
     "**가격 추이와 리스크를 시뮬레이션**합니다."
