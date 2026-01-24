@@ -11,6 +11,21 @@ import time
 from fpdf import FPDF
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
+STEP0_SAVE_PATH = os.path.join(os.path.dirname(__file__), "step0_saved.json")
+STEP0_KEYS = [
+    "project_symbol",
+    "project_total_supply",
+    "project_pre_circulated",
+    "project_unlocked",
+    "project_unlocked_vesting",
+    "project_holders",
+    "target_tier",
+    "project_type",
+    "audit_status",
+    "concentration_ratio",
+    "has_legal_opinion",
+    "has_whitepaper"
+]
 
 COIN_TYPE_VOLATILITY = {
     "New Listing (신규 상장)": {
@@ -1288,6 +1303,27 @@ def hard_reset_session():
     st.session_state.update(RESET_DEFAULTS)
     st.session_state["reset_triggered"] = True
     st.session_state["hard_reset_pending"] = False
+    if os.path.exists(STEP0_SAVE_PATH):
+        try:
+            os.remove(STEP0_SAVE_PATH)
+        except OSError:
+            pass
+
+
+def save_step0_snapshot():
+    payload = {key: st.session_state.get(key, RESET_DEFAULTS.get(key)) for key in STEP0_KEYS}
+    with open(STEP0_SAVE_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def load_step0_snapshot():
+    if not os.path.exists(STEP0_SAVE_PATH):
+        return False
+    with open(STEP0_SAVE_PATH, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+    for key, value in payload.items():
+        st.session_state[key] = value
+    return True
 
 if st.session_state.get("hard_reset_pending"):
     hard_reset_session()
@@ -1451,6 +1487,19 @@ if step0_visible:
         key="has_whitepaper",
         help="백서/유통 계획이 없으면 심사 리스크가 커집니다."
     )
+    st.sidebar.markdown("### 💾 Step 0 저장")
+    save_cols = st.sidebar.columns(2)
+    with save_cols[0]:
+        if st.button("저장"):
+            save_step0_snapshot()
+            st.sidebar.success("Step 0 저장 완료")
+    with save_cols[1]:
+        if st.button("불러오기"):
+            if load_step0_snapshot():
+                st.sidebar.success("Step 0 불러오기 완료")
+                st.rerun()
+            else:
+                st.sidebar.info("저장된 Step 0 정보가 없습니다.")
 else:
     symbol = st.session_state.get("project_symbol", "ESTV")
     total_supply_input = float(st.session_state.get("project_total_supply", 1_000_000_000))
