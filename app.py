@@ -1,14 +1,23 @@
 # app.py 파일에 이 내용을 복사해 넣으세요
 import streamlit as st
+from dotenv import load_dotenv
+import os
 
-# --- 사이드바 상단에 OpenAI API Key 입력란 추가 ---
+
+# .env에서 OpenAI API 키 불러오기
+load_dotenv()
+DEFAULT_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+
+# --- 사이드바 상단에 OpenAI API Key 입력란 추가 (공용키 기본값) ---
+
 with st.sidebar:
     st.markdown("#### OpenAI API Key 입력")
     api_key = st.text_input("OpenAI API Key", type="password", key="openai_api_key_input")
     if api_key:
         st.session_state["openai_api_key"] = api_key
-    elif "openai_api_key" not in st.session_state:
-        st.session_state["openai_api_key"] = ""
+    else:
+        st.session_state["openai_api_key"] = DEFAULT_OPENAI_API_KEY
 # --- 입력된 키는 st.session_state["openai_api_key"]로 사용 가능 ---
 import pandas as pd
 import numpy as np
@@ -20,6 +29,36 @@ import os
 import time
 from fpdf import FPDF
 from openai import OpenAI
+
+# [STRATEGIC KNOWLEDGE BASE]
+# 업로드된 4개 파일의 핵심 전략을 AI에게 Context로 주입합니다.
+
+ESTV_STRATEGIC_CONTEXT = """
+[1. Project Identity: ESTV Nexus]
+- Vision: Web3 Media Protocol & DePIN-based P2P Mesh Network.
+- Core Assets: 160M+ connected devices, 50+ global platforms (Samsung TV Plus, Roku, etc.).
+- Value Flywheel: Viewers earn tokens -> Ad revenue buys back tokens -> Token value rises.
+
+[2. Critical Risk Management (from 'Risk & Avoidance Strategy.pdf')]
+- Major Risk: High discount gap between Private Sale ($0.05) and Listing Price ($0.50). [cite: 198]
+- 3-Layer Defense Strategy:
+    1. Legal: Anti-hedging & No-OTC clauses in SAFT to prevent dumping. 
+    2. Technical: KPI-based Dynamic Vesting (Unlock only if Price > $1.0 or MAU > 1M). [cite: 422]
+    3. Economic: Soft Lock-up via Staking Bonus (High APY for voluntary holding). [cite: 423]
+- Target Stability: Maintain $500k+ bid depth (Tier 2 standard) to absorb sell pressure. 
+
+[3. Marketing Roadmap & Budget (from 'Marketing Strategy.pdf')]
+- Total Budget: $1M USD (Allocated: Short-term 40%, Mid-term 30%, Long-term 30%). [cite: 479]
+- Key Phases:
+    - Phase 1 (D-7~D+30): 'Proof of Engagement' via Wallet Abstraction & Airdrops. [cite: 941]
+    - Phase 2 (D+31~D+90): Staking Incentive Open (APR 15%). [cite: 485]
+    - Phase 3 (Post-TGE): Real Yield Disclosure (30% of Ad Revenue for Buyback). [cite: 969]
+- KPI Targets: 50k Active Holders, $5M Initial Liquidity. [cite: 976, 987]
+
+[4. P2P & DePIN Strategy (from 'P2P Strategy.pdf')]
+- DePIN Model: 'Host & Earn' - Users act as CDN nodes to reduce infrastructure costs. [cite: 82]
+- Cost Efficiency: Infrastructure cost savings are redirected to Token Buyback. [cite: 140]
+"""
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
 STEP0_SAVE_PATH = os.path.join(os.path.dirname(__file__), "step0_saved.json")
@@ -1469,102 +1508,71 @@ def generate_ai_consulting_report(result, inputs):
     return recommendations
 
 
+
 def get_real_ai_insight(api_key, inputs, result, score, series):
     if not api_key:
         return None
 
+    # 1. 시뮬레이션 데이터 추출 (Data Extraction)
     max_price = max(series) if series else 0.0
-    worst_day = "N/A"
-    if series and len(series) > 2:
-        diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
-        min_idx = diffs.index(min(diffs))
-        worst_day = f"{min_idx + 1}"
-
-    context = f"""
-    [Project Info]
-    - Project: {inputs.get('project_symbol', 'ESTV')}
-    - Target Tier: {inputs.get('target_tier', 'Tier 2')}
-    - Target Price: ${inputs.get('target_price', inputs.get('reverse_target_price', 0))}
-
-    [Simulation Result]
+    final_price = result.get('final_price', 0.0)
+    liquidity_1pct = inputs.get('depth_usdt_1pct', 0)
+    monthly_buy = inputs.get('monthly_buy_volume', 0)
+    worst_day = result.get('worst_day', 'N/A')
+    
+    # 2. 프롬프트 구성 (Persona + Context + Data + Instruction)
+    system_prompt = f"""
+    You are the Chief Strategy Officer (CSO) of ESTV. 
+    Your role is to rigorously evaluate the token simulation results against our official strategy documents.
+    
+    [Strategic Standards (Our Playbook)]
+    {ESTV_STRATEGIC_CONTEXT}
+    
+    [Current Simulation Result]
     - Final Score: {score}/100
-    - Max Price: ${max_price:.2f}
-    - Liquidity Depth (1%): ${inputs.get('depth_usdt_1pct', 0):,.0f}
-    - Worst Crash Day: Day {worst_day}
-    - KPI Vesting Triggered: {result.get('kpi_warning_triggered', False)}
+    - Max Price: ${max_price:.2f} (Target: $5.0)
+    - Final Price: ${final_price:.2f}
+    - Liquidity Depth (1%): ${liquidity_1pct:,.0f}
+    - Monthly Buy Pressure: ${monthly_buy:,.0f}
+    - KPI Vesting Triggered: {result.get('kpi_warning_triggered', False)} (Means price dropped below target)
     """
 
-    system_prompt = """
-    You are a sharp Chief Strategy Officer (CSO) at a top-tier crypto VC.
-    Analyze the token simulation results and provide a ruthless, actionable strategy report.
-
-    Output Format (Korean):
-    1. [종합 독설 및 진단]: 한 줄 요약 (냉정하게)
-    2. [치명적 약점]: 데이터에 기반한 가장 큰 리스크
-    3. [생존 전략]: 구체적인 Action Item 3가지 (숫자 포함)
-
-    Tone: Professional, Insightful, Strategic. No fluff.
+    user_prompt = """
+    Write a 'Strategic Alignment Report' in Korean based on the data above.
+    
+    **Output Structure (Strictly follow this):**
+    
+    **1. 🛡️ 전략 정합성 진단 (Strategy Alignment)**
+    - Compare the Liquidity Depth (${liquidity_1pct:,.0f}) against our 'Risk Strategy' target ($500k).
+    - Did the 'KPI-based Dynamic Vesting' work? (Check if KPI Vesting was triggered).
+    - Is the Monthly Buy Pressure sufficient to support the 'Phase 2 Staking' plan?
+    
+    **2. ⚠️ 발견된 괴리 및 위험 (Gap Analysis)**
+    - Identify specific gaps between our 'DePIN Growth Vision' and the actual simulation outcome.
+    - If the score is low ({score}), explain WHY based on the '3-Layer Defense Strategy'.
+    - Mention if the 'Marketing Budget' seems insufficient for the observed sell pressure.
+    
+    **3. 💊 AI 실행 권고 (Action Items)**
+    - Provide 3 concrete actions aligned with our Roadmap.
+    - Example: "Increase Buyback allocation from Ad Revenue", "Enforce stricter SAFT clauses", "Boost Phase 1 Marketing".
+    - Use specific terms like 'Host & Earn', 'Real Yield', 'Soft Lock-up'.
+    
+    **Tone:** Professional, Insightful, Executive-level. Be critical if the score is low.
     """
 
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o", # 또는 gpt-4-turbo
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze this simulation data:\n{context}"}
+                {"role": "user", "content": user_prompt}
             ],
             temperature=0.7
         )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"AI 호출 중 오류 발생: {e}")
-        return None
-
-
-class AdvancedReport(FPDF):
-    def __init__(self):
-        super().__init__()
-        self.font_name = "Arial"
-        fonts = resolve_korean_fonts()
-        if fonts:
-            self.add_font("Nanum", "", fonts["regular"], uni=True)
-            self.add_font("Nanum", "B", fonts["bold"], uni=True)
-            self.font_name = "Nanum"
-
-    def _safe_text(self, text):
-        if text is None:
-            return ""
-        if self.font_name == "Nanum":
-            return str(text)
-        return str(text).encode("latin-1", "replace").decode("latin-1")
-
-    def header(self):
-        self.set_font(self.font_name, "B", 10)
-        self.cell(0, 10, self._safe_text("ESTV Token Strategic Simulation Report"), 0, 1, "R")
-        self.line(10, 20, 200, 20)
-        self.ln(10)
-
-    def chapter_title(self, label):
-        self.set_font(self.font_name, "B", 14)
-        self.set_fill_color(240, 240, 240)
-        self.cell(0, 10, self._safe_text(f"  {label}"), 0, 1, "L", 1)
-        self.ln(4)
-
-    def body_text(self, text):
-        self.set_font(self.font_name, "", 11)
-        self.multi_cell(0, 8, self._safe_text(text))
-        self.ln()
-
-    def add_metric_table(self, data_dict):
-        self.set_font(self.font_name, "B", 10)
-        for key, value in data_dict.items():
-            self.cell(90, 10, self._safe_text(key), 1)
-            self.set_font(self.font_name, "", 10)
-            self.cell(90, 10, self._safe_text(str(value)), 1)
-            self.ln()
-            self.set_font(self.font_name, "B", 10)
-        self.ln()
+        return f"AI 분석 중 오류가 발생했습니다: {str(e)}"
 
 
 def create_full_report(inputs, series, score, target_price):
