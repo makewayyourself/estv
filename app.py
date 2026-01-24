@@ -3143,7 +3143,7 @@ if use_master_plan:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # 차트 그리기
-st.subheader("📈 가격 변동 추이 (일 단위)")
+st.subheader("📈 가격 변동 추이 (Interactive)")
 series = result['daily_price_trend']
 
 if st.button("🤖 AI 최적화 제안"):
@@ -3182,12 +3182,16 @@ if go is not None:
     steps_per_month = result["inputs"].get("steps_per_month", 30)
     split_label = f"{steps_per_month}일 분할"
     lp_daily_label = "예" if lp_growth_pct > 0 else "아니오"
+    main_line_color = "#00F0FF" if result['legal_check'] else "#FF4D4D"
     fig.add_trace(go.Scatter(
         x=days,
         y=series,
         mode="lines",
         name="ESTV Price ($)",
-        line=dict(color="blue" if result['legal_check'] else "red")
+        line=dict(color=main_line_color, width=3),
+        fill="tozeroy",
+        fillcolor="rgba(0, 240, 255, 0.12)" if result['legal_check'] else "rgba(255, 77, 77, 0.12)",
+        hovertemplate="<b>Day %{x}</b><br>Price: $%{y:.4f}<extra></extra>"
     ), row=1, col=1)
     if opt_result:
         opt_series = opt_result.get("daily_price_trend", [])
@@ -3227,6 +3231,32 @@ if go is not None:
 
     log = result.get("simulation_log")
     if log:
+        reason_days = []
+        reason_prices = []
+        reason_texts = []
+        for i, reason in enumerate(log.get("reason_code", [])):
+            if reason == "NORMAL":
+                continue
+            if i >= len(series):
+                break
+            reason_days.append(log.get("day", [])[i] if i < len(log.get("day", [])) else i)
+            reason_prices.append(log.get("price", [])[i] if i < len(log.get("price", [])) else series[i])
+            reason_texts.append(reason)
+        if reason_days:
+            reason_colors = [
+                "#00FF88" if ("FOMO" in text or "MARKETING" in text) else "#FF5555"
+                for text in reason_texts
+            ]
+            fig.add_trace(go.Scatter(
+                x=reason_days,
+                y=reason_prices,
+                mode="markers",
+                name="중요 이벤트",
+                marker=dict(size=10, color=reason_colors, symbol="diamond-open", line=dict(width=2)),
+                text=reason_texts,
+                hovertemplate="<b>%{text}</b><br>Day %{x}<br>Price $%{y:.4f}<extra></extra>"
+            ), row=1, col=1)
+
         reason_colors = {
             "PANIC_SELL": "red",
             "WHALE_DUMP": "orange",
@@ -3527,13 +3557,19 @@ if go is not None:
             ), row=1, col=1)
 
     fig.update_layout(
-        xaxis_title="Day",
-        hovermode="closest",
-        height=520,
-        margin=dict(l=10, r=10, t=30, b=10),
+        title="📈 ESTV Price Simulation (Interactive)",
+        template="plotly_dark",
+        xaxis=dict(
+            title="Timeline (Days)",
+            showgrid=False,
+            rangeslider=dict(visible=True)
+        ),
+        hovermode="x unified",
+        height=560,
+        margin=dict(l=10, r=10, t=45, b=10),
         barmode="overlay"
     )
-    fig.update_yaxes(title_text="Price", dtick=0.25, row=1, col=1)
+    fig.update_yaxes(title_text="Price (USDT)", dtick=0.25, row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
     st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
     if log:
