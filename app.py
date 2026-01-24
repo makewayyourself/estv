@@ -68,7 +68,7 @@ RESET_DEFAULTS = {
     "concentration_ratio": 0.0,
     "has_legal_opinion": False,
     "has_whitepaper": False,
-    "tutorial_target_price": 5.0,
+    "tutorial_target_price": 0.0,
     "contract_mode": "사용자 조정",
     "input_supply": 3.0,
     "input_unbonding": 30,
@@ -1459,7 +1459,7 @@ else:
             st.sidebar.markdown("---")
             target_price = st.sidebar.number_input(
                 "목표가 조정 ($)",
-                value=float(st.session_state.get("tutorial_target_price", 5.0)),
+                value=float(st.session_state.get("tutorial_target_price", 0.0)),
                 step=0.5,
                 key="tutorial_target_price",
                 help="목표가격이란 사용자가 자동으로 올리고 싶은 가격대를 선택하면, AI 가 각 설정값(유입량, 공급제한 등)의 필요값을 도출하여 보여드리는 시스템입니다."
@@ -1765,7 +1765,7 @@ if is_expert and current_step > 0:
     st.sidebar.markdown("---")
     target_price = st.sidebar.number_input(
         "목표가 조정 ($)",
-        value=float(st.session_state.get("tutorial_target_price", 5.0)),
+        value=float(st.session_state.get("tutorial_target_price", 0.0)),
         step=0.5,
         key="tutorial_target_price",
         help="목표가격이란 사용자가 자동으로 올리고 싶은 가격대를 선택하면, AI 가 각 설정값(유입량, 공급제한 등)의 필요값을 도출하여 보여드리는 시스템입니다."
