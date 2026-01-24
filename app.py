@@ -1543,8 +1543,8 @@ else:
             input_supply = st.sidebar.slider(
                 "초기 유통량 (%)",
                 min_value=0.0,
-                max_value=max(0.1, min(100.0, pre_circ_ratio)),
-                value=min(st.session_state.get("input_supply", 3.0), 10.0),
+                max_value=100.0,
+                value=float(st.session_state.get("input_supply", 3.0)),
                 step=0.5,
                 key="input_supply",
                 help="초기 유통량이 높을수록 가격 방어가 어려워집니다."
@@ -1882,8 +1882,8 @@ if is_expert and current_step > 0:
     input_supply = st.sidebar.slider(
         "1. 초기 유통량 (%)",
         min_value=0.0,
-        max_value=max(0.1, min(100.0, pre_circ_ratio)),
-        value=3.0,
+        max_value=100.0,
+        value=float(st.session_state.get("input_supply", 3.0)),
         step=0.5,
         help="초기 유통되는 토큰 비율입니다. 높을수록 시장 유통 물량이 많아져 가격 방어가 어려울 수 있습니다.",
         key="input_supply"
