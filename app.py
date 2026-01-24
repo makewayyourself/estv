@@ -1,5 +1,15 @@
 # app.py 파일에 이 내용을 복사해 넣으세요
 import streamlit as st
+
+# --- 사이드바 상단에 OpenAI API Key 입력란 추가 ---
+with st.sidebar:
+    st.markdown("#### OpenAI API Key 입력")
+    api_key = st.text_input("OpenAI API Key", type="password", key="openai_api_key_input")
+    if api_key:
+        st.session_state["openai_api_key"] = api_key
+    elif "openai_api_key" not in st.session_state:
+        st.session_state["openai_api_key"] = ""
+# --- 입력된 키는 st.session_state["openai_api_key"]로 사용 가능 ---
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
