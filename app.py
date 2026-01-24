@@ -82,6 +82,8 @@ RESET_DEFAULTS = {
     "simulation_active": False,
     "simulation_active_requested": False,
     "simulation_active_force": False,
+    "step0_load_pending": False,
+    "step0_load_payload": None,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
     "reverse_volatility_mode": "완화",
@@ -1321,12 +1323,26 @@ def load_step0_snapshot():
         return False
     with open(STEP0_SAVE_PATH, "r", encoding="utf-8") as f:
         payload = json.load(f)
+    st.session_state["step0_load_payload"] = payload
+    st.session_state["step0_load_pending"] = True
+    return True
+
+
+def apply_step0_snapshot():
+    payload = st.session_state.get("step0_load_payload")
+    if not payload:
+        return
     for key, value in payload.items():
         st.session_state[key] = value
-    return True
+    st.session_state["step0_load_pending"] = False
+    st.session_state["step0_load_payload"] = None
 
 if st.session_state.get("hard_reset_pending"):
     hard_reset_session()
+    st.rerun()
+
+if st.session_state.get("step0_load_pending"):
+    apply_step0_snapshot()
     st.rerun()
 
 ai_banner_ts = st.session_state.get("ai_tune_banner_ts")
@@ -3692,23 +3708,33 @@ if go is not None:
                     col=1
                 )
 
-        # Battlefield view: buy vs sell bars
+        # Upbit-style volume bars (buy + sell)
         sell_vols = log.get("sell_pressure_vol", [])
         buy_vols = log.get("buy_power_vol", [])
         if sell_vols and buy_vols:
-            bar_days = list(range(min(len(sell_vols), len(buy_vols), len(series))))
+            min_len = min(len(sell_vols), len(buy_vols), len(series))
+            vol_days = list(range(min_len))
+            total_vols = []
+            vol_colors = []
+            for i in range(min_len):
+                total_vols.append(sell_vols[i] + buy_vols[i])
+                if i > 0 and series[i] >= series[i - 1]:
+                    vol_colors.append("rgba(0, 255, 136, 0.6)")
+                elif i > 0:
+                    vol_colors.append("rgba(255, 60, 60, 0.6)")
+                else:
+                    vol_colors.append("rgba(150, 150, 150, 0.5)")
             fig.add_trace(go.Bar(
-                x=bar_days,
-                y=[sell_vols[i] for i in bar_days],
-                name="매도 압력",
-                marker_color="rgba(255, 0, 0, 0.6)"
+                x=vol_days,
+                y=total_vols,
+                name="Volume",
+                marker_color=vol_colors,
+                hovertemplate="<b>Day %{x}</b><br>Total Vol: %{y:,.0f}<extra></extra>"
             ), row=2, col=1)
-            fig.add_trace(go.Bar(
-                x=bar_days,
-                y=[buy_vols[i] for i in bar_days],
-                name="매수 지지력",
-                marker_color="rgba(0, 180, 0, 0.6)"
-            ), row=2, col=1)
+            fig.update_layout(
+                barmode="group",
+                bargap=0.2
+            )
 
     if len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
