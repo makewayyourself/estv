@@ -141,18 +141,18 @@ STRATEGY_PLAYBOOK = {
         "title": "🚨 기관 물량 베스팅 긴급 유예(Deferral) 발동 권고",
         "condition": "가격이 목표가($0.8) 하회 시",
         "action_plan": """
-        1. [거버넌스] 즉시 긴급 이사회를 소집하여 '가격 안정화 협약'을 의결하십시오.
-        2. [SAFT 수정] 초기 투자자 상위 3인과 접촉하여, 금월 해제 물량의 80%를 3개월 뒤로 미루는 'Voluntary Lock-up' 계약을 체결하십시오.
-        3. [보상안] 락업 연장에 동의한 투자자에게는 연 15%의 추가 APY(토큰 보상)를 지급하는 당근책을 제시하십시오.
+        1. [거버넌스] 긴급 이사회 소집 후 '가격 안정화 협약' 의결을 강력히 권고합니다.
+        2. [SAFT 수정] 초기 투자자 상위 3인과 협의하여, 금월 해제 물량의 80%를 3개월 뒤로 미루는 'Voluntary Lock-up' 체결을 권고합니다.
+        3. [보상안] 락업 연장 동의자에게 연 15% 추가 APY(토큰 보상) 제공을 검토하십시오.
         """
     },
     "LIQUIDITY_CRISIS": {
         "title": "💧 유동성 공급(LP) 비상 확충 계획 수립",
         "condition": "오더북 깊이가 위험 수준일 때",
         "action_plan": """
-        1. [MM 계약] 지정된 마켓 메이킹(MM) 파트너사에게 'Bid Wall(매수벽) 강화'를 주문하십시오.
-        2. [재원 마련] 마케팅 예산의 30%를 즉시 USDT로 전환하여 오더북에 투입하십시오.
-        3. [커뮤니티] 'LP 스테이킹 프로그램'을 런칭하여, 사용자가 직접 유동성을 공급하면 높은 이자를 주는 방식으로 방어선을 구축하십시오.
+        1. [MM 계약] 지정된 마켓 메이킹(MM) 파트너사에게 'Bid Wall(매수벽) 강화'를 요청하십시오.
+        2. [재원 마련] 마케팅 예산의 30%를 USDT로 전환해 오더북 투입을 권고합니다.
+        3. [커뮤니티] 'LP 스테이킹 프로그램' 런칭으로 자발적 유동성 공급을 유도하십시오.
         """
     }
 }
@@ -1431,7 +1431,7 @@ def generate_ai_consulting_report(result, inputs):
         **[진단]** Day {breach_day}에 가격이 ${breach_price:.2f}로 하락하며 KPI 방어선이 붕괴되었습니다.
         이 상태에서 예정된 물량이 출회되면 가격은 추가 하락할 가능성이 큽니다.
 
-        **[AI 전략 권고]**
+        **[경영진 권고]**
         {rec['title']}
 
         **[구체적 실행 계획 (Action Items)]**
@@ -1447,7 +1447,7 @@ def generate_ai_consulting_report(result, inputs):
         msg = f"""
         **[진단]** 오더북 깊이가 위험 수준으로 추정됩니다. (1% 깊이 ${liquidity_depth:,.0f}, 최소 심리 깊이 {min_depth_ratio:.2f})
 
-        **[AI 전략 권고]**
+        **[경영진 권고]**
         {rec['title']}
 
         **[구체적 실행 계획 (Action Items)]**
@@ -1560,6 +1560,20 @@ def create_full_report(inputs, series, score, target_price):
         "패닉 깊이 하한": f"{inputs.get('min_depth_ratio', 0):.2f}"
     }
     pdf.add_metric_table(settings_snapshot)
+
+    pdf.add_page()
+    pdf.chapter_title("5. AI 전략 컨설팅 및 실행 계획")
+    ai_advice_list = generate_ai_consulting_report(result_summary, inputs)
+    if ai_advice_list:
+        for advice in ai_advice_list:
+            clean_text = advice.replace("**", "").strip()
+            pdf.set_font(pdf.font_name, "", 11)
+            pdf.multi_cell(0, 8, pdf._safe_text(clean_text))
+            pdf.ln(5)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+    else:
+        pdf.body_text("✅ 현재 시뮬레이션 상 중대한 전략적 위험이 감지되지 않았습니다. 기존 계획대로 진행하십시오.")
 
     return pdf.output(dest="S").encode("latin-1", "replace")
 
