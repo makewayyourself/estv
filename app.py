@@ -26,6 +26,84 @@ STEP0_KEYS = [
     "has_legal_opinion",
     "has_whitepaper"
 ]
+FULL_SNAPSHOT_KEYS = [
+    "mode",
+    "mode_selector",
+    "tutorial_step",
+    "step0_completed",
+    "contract_mode_label",
+    "contract_mode",
+    "input_supply",
+    "input_unbonding",
+    "input_sell_ratio",
+    "input_buy_volume",
+    "simulation_unit",
+    "simulation_value",
+    "scenario_preset",
+    "conversion_rate",
+    "avg_ticket",
+    "use_buy_inflow_pattern",
+    "pattern_month4_avg_krw",
+    "enable_dual_pipeline",
+    "migration_target",
+    "migration_ramp_months",
+    "acquisition_target",
+    "acquisition_ramp_months",
+    "use_phase_inflow",
+    "phase2_days",
+    "phase2_multiplier",
+    "prelisting_days",
+    "prelisting_multiplier",
+    "prelisting_release_days",
+    "volume_volatility",
+    "volatility_project_type",
+    "weekend_dip",
+    "price_model",
+    "depth_usdt_1pct",
+    "depth_usdt_2pct",
+    "depth_growth_rate",
+    "steps_per_month",
+    "turnover_ratio",
+    "turnover_buy_share",
+    "lp_growth_rate",
+    "max_buy_usdt_ratio",
+    "max_sell_token_ratio",
+    "use_master_plan",
+    "use_triggers",
+    "buy_verify_boost",
+    "holding_suppress",
+    "payburn_delta",
+    "buyback_daily",
+    "monthly_buyback_usdt",
+    "burn_fee_rate",
+    "initial_investor_lock_months",
+    "initial_investor_locked_tokens",
+    "initial_investor_vesting_months",
+    "initial_investor_release_percent",
+    "initial_investor_release_interval",
+    "initial_investor_sell_ratio",
+    "panic_sensitivity",
+    "fomo_sensitivity",
+    "private_sale_price",
+    "profit_taking_multiple",
+    "arbitrage_threshold",
+    "min_depth_ratio",
+    "project_symbol",
+    "project_total_supply",
+    "project_pre_circulated",
+    "project_unlocked",
+    "project_unlocked_vesting",
+    "project_holders",
+    "target_tier",
+    "project_type",
+    "audit_status",
+    "concentration_ratio",
+    "has_legal_opinion",
+    "has_whitepaper",
+    "marketing_dashboard_url",
+    "show_upbit_baseline",
+    "enable_confidence"
+]
 
 COIN_TYPE_VOLATILITY = {
     "New Listing (신규 상장)": {
@@ -84,6 +162,10 @@ RESET_DEFAULTS = {
     "simulation_active_force": False,
     "step0_load_pending": False,
     "step0_load_payload": None,
+    "full_load_pending": False,
+    "full_load_payload": None,
+    "loaded_result": None,
+    "loaded_inputs": None,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
     "reverse_volatility_mode": "완화",
@@ -1351,6 +1433,22 @@ def create_full_report(inputs, series, score, target_price):
     }
     pdf.add_metric_table(metrics)
 
+    pdf.chapter_title("4. 설정 기록 (Inputs Snapshot)")
+    settings_snapshot = {
+        "코인 심볼": inputs.get("project_symbol", "ESTV"),
+        "총 발행량": f"{inputs.get('total_supply', 0):,.0f}",
+        "초기 유통량(%)": f"{inputs.get('initial_circulating_percent', 0):.2f}",
+        "언본딩 기간(일)": f"{inputs.get('unbonding_days', 0)}",
+        "락업 해제 매도율(%)": f"{inputs.get('sell_pressure_ratio', 0) * 100:.1f}",
+        "월간 매수 유입($)": f"{inputs.get('monthly_buy_volume', 0):,.0f}",
+        "오더북 깊이(1%)": f"${inputs.get('depth_usdt_1pct', 0):,.0f}",
+        "패닉 민감도": f"{inputs.get('panic_sensitivity', 0):.2f}",
+        "FOMO 민감도": f"{inputs.get('fomo_sensitivity', 0):.2f}",
+        "차익거래 임계값(%)": f"{inputs.get('arbitrage_threshold', 0) * 100:.1f}",
+        "패닉 깊이 하한": f"{inputs.get('min_depth_ratio', 0):.2f}"
+    }
+    pdf.add_metric_table(settings_snapshot)
+
     return pdf.output(dest="S").encode("latin-1", "replace")
 
 # ==========================================
@@ -1399,12 +1497,57 @@ def apply_step0_snapshot():
     st.session_state["step0_load_pending"] = False
     st.session_state["step0_load_payload"] = None
 
+
+def to_jsonable(obj):
+    if isinstance(obj, dict):
+        return {k: to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [to_jsonable(v) for v in obj]
+    if isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    if isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    return obj
+
+
+def build_full_snapshot(inputs, result):
+    payload = {
+        "version": 1,
+        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "session_state": {key: st.session_state.get(key, RESET_DEFAULTS.get(key)) for key in FULL_SNAPSHOT_KEYS},
+        "inputs": to_jsonable(inputs),
+        "result": to_jsonable(result)
+    }
+    return payload
+
+
+def load_full_snapshot(payload):
+    st.session_state["full_load_payload"] = payload
+    st.session_state["full_load_pending"] = True
+
+
+def apply_full_snapshot():
+    payload = st.session_state.get("full_load_payload")
+    if not payload:
+        return
+    for key, value in payload.get("session_state", {}).items():
+        st.session_state[key] = value
+    st.session_state["loaded_inputs"] = payload.get("inputs")
+    st.session_state["loaded_result"] = payload.get("result")
+    st.session_state["simulation_active"] = True
+    st.session_state["full_load_pending"] = False
+    st.session_state["full_load_payload"] = None
+
 if st.session_state.get("hard_reset_pending"):
     hard_reset_session()
     st.rerun()
 
 if st.session_state.get("step0_load_pending"):
     apply_step0_snapshot()
+    st.rerun()
+
+if st.session_state.get("full_load_pending"):
+    apply_full_snapshot()
     st.rerun()
 
 ai_banner_ts = st.session_state.get("ai_tune_banner_ts")
@@ -1907,6 +2050,8 @@ else:
                 st.session_state["simulation_active"] = True
                 st.session_state["simulation_active_requested"] = True
                 st.session_state["simulation_active_force"] = True
+                st.session_state["loaded_result"] = None
+                st.session_state["loaded_inputs"] = None
                 st.rerun()
 
     nav_cols = st.sidebar.columns(2)
@@ -3085,6 +3230,8 @@ if is_expert and current_step > 0:
         st.session_state["simulation_active"] = True
         st.session_state["simulation_active_requested"] = True
         st.session_state["simulation_active_force"] = True
+        st.session_state["loaded_result"] = None
+        st.session_state["loaded_inputs"] = None
         st.rerun()
 
 # 메인 화면 로직 분기
@@ -3180,10 +3327,17 @@ inputs = {
 }
 contract_notes = []
 reset_triggered = bool(st.session_state.get("reset_triggered", False))
+loaded_result = st.session_state.get("loaded_result")
+loaded_inputs = st.session_state.get("loaded_inputs")
 if reset_triggered:
     result = build_reset_result(inputs, total_days)
     upbit_baseline_result = None
     st.session_state["reset_triggered"] = False
+elif loaded_result:
+    result = loaded_result
+    if loaded_inputs:
+        inputs = loaded_inputs
+    upbit_baseline_result = None
 else:
     result = run_sim_with_cache(inputs)
     upbit_baseline_result = None
@@ -4142,6 +4296,11 @@ if st.session_state.get("simulation_active", False):
     listing_score = float(st.session_state.get("listing_score", 0.0))
     target_price_value = float(st.session_state.get("tutorial_target_price", 0.0))
     pdf_bytes = create_full_report(inputs, series, listing_score, target_price_value)
+    log_data = result.get("simulation_log", {})
+    log_df = pd.DataFrame(log_data) if log_data else pd.DataFrame()
+    log_json = log_df.to_json(orient="records", force_ascii=False, indent=2) if not log_df.empty else "[]"
+    log_csv = log_df.to_csv(index=False) if not log_df.empty else ""
+
     st.download_button(
         label="📥 전략 리포트 다운로드 (PDF)",
         data=pdf_bytes,
@@ -4149,3 +4308,46 @@ if st.session_state.get("simulation_active", False):
         mime="application/pdf",
         help="상장 심사 제출용 근거 자료 및 상세 전략이 포함된 리포트입니다."
     )
+    download_cols = st.columns(2)
+    with download_cols[0]:
+        st.download_button(
+            label="📥 전체 기록 다운로드 (CSV)",
+            data=log_csv,
+            file_name="ESTV_Simulation_Log.csv",
+            mime="text/csv",
+            disabled=log_df.empty,
+            help="시뮬레이션 전체 로그를 CSV로 저장합니다."
+        )
+    with download_cols[1]:
+        st.download_button(
+            label="📥 전체 기록 다운로드 (JSON)",
+            data=log_json,
+            file_name="ESTV_Simulation_Log.json",
+            mime="application/json",
+            disabled=log_df.empty,
+            help="시뮬레이션 전체 로그를 JSON으로 저장합니다."
+        )
+    st.markdown("---")
+    st.subheader("💾 전체 분석 저장/불러오기")
+    full_snapshot = build_full_snapshot(inputs, result)
+    full_snapshot_json = json.dumps(full_snapshot, ensure_ascii=False, indent=2, default=str)
+    st.download_button(
+        label="💾 전체 분석 저장 (JSON)",
+        data=full_snapshot_json,
+        file_name="ESTV_Full_Analysis.json",
+        mime="application/json",
+        help="설정 + 결과 + 로그를 포함한 전체 분석을 저장합니다."
+    )
+    uploaded_snapshot = st.file_uploader(
+        "전체 분석 불러오기 (JSON)",
+        type=["json"],
+        key="full_snapshot_file"
+    )
+    if st.button("📂 전체 분석 불러오기"):
+        if uploaded_snapshot is None:
+            st.info("불러올 JSON 파일을 선택하세요.")
+        else:
+            payload = json.load(uploaded_snapshot)
+            load_full_snapshot(payload)
+            st.success("전체 분석을 불러오는 중입니다.")
+            st.rerun()
