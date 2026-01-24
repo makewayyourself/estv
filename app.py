@@ -77,6 +77,7 @@ STEP0_KEYS = [
     "has_legal_opinion",
     "has_whitepaper"
 ]
+
 FULL_SNAPSHOT_KEYS = [
     "mode",
     "mode_selector",
@@ -1574,6 +1575,32 @@ def get_real_ai_insight(api_key, inputs, result, score, series):
     except Exception as e:
         return f"AI 분석 중 오류가 발생했습니다: {str(e)}"
 
+
+class AdvancedReport(FPDF):
+    def __init__(self, title="AI Report"):
+        super().__init__()
+        self.title = title
+        self.set_auto_page_break(auto=True, margin=15)
+
+    def header(self):
+        self.set_font("Arial", "B", 16)
+        self.cell(0, 10, self.title, ln=True, align="C")
+        self.ln(10)
+
+    def chapter_title(self, title):
+        self.set_font("Arial", "B", 14)
+        self.cell(0, 10, title, ln=True, align="L")
+        self.ln(4)
+
+    def chapter_body(self, body):
+        self.set_font("Arial", "", 12)
+        self.multi_cell(0, 8, body)
+        self.ln()
+
+    def add_section(self, title, body):
+        self.add_page()
+        self.chapter_title(title)
+        self.chapter_body(body)
 
 def create_full_report(inputs, series, score, target_price):
     pdf = AdvancedReport()
@@ -3629,6 +3656,7 @@ if ai_strategy_report:
         st.markdown(ai_strategy_report)
 
 ai_consulting = generate_ai_consulting_report(result, inputs)
+series = result.get('daily_price_trend', [])
 if ai_consulting:
     with st.expander("🧠 AI 컨설팅 리포트", expanded=True):
         for item in ai_consulting:
@@ -3636,17 +3664,33 @@ if ai_consulting:
         openai_key = st.session_state.get("openai_api_key", "")
         if openai_key:
             if st.button("🧠 AI 실시간 정밀 분석"):
-                st.session_state["ai_real_insight"] = get_real_ai_insight(
-                    openai_key,
-                    inputs,
-                    result,
-                    float(st.session_state.get("listing_score", 0.0)),
-                    series
-                )
+                if not openai_key:
+                    st.error("OpenAI API 키가 필요합니다.")
+                else:
+                    with st.spinner("ESTV 전략 문서를 분석하여 리포트를 작성 중입니다..."):
+                        # series(가격 데이터)를 result에서 꺼내는 코드 추가
+                        series = result.get('simulation_log', {}).get('price', [])
+                        ai_report = get_real_ai_insight(
+                            openai_key,
+                            inputs,
+                            result,
+                            float(st.session_state.get("listing_score", 0.0)),
+                            series
+                        )
+                        if ai_report:
+                            st.markdown(ai_report)
+                            st.session_state['ai_insight_text'] = ai_report
         real_insight = st.session_state.get("ai_real_insight")
         if real_insight:
             st.markdown("---")
             st.markdown(real_insight)
+
+# 가격 변동 추이 시각화 추가
+if series and len(series) > 2:
+    chart_data = pd.DataFrame({"Price": series, "Day": range(1, len(series)+1)})
+    st.subheader("📈 가격 변동 추이")
+    st.line_chart(chart_data, x="Day", y="Price")
+    st.caption("시뮬레이션 기간 동안의 가격 변동 추이입니다.")
 
 if enable_confidence and not reset_triggered:
     confidence_result = run_confidence_with_cache(
