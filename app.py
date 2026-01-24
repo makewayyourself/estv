@@ -1506,13 +1506,6 @@ else:
                 help="목표가격 선택 시 자동 반영된 값을 확인합니다.",
                 disabled=(target_preset == "사용자 조정")
             )
-            contract_mode = st.sidebar.selectbox(
-                "계약 시나리오",
-                options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
-                index=0,
-                key="contract_mode",
-                help="선택한 계약 시나리오에 맞춰 주요 값이 자동 적용됩니다."
-            )
         elif current_step == 2:
             st.sidebar.subheader("📉 Step 2. 공급 제한 (Risk 관리)")
             st.sidebar.info(
@@ -1782,14 +1775,7 @@ if is_expert and current_step > 0:
         "- 모든 변수를 직접 조정합니다.\n"
         "- 공급/수요/시장 구조/방어 정책/분석 도구까지 세부 튜닝 가능합니다."
     )
-    st.sidebar.header("📜 계약 시나리오")
-    contract_mode = st.sidebar.radio(
-        "계약 시나리오 선택",
-        options=["사용자 조정", "기존 계약서", "변동 계약서", "역산목표가격"],
-        index=0,
-        help="기본은 사용자 조정이며, 다른 옵션은 계약/역산 기준으로 자동 적용됩니다.",
-        key="contract_mode"
-    )
+    contract_mode = st.session_state.get("contract_mode", "사용자 조정")
 
     def apply_target_preset_expert():
         preset = st.session_state.get("target_price_preset", "사용자 조정")
