@@ -9,6 +9,7 @@ import json
 import os
 import time
 from fpdf import FPDF
+from openai import OpenAI
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
 STEP0_SAVE_PATH = os.path.join(os.path.dirname(__file__), "step0_saved.json")
@@ -1456,6 +1457,59 @@ def generate_ai_consulting_report(result, inputs):
         recommendations.append(msg.strip())
 
     return recommendations
+
+
+def get_real_ai_insight(api_key, inputs, result, score, series):
+    if not api_key:
+        return None
+
+    max_price = max(series) if series else 0.0
+    worst_day = "N/A"
+    if series and len(series) > 2:
+        diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
+        min_idx = diffs.index(min(diffs))
+        worst_day = f"{min_idx + 1}"
+
+    context = f"""
+    [Project Info]
+    - Project: {inputs.get('project_symbol', 'ESTV')}
+    - Target Tier: {inputs.get('target_tier', 'Tier 2')}
+    - Target Price: ${inputs.get('target_price', inputs.get('reverse_target_price', 0))}
+
+    [Simulation Result]
+    - Final Score: {score}/100
+    - Max Price: ${max_price:.2f}
+    - Liquidity Depth (1%): ${inputs.get('depth_usdt_1pct', 0):,.0f}
+    - Worst Crash Day: Day {worst_day}
+    - KPI Vesting Triggered: {result.get('kpi_warning_triggered', False)}
+    """
+
+    system_prompt = """
+    You are a sharp Chief Strategy Officer (CSO) at a top-tier crypto VC.
+    Analyze the token simulation results and provide a ruthless, actionable strategy report.
+
+    Output Format (Korean):
+    1. [종합 독설 및 진단]: 한 줄 요약 (냉정하게)
+    2. [치명적 약점]: 데이터에 기반한 가장 큰 리스크
+    3. [생존 전략]: 구체적인 Action Item 3가지 (숫자 포함)
+
+    Tone: Professional, Insightful, Strategic. No fluff.
+    """
+
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze this simulation data:\n{context}"}
+            ],
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"AI 호출 중 오류 발생: {e}")
+        return None
 
 
 class AdvancedReport(FPDF):
@@ -3378,6 +3432,13 @@ if is_expert and current_step > 0:
         st.sidebar.info("Streamlit Cloud에서는 로컬 주소로 접속할 수 없습니다. 배포된 URL로 변경하세요.")
 
     st.sidebar.markdown("---")
+    openai_api_key = st.sidebar.text_input(
+        "🔑 OpenAI API Key (옵션)",
+        type="password",
+        key="openai_api_key",
+        help="키를 입력하면 AI가 실시간으로 정밀 분석 리포트를 작성해줍니다. 없으면 기본 로직이 작동합니다."
+    )
+    st.sidebar.markdown("---")
     apply_btn = st.sidebar.button(
         RUN_SIM_BUTTON_LABEL,
         type="primary",
@@ -3538,6 +3599,20 @@ if ai_consulting:
     with st.expander("🧠 AI 컨설팅 리포트", expanded=True):
         for item in ai_consulting:
             st.markdown(item)
+        openai_key = st.session_state.get("openai_api_key", "")
+        if openai_key:
+            if st.button("🧠 AI 실시간 정밀 분석"):
+                st.session_state["ai_real_insight"] = get_real_ai_insight(
+                    openai_key,
+                    inputs,
+                    result,
+                    float(st.session_state.get("listing_score", 0.0)),
+                    series
+                )
+        real_insight = st.session_state.get("ai_real_insight")
+        if real_insight:
+            st.markdown("---")
+            st.markdown(real_insight)
 
 if enable_confidence and not reset_triggered:
     confidence_result = run_confidence_with_cache(
