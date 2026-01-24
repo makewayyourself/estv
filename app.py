@@ -35,6 +35,13 @@ COIN_TYPE_VOLATILITY = {
     }
 }
 
+SENTIMENT_DEFAULTS = {
+    "New Listing (신규 상장)": {"panic": 1.6, "fomo": 1.8},
+    "Meme/Low Cap (밈/잡코인)": {"panic": 2.5, "fomo": 3.0},
+    "Major Alts (메이저 알트)": {"panic": 1.1, "fomo": 1.2},
+    "Major (비트/이더)": {"panic": 0.6, "fomo": 0.7}
+}
+
 # NOTE: Streamlit Cloud redeploy trigger (no functional change)
 
 RESET_DEFAULTS = {
@@ -129,6 +136,7 @@ RESET_DEFAULTS = {
     "initial_investor_sell_ratio": 50,
     "panic_sensitivity": 1.5,
     "fomo_sensitivity": 1.2,
+    "sentiment_project_type": "New Listing (신규 상장)",
     "private_sale_price": 0.05,
     "profit_taking_multiple": 5.0,
     "arbitrage_threshold": 2.0,
@@ -1201,25 +1209,30 @@ def generate_strategic_imperative(inputs, series):
 
 
 class StrategicReportPDF(FPDF):
+    def _safe_text(self, text):
+        if text is None:
+            return ""
+        return str(text).encode("latin-1", "replace").decode("latin-1")
+
     def header(self):
         self.set_font("Arial", "B", 15)
-        self.cell(0, 10, "ESTV Strategic Listing Report", 0, 1, "C")
+        self.cell(0, 10, self._safe_text("ESTV Strategic Listing Report"), 0, 1, "C")
         self.ln(5)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("Arial", "I", 8)
-        self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
+        self.cell(0, 10, self._safe_text(f"Page {self.page_no()}"), 0, 0, "C")
 
     def chapter_title(self, title):
         self.set_font("Arial", "B", 12)
         self.set_fill_color(200, 220, 255)
-        self.cell(0, 10, title, 0, 1, "L", 1)
+        self.cell(0, 10, self._safe_text(title), 0, 1, "L", 1)
         self.ln(4)
 
     def chapter_body(self, body):
         self.set_font("Arial", "", 11)
-        self.multi_cell(0, 10, body)
+        self.multi_cell(0, 10, self._safe_text(body))
         self.ln()
 
 
@@ -2688,22 +2701,30 @@ if is_expert and current_step > 0:
     )
 
     sentiment_expander = st.sidebar.expander("🧠 시장 심리/비선형", expanded=is_expert)
-    panic_sensitivity = sentiment_expander.slider(
-        "패닉 민감도",
-        min_value=1.0,
+    p_type = st.session_state.get("project_type", "New Listing (신규 상장)")
+    defaults = SENTIMENT_DEFAULTS.get(p_type, SENTIMENT_DEFAULTS["New Listing (신규 상장)"])
+    if st.session_state.get("sentiment_project_type") != p_type:
+        st.session_state["panic_sensitivity"] = defaults["panic"]
+        st.session_state["fomo_sensitivity"] = defaults["fomo"]
+        st.session_state["sentiment_project_type"] = p_type
+
+    sentiment_cols = sentiment_expander.columns(2)
+    panic_sensitivity = sentiment_cols[0].slider(
+        "😱 패닉 민감도 (Panic)",
+        min_value=0.5,
         max_value=3.0,
-        value=1.5,
+        value=float(st.session_state.get("panic_sensitivity", defaults["panic"])),
         step=0.1,
-        help="가격 하락 시 매도 압력을 증폭시키는 강도입니다.",
+        help="하락장에서 매도세가 증폭되는 정도입니다. 신규 상장은 1.5 이상이 현실적입니다.",
         key="panic_sensitivity"
     )
-    fomo_sensitivity = sentiment_expander.slider(
-        "FOMO 민감도",
-        min_value=1.0,
-        max_value=2.0,
-        value=1.2,
+    fomo_sensitivity = sentiment_cols[1].slider(
+        "🤩 FOMO 민감도 (Greed)",
+        min_value=0.5,
+        max_value=5.0,
+        value=float(st.session_state.get("fomo_sensitivity", defaults["fomo"])),
         step=0.1,
-        help="가격 상승 시 추격 매수를 증폭시키는 강도입니다.",
+        help="상승장에서 추격 매수가 붙는 정도입니다. 밈코인은 3.0 이상까지 치솟습니다.",
         key="fomo_sensitivity"
     )
     private_sale_price = sentiment_expander.number_input(
