@@ -54,6 +54,7 @@ RESET_DEFAULTS = {
     "recommended_notes": None,
     "ai_strategy_report": None,
     "ai_tune_banner_ts": None,
+    "simulation_active": False,
     "reverse_target_price": 5.0,
     "reverse_basis": "전환율 조정",
     "reverse_volatility_mode": "완화",
@@ -1132,11 +1133,6 @@ if st.session_state.get("hard_reset_pending"):
     hard_reset_session()
     st.rerun()
 
-st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
-st.markdown(
-    "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
-    "**가격 추이와 리스크를 시뮬레이션**합니다."
-)
 ai_banner_ts = st.session_state.get("ai_tune_banner_ts")
 if ai_banner_ts and (time.time() - ai_banner_ts) <= 3.0:
     st.success("✅ AI가 조정한 목표가로 각 설정들을 자동 조정하고 있습니다.")
@@ -2756,6 +2752,46 @@ if is_expert and current_step > 0:
     if dashboard_url.startswith("http://localhost") or dashboard_url.startswith("http://127.0.0.1"):
         st.sidebar.info("Streamlit Cloud에서는 로컬 주소로 접속할 수 없습니다. 배포된 URL로 변경하세요.")
 
+    st.sidebar.markdown("---")
+    apply_btn = st.sidebar.button(
+        "🚀 시나리오 적용 및 시뮬레이션",
+        type="primary",
+        use_container_width=True
+    )
+    if apply_btn:
+        st.session_state["simulation_active"] = True
+
+# 메인 화면 로직 분기
+if not st.session_state.get("simulation_active", False):
+    st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
+    st.markdown(
+        "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
+        "**가격 추이와 리스크를 시뮬레이션**합니다."
+    )
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("최종 가격", "$0.000", "0.0%")
+    col2.metric("상태 진단", "READY", help="시뮬레이션 대기 중입니다.")
+    col3.metric("법적 리스크", "CHECKING..")
+    col4.metric("경고 발생", "-")
+    st.info(
+        "### 👋 시뮬레이션 준비 완료\n"
+        "좌측 사이드바에서 **목표, 공급, 수요, 시장 변수**를 설정하세요.\n"
+        "설정이 완료되면 하단의 **[🚀 시나리오 적용 및 시뮬레이션]** 버튼을 눌러 결과를 확인하세요."
+    )
+    st.subheader("📈 가격 변동 추이 (대기 중)")
+    empty_chart_data = pd.DataFrame(
+        {"Price": [0.5] * 30, "Day": range(30)}
+    )
+    st.line_chart(empty_chart_data, x="Day", y="Price")
+    st.caption("시뮬레이션을 실행하면 이곳에 예측 그래프가 표시됩니다.")
+    st.stop()
+
+# 시뮬레이션 결과 화면
+st.title("📊 ESTV 토큰 상장 리스크 & 수급 시뮬레이터")
+st.markdown(
+    "계약 시나리오와 토크노믹스 입력(유통·언본딩·유입·유동성·방어 정책)을 바탕으로 "
+    "**가격 추이와 리스크를 시뮬레이션**합니다."
+)
 
 # 초기 투자자 락업/베스팅 적용 값 구성
 initial_investor_allocation = None
