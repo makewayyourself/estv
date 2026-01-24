@@ -12,6 +12,7 @@ from fpdf import FPDF
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
 STEP0_SAVE_PATH = os.path.join(os.path.dirname(__file__), "step0_saved.json")
+FULL_HISTORY_DIR = os.path.join(os.path.dirname(__file__), "analysis_history")
 STEP0_KEYS = [
     "project_symbol",
     "project_total_supply",
@@ -1521,6 +1522,37 @@ def build_full_snapshot(inputs, result):
     return payload
 
 
+def ensure_history_dir():
+    os.makedirs(FULL_HISTORY_DIR, exist_ok=True)
+
+
+def save_full_snapshot_to_history(payload):
+    ensure_history_dir()
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    safe_symbol = str(payload.get("session_state", {}).get("project_symbol", "ESTV")).replace("/", "_")
+    filename = f"analysis_{safe_symbol}_{timestamp}.json"
+    path = os.path.join(FULL_HISTORY_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return filename
+
+
+def list_history_files():
+    if not os.path.exists(FULL_HISTORY_DIR):
+        return []
+    files = [f for f in os.listdir(FULL_HISTORY_DIR) if f.endswith(".json")]
+    files.sort(reverse=True)
+    return files
+
+
+def load_history_file(filename):
+    path = os.path.join(FULL_HISTORY_DIR, filename)
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_full_snapshot(payload):
     st.session_state["full_load_payload"] = payload
     st.session_state["full_load_pending"] = True
@@ -2965,9 +2997,9 @@ if is_expert and current_step > 0:
     burn_fee_rate = burn_expander.slider(
         "거래 수수료 소각률(%)",
         min_value=0.0,
-        max_value=2.0,
-        value=0.3,
-        step=0.1,
+        max_value=100.0,
+        value=float(st.session_state.get("burn_fee_rate", 0.3)),
+        step=0.5,
         help="거래 수수료 중 일부를 토큰으로 소각합니다. 높을수록 유통량이 줄어 가격 상승 압력이 생깁니다.",
         key="burn_fee_rate"
     )
@@ -4338,6 +4370,24 @@ if st.session_state.get("simulation_active", False):
         mime="application/json",
         help="설정 + 결과 + 로그를 포함한 전체 분석을 저장합니다."
     )
+    if st.button("🗂️ 지난 기록 저장"):
+        saved_name = save_full_snapshot_to_history(full_snapshot)
+        st.success(f"저장 완료: {saved_name}")
+    history_files = list_history_files()
+    if history_files:
+        selected_history = st.selectbox(
+            "지난 기록 열기",
+            options=history_files,
+            index=0
+        )
+        if st.button("📂 선택 기록 불러오기"):
+            payload = load_history_file(selected_history)
+            if payload:
+                load_full_snapshot(payload)
+                st.success("선택한 기록을 불러오는 중입니다.")
+                st.rerun()
+            else:
+                st.info("선택한 기록을 불러오지 못했습니다.")
     uploaded_snapshot = st.file_uploader(
         "전체 분석 불러오기 (JSON)",
         type=["json"],
