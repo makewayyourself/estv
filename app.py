@@ -1443,18 +1443,12 @@ else:
             )
             contract_mode_label = st.sidebar.selectbox(
                 "시나리오 모드 선택",
-                ["사용자 조정 (Manual)", "기존 계약서 (Legacy)", "변동 계약서 (Dynamic)"],
+                ["사용자 조정 (Manual)"],
                 index=0,
                 key="contract_mode_label"
             )
-            contract_mode = "사용자 조정"
-            if "기존 계약서" in contract_mode_label:
-                contract_mode = "기존 계약서"
-            elif "변동 계약서" in contract_mode_label:
-                contract_mode = "변동 계약서"
-            st.session_state["contract_mode"] = contract_mode
-            if "사용자 조정" in contract_mode_label:
-                st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
+            st.session_state["contract_mode"] = "사용자 조정"
+            st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
 
             st.sidebar.markdown("---")
             target_price = st.sidebar.number_input(
@@ -1748,19 +1742,13 @@ if is_expert and current_step > 0:
     st.sidebar.subheader("🎯 Step 1. 목표 설정 & 시나리오")
     contract_mode_label = st.sidebar.selectbox(
         "시나리오 모드 선택",
-        ["사용자 조정 (Manual)", "기존 계약서 (Legacy)", "변동 계약서 (Dynamic)"],
+        ["사용자 조정 (Manual)"],
         index=0,
         key="contract_mode_label",
         help="시뮬레이션 방식을 먼저 선택합니다."
     )
-    contract_mode = "사용자 조정"
-    if "기존 계약서" in contract_mode_label:
-        contract_mode = "기존 계약서"
-    elif "변동 계약서" in contract_mode_label:
-        contract_mode = "변동 계약서"
-    st.session_state["contract_mode"] = contract_mode
-    if "사용자 조정" in contract_mode_label:
-        st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
+    st.session_state["contract_mode"] = "사용자 조정"
+    st.sidebar.info("ℹ️ 가이드: 각 설정값을 사용자가 직접 정하면, 실시간으로 AI가 그에 따른 결과값을 계산하여 보여줍니다.")
 
     st.sidebar.markdown("---")
     target_price = st.sidebar.number_input(
