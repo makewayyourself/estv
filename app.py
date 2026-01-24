@@ -1064,29 +1064,6 @@ def run_confidence_with_cache(inputs, runs, noise_pct, mape_threshold):
     return _run_confidence_cached(inputs_json, runs, noise_pct, mape_threshold)
 
 
-def apply_contract_inputs(base_inputs, mode):
-    adjusted = dict(base_inputs)
-    notes = []
-    if mode == "기존 계약서":
-        adjusted["initial_circulating_percent"] = 10.0
-        adjusted["unbonding_days"] = 0
-        adjusted["use_marketing_contract_scenario"] = True
-        krw_rate = adjusted.get("krw_per_usd", 1300)
-        upbit_monthly_buy = 3_500_000_000 / max(krw_rate, 1)
-        adjusted["monthly_buy_volume"] = upbit_monthly_buy
-        adjusted["base_monthly_buy_volume"] = upbit_monthly_buy
-        adjusted["daily_user_buy_schedule"] = [upbit_monthly_buy / 30] * max(adjusted.get("simulation_days", 30), 1)
-        adjusted["price_model"] = "CEX"
-        adjusted["depth_usdt_1pct"] = 300_000
-        adjusted["depth_usdt_2pct"] = 800_000
-        adjusted["depth_growth_rate"] = 0.0
-        notes.append("기존 계약서 기준 자동 적용")
-    elif mode == "변동 계약서":
-        adjusted["initial_circulating_percent"] = 3.0
-        adjusted["unbonding_days"] = 20
-    return adjusted, notes
-
-
 def filter_recommended_settings(payload):
     return dict(payload), []
 
@@ -2539,25 +2516,6 @@ if is_expert and current_step > 0:
 contract_mode = st.session_state.get("contract_mode", "사용자 조정")
 use_master_plan = bool(st.session_state.get("use_master_plan", False))
 
-if st.session_state.get("step0_completed", False):
-    if st.session_state.get("contract_mode_applied") != contract_mode:
-        if contract_mode == "기존 계약서":
-            krw_rate = st.session_state.get("krw_per_usd", 1300)
-            st.session_state.update({
-                "input_supply": 10.0,
-                "input_unbonding": 0,
-                "input_sell_ratio": 15,
-                "input_buy_volume": int(3_500_000_000 / max(krw_rate, 1)),
-                "scenario_preset": "직접 입력",
-                "simulation_unit": "일",
-                "simulation_value": 30,
-                "price_model": "CEX",
-                "depth_usdt_1pct": 300_000,
-                "depth_usdt_2pct": 800_000,
-                "depth_growth_rate": 0.0
-            })
-        st.session_state["contract_mode_applied"] = contract_mode
-
 if st.session_state.get("step0_completed", False) and use_master_plan:
     phase2_start = prelisting_days
     phase2_end = min(prelisting_days + phase2_days, total_days)
@@ -2786,14 +2744,14 @@ inputs = {
     'triggers': triggers,
     'enable_triggers': use_triggers
 }
-adjusted_inputs, contract_notes = apply_contract_inputs(inputs, contract_mode)
+contract_notes = []
 reset_triggered = bool(st.session_state.get("reset_triggered", False))
 if reset_triggered:
-    result = build_reset_result(adjusted_inputs, total_days)
+    result = build_reset_result(inputs, total_days)
     upbit_baseline_result = None
     st.session_state["reset_triggered"] = False
 else:
-    result = run_sim_with_cache(adjusted_inputs)
+    result = run_sim_with_cache(inputs)
     upbit_baseline_result = None
     if show_upbit_baseline:
         upbit_monthly_buy = 3_500_000_000 / max(krw_per_usd, 1)
@@ -2839,7 +2797,7 @@ if enable_confidence and not reset_triggered:
     c3.metric("오차 범위(10~90%)", f"{confidence_result['p10_mape']:.1f}% ~ {confidence_result['p90_mape']:.1f}%")
     st.caption("신뢰도는 입력값 불확실성 범위 내에서 기준 추이와 유사한 시뮬레이션 비율입니다.")
 
-with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=(contract_mode == "역산목표가격")):
+with st.expander("🎯 역산 목표 가격 시뮬레이션", expanded=False):
     target_price = st.number_input(
         "목표 최종 가격 ($)",
         min_value=0.1,
