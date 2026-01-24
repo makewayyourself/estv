@@ -1225,36 +1225,92 @@ def generate_strategic_imperative(inputs, series):
     }
 
 
-class StrategicReportPDF(FPDF):
+KOREAN_FONT_FILES = {
+    "regular": os.path.join("assets", "fonts", "NanumGothic.ttf"),
+    "bold": os.path.join("assets", "fonts", "NanumGothic-Bold.ttf"),
+    "extra": os.path.join("assets", "fonts", "NanumGothic-ExtraBold.ttf")
+}
+
+
+def resolve_korean_fonts():
+    regular = KOREAN_FONT_FILES["regular"]
+    bold = KOREAN_FONT_FILES["bold"]
+    if os.path.exists(regular) and os.path.exists(bold):
+        return {"regular": regular, "bold": bold}
+    return None
+
+
+def generate_insight_text(result, inputs):
+    score = result.get("final_score", 0)
+    if score >= 80:
+        grade = "S (즉시 상장 가능)"
+        summary = "전반적인 토크노믹스 설계가 매우 견고하며, Tier 1 거래소 심사 기준을 상회합니다."
+    elif score >= 60:
+        grade = "B (보완 필요)"
+        summary = "상장은 가능하나, 상장 후 1개월 내 가격 변동성 리스크가 큽니다. 유동성 보강이 필수적입니다."
+    else:
+        grade = "D (상장 불가)"
+        summary = "현재 구조로는 상장 심사 탈락이 확정적입니다. 전면적인 토크노믹스 재설계가 요구됩니다."
+
+    liquidity = inputs.get("depth_usdt_1pct", 0)
+    if liquidity < 100000:
+        liq_msg = (
+            f"현재 오더북 두께(${(liquidity / 1000):.1f}k)는 '두부 방어력'입니다. "
+            "최소 $200k까지 증액하지 않으면 세력의 먹잇감이 됩니다."
+        )
+    else:
+        liq_msg = "오더북 두께는 양호하며, 일반적인 매도 공격을 방어할 수 있는 수준입니다."
+
+    return grade, summary, liq_msg
+
+
+class AdvancedReport(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.font_name = "Arial"
+        fonts = resolve_korean_fonts()
+        if fonts:
+            self.add_font("Nanum", "", fonts["regular"], uni=True)
+            self.add_font("Nanum", "B", fonts["bold"], uni=True)
+            self.font_name = "Nanum"
+
     def _safe_text(self, text):
         if text is None:
             return ""
+        if self.font_name == "Nanum":
+            return str(text)
         return str(text).encode("latin-1", "replace").decode("latin-1")
 
     def header(self):
-        self.set_font("Arial", "B", 15)
-        self.cell(0, 10, self._safe_text("ESTV Strategic Listing Report"), 0, 1, "C")
-        self.ln(5)
+        self.set_font(self.font_name, "B", 10)
+        self.cell(0, 10, self._safe_text("ESTV Token Strategic Simulation Report"), 0, 1, "R")
+        self.line(10, 20, 200, 20)
+        self.ln(10)
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Arial", "I", 8)
-        self.cell(0, 10, self._safe_text(f"Page {self.page_no()}"), 0, 0, "C")
-
-    def chapter_title(self, title):
-        self.set_font("Arial", "B", 12)
-        self.set_fill_color(200, 220, 255)
-        self.cell(0, 10, self._safe_text(title), 0, 1, "L", 1)
+    def chapter_title(self, label):
+        self.set_font(self.font_name, "B", 14)
+        self.set_fill_color(240, 240, 240)
+        self.cell(0, 10, self._safe_text(f"  {label}"), 0, 1, "L", 1)
         self.ln(4)
 
-    def chapter_body(self, body):
-        self.set_font("Arial", "", 11)
-        self.multi_cell(0, 10, self._safe_text(body))
+    def body_text(self, text):
+        self.set_font(self.font_name, "", 11)
+        self.multi_cell(0, 8, self._safe_text(text))
+        self.ln()
+
+    def add_metric_table(self, data_dict):
+        self.set_font(self.font_name, "B", 10)
+        for key, value in data_dict.items():
+            self.cell(90, 10, self._safe_text(key), 1)
+            self.set_font(self.font_name, "", 10)
+            self.cell(90, 10, self._safe_text(str(value)), 1)
+            self.ln()
+            self.set_font(self.font_name, "B", 10)
         self.ln()
 
 
-def create_downloadable_report(inputs, series, score, imperative, target_price):
-    pdf = StrategicReportPDF()
+def create_full_report(inputs, series, score, target_price):
+    pdf = AdvancedReport()
     pdf.add_page()
 
     max_price = max(series) if series else 0.0
@@ -1262,32 +1318,38 @@ def create_downloadable_report(inputs, series, score, imperative, target_price):
     if series and len(series) > 2:
         diffs = [series[i] - series[i - 1] for i in range(1, len(series))]
         min_idx = diffs.index(min(diffs))
-        worst_day = f"Day {min_idx + 1}"
+        worst_day = f"{min_idx + 1}"
 
-    pdf.chapter_title(f"1. Diagnostic Summary (Score: {int(score)}/100)")
-    summary_text = (
-        f"Target Listing Tier: {inputs.get('target_tier', 'N/A')}\n"
-        f"Target Price: ${target_price:,.2f}\n"
-        f"Max Simulated Price: ${max_price:,.2f}\n\n"
-        f"Listing Probability: {'High' if score >= 80 else 'Medium' if score >= 60 else 'Low'}"
-    )
-    pdf.chapter_body(summary_text)
+    result_summary = {
+        "final_score": score,
+        "max_price": max_price,
+        "worst_day": worst_day
+    }
+    grade, summary, liq_msg = generate_insight_text(result_summary, inputs)
 
-    pdf.chapter_title("2. Strategic Mandates (Must-Do Actions)")
-    mandate_text = (
-        f"Title: {imperative['title']}\n\n"
-        f"{imperative['content'].replace('**', '').strip()}\n\n"
-        "* This action is mandatory for listing approval."
-    )
-    pdf.chapter_body(mandate_text)
+    pdf.set_font(pdf.font_name, "B", 24)
+    pdf.cell(0, 20, pdf._safe_text("전략 시뮬레이션 결과 보고서"), 0, 1, "C")
+    pdf.ln(10)
 
-    pdf.chapter_title("3. Key Financial Projections")
-    data_text = (
-        f"- Initial Liquidity Required: ${inputs.get('depth_usdt_1pct', 0) * 2:,.0f} (Estimated)\n"
-        f"- Monthly Buy Inflow: ${inputs.get('monthly_buy_volume', 0):,.0f}\n"
-        f"- Max Drawdown Risk: {worst_day}"
-    )
-    pdf.chapter_body(data_text)
+    pdf.chapter_title("1. 종합 진단 (Executive Summary)")
+    if "D" in grade:
+        pdf.set_text_color(255, 0, 0)
+    pdf.body_text(f"■ 종합 등급: {grade}")
+    pdf.set_text_color(0, 0, 0)
+    pdf.body_text(f"■ 진단 요약:\n{summary}")
+
+    pdf.chapter_title("2. 핵심 리스크 및 대응 전략")
+    pdf.body_text(f"■ 유동성 리스크:\n{liq_msg}")
+    pdf.body_text(f"■ 최대 낙폭 구간:\n시뮬레이션 상 Day {worst_day}에 가장 큰 하락이 예상됩니다. 이 시기에 맞춰 마케팅 자금을 집중 투하해야 합니다.")
+
+    pdf.chapter_title("3. 주요 시뮬레이션 지표")
+    metrics = {
+        "목표 가격": f"${target_price:,.2f}",
+        "최대 도달 가격": f"${max_price:,.2f}",
+        "필요 초기 자금 (LP)": f"${inputs.get('depth_usdt_1pct', 0) * 2:,.0f}",
+        "월간 마케팅 예산": f"${inputs.get('monthly_buy_volume', 0):,.0f}"
+    }
+    pdf.add_metric_table(metrics)
 
     return pdf.output(dest="S").encode("latin-1", "replace")
 
@@ -2820,10 +2882,10 @@ if is_expert and current_step > 0:
     )
     min_depth_ratio = sentiment_expander.slider(
         "패닉 시 오더북 깊이 하한",
-        min_value=0.1,
+        min_value=0.0,
         max_value=1.0,
-        value=0.3,
-        step=0.05,
+        value=float(st.session_state.get("min_depth_ratio", 0.3)),
+        step=0.01,
         help="패닉 국면에서 오더북 깊이가 줄어드는 최소 비율입니다.",
         key="min_depth_ratio"
     )
@@ -4079,8 +4141,7 @@ if result.get("action_logs"):
 if st.session_state.get("simulation_active", False):
     listing_score = float(st.session_state.get("listing_score", 0.0))
     target_price_value = float(st.session_state.get("tutorial_target_price", 0.0))
-    imperative = generate_strategic_imperative(inputs, series)
-    pdf_bytes = create_downloadable_report(inputs, series, listing_score, imperative, target_price_value)
+    pdf_bytes = create_full_report(inputs, series, listing_score, target_price_value)
     st.download_button(
         label="📥 전략 리포트 다운로드 (PDF)",
         data=pdf_bytes,
