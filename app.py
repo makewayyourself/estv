@@ -1579,12 +1579,27 @@ def create_full_report(inputs, series, score, target_price):
     pdf.cell(0, 20, pdf._safe_text("전략 시뮬레이션 결과 보고서"), 0, 1, "C")
     pdf.ln(10)
 
-    pdf.chapter_title("1. 종합 진단 (Executive Summary)")
-    if "D" in grade:
-        pdf.set_text_color(255, 0, 0)
-    pdf.body_text(f"■ 종합 등급: {grade}")
-    pdf.set_text_color(0, 0, 0)
-    pdf.body_text(f"■ 진단 요약:\n{summary}")
+    pdf.chapter_title("1. AI CSO 종합 진단 (Powered by GPT-4)")
+    # OpenAI API Key를 세션에서 가져옴
+    openai_api_key = ""
+    try:
+        openai_api_key = st.session_state.get("openai_api_key", "")
+    except Exception:
+        pass
+    real_ai_text = None
+    if openai_api_key:
+        try:
+            real_ai_text = get_real_ai_insight(openai_api_key, inputs, result_summary, score, series)
+        except Exception as e:
+            real_ai_text = None
+    if real_ai_text:
+        pdf.body_text(real_ai_text)
+    else:
+        if "D" in grade:
+            pdf.set_text_color(255, 0, 0)
+        pdf.body_text(f"■ 종합 등급: {grade}")
+        pdf.set_text_color(0, 0, 0)
+        pdf.body_text(f"■ 진단 요약:\n{summary}")
 
     pdf.chapter_title("2. 핵심 리스크 및 대응 전략")
     pdf.body_text(f"■ 유동성 리스크:\n{liq_msg}")
@@ -3432,11 +3447,12 @@ if is_expert and current_step > 0:
         st.sidebar.info("Streamlit Cloud에서는 로컬 주소로 접속할 수 없습니다. 배포된 URL로 변경하세요.")
 
     st.sidebar.markdown("---")
+    st.sidebar.subheader("🤖 OpenAI 연동 (선택)")
     openai_api_key = st.sidebar.text_input(
-        "🔑 OpenAI API Key (옵션)",
+        "🔑 OpenAI API Key 입력 (GPT-4 리포트)",
         type="password",
         key="openai_api_key",
-        help="키를 입력하면 AI가 실시간으로 정밀 분석 리포트를 작성해줍니다. 없으면 기본 로직이 작동합니다."
+        help="키를 입력하면 AI가 실시간으로 전략 리포트를 작성합니다. (GPT-4, gpt-3.5-turbo 등 지원)"
     )
     st.sidebar.markdown("---")
     apply_btn = st.sidebar.button(
@@ -4468,7 +4484,10 @@ if len(series) > 2:
             break
 
     # B. 초기 투자자 락업 해제 체크 (Cliff)
-    investor_cliff_months = inputs.get('initial_investor_allocation', {}).get('cliff', 12)
+    allocation = inputs.get('initial_investor_allocation', {})
+    if not isinstance(allocation, dict):
+        allocation = {}
+    investor_cliff_months = allocation.get('cliff', 12)
     investor_cliff_days = investor_cliff_months * 30
     if drop_day >= investor_cliff_days and drop_day <= investor_cliff_days + 7:
         reasons.append(f"초기 투자자 락업 해제(D+{investor_cliff_days}) 물량 출회")
