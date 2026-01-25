@@ -9,15 +9,7 @@ load_dotenv()
 DEFAULT_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
-# --- 사이드바 상단에 OpenAI API Key 입력란 추가 (공용키 기본값) ---
 
-with st.sidebar:
-    st.markdown("#### OpenAI API Key 입력")
-    api_key = st.text_input("OpenAI API Key", type="password", key="openai_api_key_input")
-    if api_key:
-        st.session_state["openai_api_key"] = api_key
-    else:
-        st.session_state["openai_api_key"] = DEFAULT_OPENAI_API_KEY
 # --- 입력된 키는 st.session_state["openai_api_key"]로 사용 가능 ---
 import pandas as pd
 import numpy as np
