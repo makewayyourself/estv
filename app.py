@@ -208,11 +208,44 @@ def main():
 아래 입력창에 현재 시장 상황, 원하는 전략, 이벤트 등을 자유롭게 설명하세요.
 예시: "시장에 대규모 매도와 펌프가 동시에 발생할 수 있어. 인플레이션은 낮게, 보수적 전략으로 시뮬레이션해줘."
 """)
-    user_scenario_text = st.text_area(
-        "상황 설명 (자연어)",
-        placeholder="시장 상황, 이벤트, 전략 등 자유롭게 입력...",
-        height=80
-    )
+    uploaded_file = st.file_uploader("시나리오 파일 업로드 (txt, json, xlsx, pdf)", type=["txt", "json", "xlsx", "pdf"], help="시나리오 설명이 담긴 파일을 업로드하면 자동으로 입력됩니다.")
+    uploaded_text = None
+    if uploaded_file is not None:
+        if uploaded_file.type == "text/plain":
+            uploaded_text = uploaded_file.read().decode("utf-8")
+        elif uploaded_file.type == "application/json":
+            try:
+                data = json.load(uploaded_file)
+                uploaded_text = json.dumps(data, ensure_ascii=False, indent=2)
+            except Exception:
+                uploaded_text = "(JSON 파싱 실패)"
+        elif uploaded_file.type == "application/pdf":
+            try:
+                import PyPDF2
+                reader = PyPDF2.PdfReader(uploaded_file)
+                uploaded_text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
+            except Exception:
+                uploaded_text = "(PDF 텍스트 추출 실패)"
+        elif uploaded_file.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"]:
+            try:
+                import pandas as pd
+                df = pd.read_excel(uploaded_file)
+                uploaded_text = df.to_string(index=False)
+            except Exception:
+                uploaded_text = "(엑셀 텍스트 추출 실패)"
+    if uploaded_text is not None:
+        user_scenario_text = st.text_area(
+            "상황 설명 (자연어)",
+            value=uploaded_text,
+            placeholder="시장 상황, 이벤트, 전략 등 자유롭게 입력...",
+            height=80
+        )
+    else:
+        user_scenario_text = st.text_area(
+            "상황 설명 (자연어)",
+            placeholder="시장 상황, 이벤트, 전략 등 자유롭게 입력...",
+            height=80
+        )
     st.markdown("---")
     # 1. 상황 설명 → AI 파싱 → 입력값 dict 생성
     default_inputs = {
