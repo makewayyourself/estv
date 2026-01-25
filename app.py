@@ -3,8 +3,11 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+
 import json
 from datetime import datetime
+import os
+import openai
 
 st.set_page_config(
     page_title="ESTV Strategic AI Advisor",
@@ -65,6 +68,46 @@ class TokenSimulationEngine:
         }
 
 def generate_ai_strategy_report(success_rate, var_95, median_price, target_price, inputs):
+    # OpenAI API 연동
+    api_key = os.getenv("OPENAI_API_KEY")
+    prompt = f"""
+당신은 토큰 이코노미/시장 전문가입니다. 아래 시뮬레이션 결과와 입력값을 바탕으로, 실제 Web3/DeFi 프로젝트의 전략적 의사결정에 도움이 되는 1) 시장 진단, 2) 리스크 요인, 3) 구체적 액션 플랜을 전문가 어투로 500자 이내로 작성하세요. (이모지, 마케팅 문구, 과장 없이)
+
+---
+시뮬레이션 주요 결과:
+- 목표가 달성 확률: {success_rate:.1f}%
+- 중위값 최종가: ${median_price:.3f}
+- VaR(95%): ${var_95:.3f}
+- 목표가: ${target_price}
+
+주요 입력 변수:
+{json.dumps(inputs, ensure_ascii=False, indent=2)}
+---
+분석:
+"""
+    if api_key:
+        try:
+            openai.api_key = api_key
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "당신은 Web3/토큰 이코노미 전문가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.4
+            )
+            ai_text = response.choices[0].message.content.strip()
+            return {
+                'sentiment': "AI 분석",
+                'color': "blue",
+                'action': "AI 전략 리포트",
+                'detail': ai_text
+            }
+        except Exception as e:
+            # API 실패 시 fallback
+            pass
+    # fallback: 기존 규칙 기반 리포트
     buy_vol = inputs['monthly_buy_volume']
     liquidity = inputs['liquidity_level']
     report = {}
