@@ -16,8 +16,8 @@ def scenario_text_to_inputs(user_text, default_inputs=None):
 """
     if api_key:
         try:
-            openai.api_key = api_key
-            response = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "당신은 Web3/토큰 시뮬레이터 입력값 추출 전문가입니다."},
@@ -28,12 +28,10 @@ def scenario_text_to_inputs(user_text, default_inputs=None):
             )
             import json
             text = response.choices[0].message.content.strip()
-            # JSON 파싱
             try:
                 parsed = json.loads(text)
                 return parsed
             except Exception:
-                # JSON 파싱 실패 시, 숫자/키워드 추출 보정
                 return default_inputs or {}
         except Exception as e:
             import streamlit as st
@@ -194,8 +192,8 @@ def generate_ai_strategy_report(success_rate, var_95, median_price, target_price
 """
     if api_key:
         try:
-            openai.api_key = api_key
-            response = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "당신은 Web3/토큰 이코노미 전문가입니다."},
