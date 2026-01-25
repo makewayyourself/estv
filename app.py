@@ -892,7 +892,7 @@ class TokenSimulationEngine:
             }
 
             # [NEW] AI의 전략적 판단 호출
-            ai_action, ai_amount, urgency = ai_agent.evaluate(market_state)
+            ai_action, ai_amount, urgency, _ = ai_agent.evaluate(market_state)
 
             if ai_action == "BUYBACK":
                 # 결정된 금액만큼 즉시 시장가 매수 집행
