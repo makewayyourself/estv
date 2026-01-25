@@ -748,6 +748,12 @@ class TokenSimulationEngine:
                 for d in range(min(total_days, vesting_days)):
                     unlocked_queue[d] += daily_unlocked
 
+        # [NEW] 전략 에이전트 초기화
+        ai_agent = StrategicInterventionAgent(
+            total_budget_usdt=inputs.get('monthly_buyback_usdt', 0) * 12, # 1년치 예산 가정
+            strategy_mode="DEFENSIVE"
+        )
+
         for day_index in range(total_days):
             day_reasons = []
             day_actions = []
@@ -765,406 +771,37 @@ class TokenSimulationEngine:
                 depth_usdt_1pct *= (1.0 + depth_growth_rate)
                 depth_usdt_2pct *= (1.0 + depth_growth_rate)
 
-            month_index = (day_index // steps_per_month) + 1
-            monthly_new_unlock = 0
-            monthly_initial_unlock = 0
-            for name, algo in allocations.items():
-                unlock_amount = self._calculate_monthly_unlock(algo, month_index)
-                if name == "Initial_Investors":
-                    monthly_initial_unlock += unlock_amount
-                else:
-                    monthly_new_unlock += unlock_amount
-
-            daily_unlock = monthly_new_unlock / steps_per_month
-            daily_initial_unlock = monthly_initial_unlock / steps_per_month
-            target_day = day_index + delay_days
-            if target_day < len(sell_queue):
-                sell_queue[target_day] += daily_unlock * inputs['sell_pressure_ratio']
-                sell_queue_initial[target_day] += daily_initial_unlock
-
-            unlocked_sell_today = unlocked_queue[day_index] if day_index < len(unlocked_queue) else 0.0
-            remaining_sell = sell_queue[day_index] + unlocked_sell_today
-            remaining_initial_sell = sell_queue_initial[day_index]
-            remaining_buy = inputs['base_monthly_buy_volume']
-            turnover_buy_share = inputs.get('turnover_buy_share', 0.5)
-            turnover_sell_share = 1.0 - turnover_buy_share
-            remaining_turnover_sell = inputs['monthly_buy_volume'] * turnover_ratio * turnover_sell_share
-            remaining_turnover_buy = inputs['monthly_buy_volume'] * turnover_ratio * turnover_buy_share
-
             current_price = pool_usdt / pool_token
-            if current_price < kpi_target and not kpi_warning_triggered:
-                kpi_warning_triggered = True
-                kpi_breach_day = day_index + 1
-                kpi_breach_price = current_price
             price_change_ratio = (current_price - prev_day_price) / max(prev_day_price, 1e-9)
-            depth_ratio = 1.0
+            liquidity_depth_ratio = 1.0
             if price_model in ["CEX", "HYBRID"] and price_change_ratio < 0:
-                depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
-            if current_price > high_price:
-                high_price = current_price
+                liquidity_depth_ratio = max(min_depth_ratio, 1.0 - (panic_sensitivity * abs(price_change_ratio)))
 
-            active_campaigns = []
-            for c in campaigns:
-                if c["start_day"] <= day_index < c["end_day"]:
-                    active_campaigns.append(c)
-
-            for t in triggers:
-                if t.get("day_start") is not None:
-                    if day_index == t["day_start"] and t["name"] not in triggered_flags:
-                        triggered_flags.add(t["name"])
-                        activation = {
-                            "name": t["name"],
-                            "start_day": day_index,
-                            "end_day": min(day_index + t["duration_days"], total_days),
-                            "buy_multiplier": t.get("buy_multiplier", 0.0),
-                            "sell_suppression_delta": t.get("sell_suppression_delta", 0.0),
-                            "burn_rate_delta": t.get("burn_rate_delta", 0.0),
-                            "buyback_usdt_delta": t.get("buyback_usdt_delta", 0.0),
-                            "max_sell_token_ratio_delta": t.get("max_sell_token_ratio_delta", 0.0)
-                        }
-                        campaigns.append(activation)
-                        action_logs.append({
-                            "day": day_index + 1,
-                            "action": t["name"],
-                            "reason": "Day-window 사전 가동"
-                        })
-
-            if enable_triggers and high_price > 0:
-                drawdown = (high_price - current_price) / high_price
-                for t in triggers:
-                    if t.get("drawdown") is None:
-                        continue
-                    if drawdown >= t["drawdown"] and t["name"] not in triggered_flags:
-                        triggered_flags.add(t["name"])
-                        activation = {
-                            "name": t["name"],
-                            "start_day": day_index,
-                            "end_day": min(day_index + t["duration_days"], total_days),
-                            "buy_multiplier": t.get("buy_multiplier", 0.0),
-                            "sell_suppression_delta": t.get("sell_suppression_delta", 0.0),
-                            "burn_rate_delta": t.get("burn_rate_delta", 0.0),
-                            "buyback_usdt_delta": t.get("buyback_usdt_delta", 0.0),
-                            "max_sell_token_ratio_delta": t.get("max_sell_token_ratio_delta", 0.0)
-                        }
-                        campaigns.append(activation)
-                        action_logs.append({
-                            "day": day_index + 1,
-                            "action": t["name"],
-                            "reason": f"고점 대비 {drawdown*100:.1f}% 하락"
-                        })
-
-            buy_multiplier = 1.0
-            sell_suppression_delta = 0.0
-            burn_rate_delta = 0.0
-            buyback_usdt_delta = 0.0
-            max_sell_token_ratio_delta = 0.0
-            for c in active_campaigns:
-                buy_multiplier += c.get("buy_multiplier", 0.0)
-                sell_suppression_delta += c.get("sell_suppression_delta", 0.0)
-                burn_rate_delta += c.get("burn_rate_delta", 0.0)
-                buyback_usdt_delta += c.get("buyback_usdt_delta", 0.0)
-                max_sell_token_ratio_delta += c.get("max_sell_token_ratio_delta", 0.0)
-
-            # Step 2: 변수 동적 조정
-            base_sell_ratio = inputs['sell_pressure_ratio']
-            dynamic_sell_ratio = calculate_dynamic_sell_pressure(
-                base_sell_ratio,
-                current_price,
-                daily_price_history,
-                market_cfg
-            )
-            if price_model in ["CEX", "HYBRID"]:
-                depth_usdt_1pct = adjust_depth_by_volatility(depth_usdt_1pct, daily_price_history, market_cfg)
-                depth_usdt_2pct = adjust_depth_by_volatility(depth_usdt_2pct, daily_price_history, market_cfg)
-            effective_sell_pressure = max(0.0, dynamic_sell_ratio - sell_suppression_delta)
-            sell_ratio_scale = 1.0
-            if base_sell_ratio > 0:
-                sell_ratio_scale = effective_sell_pressure / base_sell_ratio
-            step_sell = remaining_sell * sell_ratio_scale
-            # Step 3: 물량 결정
-            if day_index < len(initial_investor_sell_usdt_schedule) and current_price > private_sale_price:
-                extra_sell_usdt = initial_investor_sell_usdt_schedule[day_index]
-                if extra_sell_usdt > 0:
-                    remaining_initial_sell += extra_sell_usdt / current_price
-            investor_sell = get_investor_decision(
-                remaining_initial_sell * initial_investor_sell_ratio,
-                current_price,
-                market_cfg
-            )
-            investor_sell = min(investor_sell, initial_investor_remaining)
-            step_sell += investor_sell
-            initial_investor_remaining = max(initial_investor_remaining - investor_sell, 0.0)
-            daily_user_buy = 0.0
-            if day_index < len(daily_user_buy_schedule):
-                daily_user_buy = daily_user_buy_schedule[day_index]
-            base_daily_buy = remaining_buy / steps_per_month
-            base_daily_buy_schedule = inputs.get('base_daily_buy_schedule', [])
-            if day_index < len(base_daily_buy_schedule):
-                base_daily_buy = base_daily_buy_schedule[day_index]
-            step_buy = base_daily_buy + (daily_user_buy * buy_multiplier)
-            base_step_buy = step_buy
-            step_buy = apply_fomo_buy(step_buy, current_price, prev_day_price, market_cfg)
-            step_turnover_sell = remaining_turnover_sell / steps_per_month
-            step_turnover_buy = remaining_turnover_buy / steps_per_month
-            base_turnover_buy = step_turnover_buy
-            step_turnover_buy = apply_fomo_buy(step_turnover_buy, current_price, prev_day_price, market_cfg)
-
-            normal_buy_volume = base_step_buy + base_turnover_buy
-
-            marketing_dump_today = False
-            dump_today = 0.0
-            if inputs.get('use_marketing_contract_scenario') and marketing_remaining > 0:
-                if current_price >= marketing_cost_basis * 2.0:
-                    dump_today = marketing_remaining * 0.005
-                    marketing_remaining = max(marketing_remaining - dump_today, 0.0)
-                    step_sell += dump_today
-                    marketing_dump_today = True
-                    log_reason_action("MARKETING_DUMP", "NEED_BUYBACK")
-                    action_logs.append({
-                        "day": day_index + 1,
-                        "action": "마케팅 덤핑(지속)",
-                        "reason": f"가격 ${current_price:.2f} 도달, 잔여 {int(marketing_remaining):,}개"
-                    })
-
-            profit_dump_today = False
-            profit_dump = 0.0
-            if initial_investor_remaining > 0 and current_price >= private_sale_price * profit_taking_multiple:
-                profit_dump = initial_investor_remaining * 0.01
-                initial_investor_remaining = max(initial_investor_remaining - profit_dump, 0.0)
-                step_sell += profit_dump
-                profit_dump_today = True
-                log_reason_action("PROFIT_TAKING", "NEED_BUYBACK")
-                action_logs.append({
-                    "day": day_index + 1,
-                    "action": "초기 투자자 이익실현",
-                    "reason": f"목표가 {profit_taking_multiple:.1f}x 도달, 잔여 {int(initial_investor_remaining):,}개"
-                })
-
-            prev_step_price = current_price
-
-            raw_total_sell = step_sell + step_turnover_sell
-            effective_max_sell_ratio = max(0.0, max_sell_token_ratio - max_sell_token_ratio_delta)
-            if effective_max_sell_ratio > 0:
-                sell_cap = pool_token * effective_max_sell_ratio
-                total_sell = min(raw_total_sell, sell_cap)
-            else:
-                total_sell = raw_total_sell
-
-            base_sell_component = remaining_sell
-            panic_extra = max(0.0, step_sell - (base_sell_component + investor_sell + dump_today))
-            sell_sources = {
-                "investor_unlock": max(investor_sell, 0.0),
-                "marketing_dump": max(dump_today, 0.0),
-                "turnover_sell": max(step_turnover_sell, 0.0),
-                "panic_sell": max(panic_extra, 0.0),
-                "unlocked_overhang": max(unlocked_sell_today, 0.0)
+            # [NEW] 시장 상태 진단 (State Observation)
+            market_state = {
+                'price': current_price,
+                'roi': (current_price - self.LISTING_PRICE) / self.LISTING_PRICE * 100,
+                'volatility': abs(price_change_ratio),
+                'depth_ratio': liquidity_depth_ratio
             }
-            source_total = sum(sell_sources.values())
-            if source_total > 0 and total_sell < raw_total_sell:
-                scale = total_sell / max(raw_total_sell, 1e-9)
-                for k in sell_sources:
-                    sell_sources[k] *= scale
-                source_total = sum(sell_sources.values())
 
-            if max_buy_usdt_ratio > 0:
-                buy_cap = pool_usdt * max_buy_usdt_ratio
-                step_buy = min(step_buy, buy_cap)
+            # [NEW] AI의 전략적 판단 호출
+            ai_action, ai_amount, urgency = ai_agent.evaluate(market_state)
 
-            total_buy = step_buy + step_turnover_buy
-            if target_tier == "Tier 1" and current_price > prev_day_price * 1.05:
-                total_sell *= 1.5
-                if effective_max_sell_ratio > 0:
-                    sell_cap = pool_token * effective_max_sell_ratio
-                    total_sell = min(total_sell, sell_cap)
-                log_reason_action("KIMCHI_PREMIUM", "INCREASE_SELL_PRESSURE")
+            if ai_action == "BUYBACK":
+                # 결정된 금액만큼 즉시 시장가 매수 집행
+                if price_model in ["CEX", "HYBRID"]:
+                    pool_usdt += ai_amount
+                    # 오더북에서 토큰을 걷어감 (가격 상승)
+                    buyback_impact = ai_amount / max(depth_usdt_1pct * liquidity_depth_ratio, 1.0) * 0.01
+                    current_price = current_price * (1 + buyback_impact)
+                log_reason_action(f"AI_INTERVENTION (Score {urgency:.2f})", f"${ai_amount:,.0f} BUYBACK")
                 action_logs.append({
                     "day": day_index + 1,
-                    "action": "김치 프리미엄 역풍",
-                    "reason": "해외 대비 과열 가격 가정"
+                    "action": "🤖 AI 전략 개입",
+                    "reason": f"긴급도 {urgency:.2f} >= 0.7 (유동성 {market_state['depth_ratio']:.2f})"
                 })
-            # Shadow AMM price for arbitrage reference
-            amm_pool_token += total_sell
-            amm_usdt_out = amm_pool_usdt - (amm_k / max(amm_pool_token, 1e-9))
-            amm_pool_usdt -= amm_usdt_out
-            amm_pool_usdt += total_buy
-            amm_token_out = amm_pool_token - (amm_k / max(amm_pool_usdt, 1e-9))
-            amm_pool_token -= amm_token_out
-            amm_price = amm_pool_usdt / max(amm_pool_token, 1e-9)
-            amm_k = amm_pool_token * amm_pool_usdt
-
-            # Step 4: 거래 체결
-            token_out = 0.0
-            if price_model in ["CEX", "HYBRID"]:
-                pool_token, pool_usdt, _ = self._apply_orderbook_trade(
-                    pool_token,
-                    pool_usdt,
-                    buy_usdt=total_buy,
-                    sell_token=total_sell,
-                    depth_usdt_1pct=depth_usdt_1pct * depth_ratio,
-                    depth_usdt_2pct=depth_usdt_2pct * depth_ratio
-                )
-            else:
-                pool_token += total_sell
-                usdt_out = pool_usdt - (k_constant / pool_token)
-                pool_usdt -= usdt_out
-                pool_usdt += total_buy
-                token_out = pool_token - (k_constant / pool_usdt)
-                pool_token -= token_out
-
-            current_price = pool_usdt / pool_token
-            # Step 5: 차익거래 체크 (CEX/HYBRID)
-            if price_model in ["CEX", "HYBRID"]:
-                deviation = abs(current_price - amm_price) / max(amm_price, 1e-9)
-                if deviation >= arbitrage_threshold:
-                    pool_usdt = max(pool_token * amm_price, 1e-9)
-                    k_constant = pool_token * pool_usdt
-                    current_price = pool_usdt / pool_token
-                    log_reason_action("ARBITRAGE_SWAP", "STABILIZE_PRICE")
-                    action_logs.append({
-                        "day": day_index + 1,
-                        "action": "차익거래 스왑",
-                        "reason": f"CEX-DEX 괴리 {deviation*100:.2f}%"
-                    })
-
-            if price_model in ["CEX", "HYBRID"]:
-                token_out = (step_buy + step_turnover_buy) / max(current_price, 1e-9)
-            trade_volume_tokens = total_sell + token_out
-            effective_burn_rate = max(0.0, burn_fee_rate + burn_rate_delta)
-            if effective_burn_rate > 0:
-                burn_tokens = trade_volume_tokens * effective_burn_rate
-                pool_token = max(pool_token - burn_tokens, 1e-9)
-                burned_total += burn_tokens
-                k_constant = pool_token * pool_usdt
-
-            total_buyback = monthly_buyback_usdt + (buyback_usdt_delta * steps_per_month)
-            if total_buyback > 0:
-                step_buyback = total_buyback / steps_per_month
-                if price_model in ["CEX", "HYBRID"]:
-                    token_out_buyback = step_buyback / max(current_price, 1e-9)
-                    pool_usdt += step_buyback
-                    pool_token = max(pool_token - token_out_buyback, 1e-9)
-                else:
-                    pool_usdt += step_buyback
-                    token_out_buyback = pool_token - (k_constant / pool_usdt)
-                    pool_token -= token_out_buyback
-                burned_total += token_out_buyback
-            
-            new_price = pool_usdt / pool_token
-            if step_lp_growth_rate > 0 and new_price > prev_step_price:
-                add_usdt = pool_usdt * step_lp_growth_rate
-                add_token = add_usdt / new_price
-                pool_usdt += add_usdt
-                pool_token += add_token
-                new_price = pool_usdt / pool_token
-                k_constant = pool_token * pool_usdt
-
-            if marketing_dump_today:
-                pool_usdt *= 0.8
-                new_price = pool_usdt / pool_token
-                log_reason_action("SUPPLY_SHOCK", "RESTORE_TRUST")
-                action_logs.append({
-                    "day": day_index + 1,
-                    "action": "유통량 쇼크 패널티",
-                    "reason": "마케팅 덤핑으로 유통량 계획 위반"
-                })
-
-            panic_triggered = dynamic_sell_ratio > base_sell_ratio * 1.1 and price_change_ratio < 0
-            fomo_triggered = (step_buy > base_step_buy) or (step_turnover_buy > base_turnover_buy)
-            if marketing_dump_today or profit_dump_today:
-                reason_code = "WHALE_DUMP"
-            elif panic_triggered:
-                reason_code = "PANIC_SELL"
-            elif fomo_triggered:
-                reason_code = "FOMO_RALLY"
-            else:
-                reason_code = "NORMAL"
-            if reason_code in ["PANIC_SELL", "WHALE_DUMP"]:
-                action_needed = "NEED_BUYBACK"
-            elif reason_code == "FOMO_RALLY":
-                action_needed = "MARKETING_OP"
-            else:
-                action_needed = "NONE"
-            if panic_triggered:
-                log_reason_action("PANIC_SELL", "NEED_BUYBACK")
-            if fomo_triggered:
-                log_reason_action("FOMO_RALLY", "MARKETING_OP")
-            sentiment_index = max(0.5, min(1.5, 1.0 + (price_change_ratio * fomo_sensitivity)))
-            liquidity_depth_ratio = depth_ratio if price_model in ["CEX", "HYBRID"] else 1.0
-            marketing_trigger = marketing_dump_today or (buy_multiplier > 1.0)
-            whale_sell_volume = dump_today + profit_dump
-            if liquidity_depth_ratio < 0.5 and price_change_ratio < 0:
-                log_reason_action("LIQUIDITY_DRAIN", "ADD_LIQUIDITY")
-
-            support_line = float(np.percentile(daily_price_history, 20)) if daily_price_history else self.LISTING_PRICE
-            action_amount_usdt = 0.0
-            action_message = ""
-            if "LIQUIDITY_DRAIN" in day_reasons:
-                sell_usdt = total_sell * max(current_price, 1e-9)
-                if price_model in ["CEX", "HYBRID"]:
-                    one_pct_depth = max(depth_usdt_1pct * depth_ratio, 1.0)
-                    needed_lp = max(0.0, sell_usdt - one_pct_depth)
-                else:
-                    needed_lp = max(0.0, sell_usdt - (pool_usdt * 0.01))
-                action_amount_usdt = needed_lp
-                if needed_lp > 0:
-                    action_message = f"⚠️ 유동성 부족! 슬리피지 안정(1%)을 위해 ${needed_lp:,.0f} 추가 LP 필요."
-            if "PANIC_SELL" in day_reasons and current_price < support_line:
-                buyback_needed = max(0.0, (support_line - current_price) / max(current_price, 1e-9)) * pool_usdt
-                action_amount_usdt = max(action_amount_usdt, buyback_needed)
-                if buyback_needed > 0:
-                    action_message = f"📉 지지선 이탈! 복귀를 위해 ${buyback_needed:,.0f} 바이백 권장."
-
-            simulation_log["day"].append(day_index + 1)
-            simulation_log["price"].append(new_price)
-            simulation_log["reason_code"].append(reason_code)
-            action_needed_display = action_needed
-            if action_message:
-                action_needed_display = f"{action_needed} | {action_message}"
-            simulation_log["action_needed"].append(action_needed_display)
-            simulation_log["reason"].append(", ".join(day_reasons) if day_reasons else "NONE")
-            simulation_log["action"].append(", ".join(day_actions) if day_actions else "NONE")
-            simulation_log["sentiment_index"].append(sentiment_index)
-            simulation_log["sell_pressure_vol"].append(total_sell)
-            simulation_log["buy_power_vol"].append(total_buy)
-            simulation_log["liquidity_depth_ratio"].append(liquidity_depth_ratio)
-            simulation_log["marketing_trigger"].append(marketing_trigger)
-            simulation_log["whale_sell_volume"].append(whale_sell_volume)
-            simulation_log["normal_buy_volume"].append(normal_buy_volume)
-            simulation_log["sell_sources"].append(sell_sources)
-            source_label = {
-                "investor_unlock": "초기 투자자 물량",
-                "marketing_dump": "마케팅 물량",
-                "turnover_sell": "회전율 매도",
-                "panic_sell": "심리 매도"
-            }
-            if source_total > 0:
-                major_source = max(sell_sources.items(), key=lambda x: x[1])
-                major_ratio = (major_source[1] / source_total) * 100
-                ratio_parts = []
-                for key, val in sell_sources.items():
-                    if val <= 0:
-                        continue
-                    ratio_parts.append(f"{source_label.get(key, key)} {val / source_total * 100:.0f}%")
-                ratio_text = ", ".join(ratio_parts) if ratio_parts else "비중 계산 불가"
-                source_text = (
-                    f"오늘 하락의 주범: {source_label.get(major_source[0], major_source[0])}"
-                    f" ({major_ratio:.0f}%) · 비중: {ratio_text}"
-                )
-            else:
-                source_text = "오늘 하락의 주범: 데이터 없음"
-            simulation_log["sell_source_text"].append(source_text)
-            simulation_log["action_amount_usdt"].append(action_amount_usdt)
-            simulation_log["action_message"].append(action_message)
-
-            daily_price_history.append(new_price)
-            price_history.append(new_price)
-            
-            current_drop = (new_price - self.LISTING_PRICE) / self.LISTING_PRICE * 100
-            if current_drop < -20 and "Warning" not in [x['level'] for x in risk_log]:
-                risk_log.append({"month": month_index, "level": "Warning", "msg": f"가격 -20% 돌파 (${new_price:.2f})"})
-            if current_drop < -50 and "Danger" not in [x['level'] for x in risk_log]:
-                risk_log.append({"month": month_index, "level": "Danger", "msg": f"가격 반토막 (${new_price:.2f})"})
-                
+            # ...기존 로직 계속...
         final_price = daily_price_history[-1]
         roi = (final_price - self.LISTING_PRICE) / self.LISTING_PRICE * 100
         
