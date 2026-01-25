@@ -234,22 +234,22 @@ def generate_ai_strategy_report(success_rate, var_95, median_price, target_price
     return report
 
 def main():
-        # --- 배포 환경 환경변수 및 OpenAI API 테스트 ---
-        with st.sidebar.expander("🔑 환경변수/API 테스트", expanded=False):
-            api_key_env = os.getenv("OPENAI_API_KEY")
-            st.write(f"OPENAI_API_KEY: {'✅ 감지됨' if api_key_env else '❌ 없음'}")
-            test_api = st.button("OpenAI API 키 테스트")
-            if test_api:
-                if not api_key_env:
-                    st.error("환경변수 OPENAI_API_KEY가 인식되지 않습니다. 배포 환경에서 Secrets 또는 환경변수로 등록하세요.")
-                else:
-                    try:
-                        import openai
-                        client = openai.OpenAI(api_key=api_key_env)
-                        resp = client.models.list()
-                        st.success(f"OpenAI API 연결 성공! 사용 가능 모델 수: {len(resp.data)}")
-                    except Exception as e:
-                        st.error(f"OpenAI API 연결 실패: {e}")
+    # --- 배포 환경 환경변수 및 OpenAI API 테스트 ---
+    with st.sidebar.expander("🔑 환경변수/API 테스트", expanded=False):
+        api_key_env = os.getenv("OPENAI_API_KEY")
+        st.write(f"OPENAI_API_KEY: {'✅ 감지됨' if api_key_env else '❌ 없음'}")
+        test_api = st.button("OpenAI API 키 테스트")
+        if test_api:
+            if not api_key_env:
+                st.error("환경변수 OPENAI_API_KEY가 인식되지 않습니다. 배포 환경에서 Secrets 또는 환경변수로 등록하세요.")
+            else:
+                try:
+                    import openai
+                    client = openai.OpenAI(api_key=api_key_env)
+                    resp = client.models.list()
+                    st.success(f"OpenAI API 연결 성공! 사용 가능 모델 수: {len(resp.data)}")
+                except Exception as e:
+                    st.error(f"OpenAI API 연결 실패: {e}")
     st.markdown("""
 ### 📝 상황 설명 입력 (자연어)
 아래 입력창에 현재 시장 상황, 원하는 전략, 이벤트 등을 자유롭게 설명하세요.
