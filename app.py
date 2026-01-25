@@ -89,10 +89,31 @@ def main():
     with st.sidebar:
         st.header("⚙️ 전문가 시나리오 설정")
         target_price = st.number_input("목표 가격 ($)", value=0.5, step=0.05)
+        initial_price = st.number_input("초기 가격 ($)", value=0.1, step=0.01, format="%.3f")
+        days = st.slider("시뮬레이션 기간 (일)", 30, 730, 365, step=30)
         monthly_buy_volume = st.slider("월간 매수 유입 (Unit)", 10000, 500000, 50000, step=5000)
-        liquidity_level = st.slider("유동성 깊이 (Liquidity)", 1, 5, 3)
-        volatility = st.slider("시장 변동성 (Panic/FOMO)", 0.5, 2.0, 1.0, step=0.1)
-        iterations = st.slider("시뮬레이션 횟수 (Monte Carlo)", 10, 200, 50)
+        new_user_rate = st.slider("신규 유입률 (%/월)", 0, 100, 10, step=1)
+        marketing_budget = st.slider("마케팅 예산 ($/월)", 0, 100000, 10000, step=1000)
+        liquidity_level = st.slider("유동성 깊이 (Liquidity)", 1, 10, 3)
+        liquidity_type = st.selectbox("유동성 풀 구조", ["고정형", "가변형"])
+        lockup_ratio = st.slider("락업 비율 (%)", 0, 100, 20, step=5)
+        volatility = st.slider("시장 변동성 (Panic/FOMO)", 0.5, 3.0, 1.0, step=0.1)
+        buy_tax = st.slider("매수 거래세 (%)", 0, 10, 1, step=1)
+        sell_tax = st.slider("매도 거래세 (%)", 0, 10, 1, step=1)
+        holder_ratio = st.slider("홀더 비율 (%)", 0, 100, 60, step=5)
+        trader_ratio = st.slider("트레이더 비율 (%)", 0, 100, 30, step=5)
+        bot_ratio = st.slider("봇/스나이퍼 비율 (%)", 0, 100, 10, step=5)
+        st.markdown("---")
+        st.subheader("고급 이벤트/정책")
+        big_sell_event = st.checkbox("대규모 매도 이벤트 발생", value=False)
+        big_sell_prob = st.slider("대규모 매도 확률 (%)", 0, 100, 5, step=1)
+        pump_event = st.checkbox("펌프(급등) 이벤트 발생", value=False)
+        pump_prob = st.slider("펌프 확률 (%)", 0, 100, 3, step=1)
+        fund_inflow = st.slider("외부 펀드 유입 ($/월)", 0, 100000, 0, step=1000)
+        inflation_policy = st.selectbox("인플레이션 정책", ["없음", "연 2%", "연 5%", "연 10%"])
+        ai_strategy = st.selectbox("AI 전략 모드", ["공격적", "중립적", "방어적"])
+        scenario_preset = st.selectbox("시나리오 프리셋", ["사용자 정의", "보수적", "공격적", "혼합형"])
+        iterations = st.slider("시뮬레이션 횟수 (Monte Carlo)", 10, 500, 50)
         run_btn = st.button("🚀 AI 시뮬레이션 실행", type="primary", use_container_width=True)
     st.title("ESTV Strategic AI Advisor")
     st.caption("Chaos Labs Benchmark Engine v2.5 | 전문가용 시나리오 시뮬레이터")
@@ -100,11 +121,28 @@ def main():
         with st.spinner("AI가 수백 가지 시나리오를 시뮬레이션 중입니다..."):
             engine = TokenSimulationEngine()
             inputs = {
-                'initial_price': 0.1,
-                'days': 365,
+                'initial_price': initial_price,
+                'days': days,
                 'monthly_buy_volume': monthly_buy_volume,
                 'liquidity_level': liquidity_level,
+                'liquidity_type': liquidity_type,
+                'lockup_ratio': lockup_ratio,
                 'volatility': volatility,
+                'buy_tax': buy_tax,
+                'sell_tax': sell_tax,
+                'holder_ratio': holder_ratio,
+                'trader_ratio': trader_ratio,
+                'bot_ratio': bot_ratio,
+                'new_user_rate': new_user_rate,
+                'marketing_budget': marketing_budget,
+                'big_sell_event': big_sell_event,
+                'big_sell_prob': big_sell_prob,
+                'pump_event': pump_event,
+                'pump_prob': pump_prob,
+                'fund_inflow': fund_inflow,
+                'inflation_policy': inflation_policy,
+                'ai_strategy': ai_strategy,
+                'scenario_preset': scenario_preset,
                 'target_price': target_price
             }
             all_final_prices = []
