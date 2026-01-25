@@ -300,7 +300,7 @@ def main():
             )
         )
         initial_price = st.number_input(
-            "초기 가격 ($)", value=0.1, step=0.01, format="%.3f",
+            "초기 가격 ($)", value=ai_inputs.get("initial_price", 0.1), step=0.01, format="%.3f",
             help=(
                 "시뮬레이션 시작 시점의 토큰 가격입니다.\n"
                 "이것은 모든 가격 경로의 기준점이 되며, 수익률/리스크 분석에 영향을 미칩니다.\n"
