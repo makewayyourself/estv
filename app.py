@@ -3377,6 +3377,20 @@ col3.metric("법적 리스크", "통과" if result['legal_check'] else "위반(I
 col4.metric("경고 발생 횟수", f"{len(result['risk_logs'])} 회")
 if contract_notes:
     st.info("계약 적용: " + ", ".join(contract_notes))
+st.markdown("---")
+# 몬테카를로 리스크 정밀 분석 버튼 및 결과 표시
+if st.button("🎲 몬테카를로 리스크 정밀 분석 (Beta)"):
+    with st.spinner("몬테카를로 시뮬레이션을 실행 중입니다..."):
+        mc_result = run_monte_carlo_simulation(inputs)
+        if mc_result:
+            st.subheader("🎲 몬테카를로 리스크 분석 결과")
+            st.metric("예상 최종 가격 (평균)", f"${mc_result['expected_final_price']:.3f}")
+            st.metric("리스크 발생 확률", f"{mc_result['risk_probability']*100:.1f}%")
+            st.metric("최악의 시나리오 가격", f"${mc_result['worst_case_price']:.3f}")
+            st.info(mc_result.get('risk_message', '리스크 분석 결과 메시지가 없습니다.'))
+        else:
+            st.warning("몬테카를로 시뮬레이션 결과를 가져올 수 없습니다.")
+st.markdown("---")
 ai_strategy_report = st.session_state.get("ai_strategy_report")
 if ai_strategy_report:
     with st.expander("🧭 AI 전략 가이드", expanded=True):
