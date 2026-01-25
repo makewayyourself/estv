@@ -35,7 +35,9 @@ def scenario_text_to_inputs(user_text, default_inputs=None):
             except Exception:
                 # JSON 파싱 실패 시, 숫자/키워드 추출 보정
                 return default_inputs or {}
-        except Exception:
+        except Exception as e:
+            import streamlit as st
+            st.warning(f"AI 입력값 파싱 실패: {e}")
             return default_inputs or {}
     return default_inputs or {}
 # app_merged.py의 UI/UX 및 핵심 기능을 통합
@@ -58,30 +60,59 @@ def generate_strategy_pdf(inputs, results, ai_report):
     font_path_bold = os.path.join("assets", "fonts", "NanumGothic-Bold.ttf")
     pdf = FPDF()
     pdf.add_page()
-    # 한글 폰트 Regular/Bold 모두 소문자 family/style로 등록
-    pdf.add_font('nanumgothic', '', font_path_regular, uni=True)
-    pdf.add_font('nanumgothic', 'b', font_path_bold, uni=True)
-    pdf.set_font('nanumgothic', '', 16)
+    import streamlit as st
+    import os
+    try:
+        if os.path.exists(font_path_regular) and os.path.exists(font_path_bold):
+            pdf.add_font('nanumgothic', '', font_path_regular, uni=True)
+            pdf.add_font('nanumgothic', 'b', font_path_bold, uni=True)
+            pdf.set_font('nanumgothic', '', 16)
+        else:
+            raise FileNotFoundError
+    except Exception:
+        st.warning("폰트 파일을 찾을 수 없어 기본 폰트로 PDF가 생성됩니다. 한글이 깨질 수 있습니다.")
+        pdf.set_font('Arial', '', 16)
     pdf.cell(0, 10, "ESTV 전략 리포트", ln=True, align='C')
     pdf.ln(8)
-    pdf.set_font('nanumgothic', '', 12)
+    try:
+        pdf.set_font('nanumgothic', '', 12)
+    except:
+        pdf.set_font('Arial', '', 12)
     pdf.cell(0, 10, f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
     pdf.ln(4)
-    pdf.set_font('nanumgothic', 'b', 13)
+    try:
+        pdf.set_font('nanumgothic', 'b', 13)
+    except:
+        pdf.set_font('Arial', 'B', 13)
     pdf.cell(0, 10, "[입력 변수]", ln=True)
-    pdf.set_font('nanumgothic', '', 11)
+    try:
+        pdf.set_font('nanumgothic', '', 11)
+    except:
+        pdf.set_font('Arial', '', 11)
     for k, v in inputs.items():
         pdf.cell(0, 8, f"- {k}: {v}", ln=True)
     pdf.ln(2)
-    pdf.set_font('nanumgothic', 'b', 13)
+    try:
+        pdf.set_font('nanumgothic', 'b', 13)
+    except:
+        pdf.set_font('Arial', 'B', 13)
     pdf.cell(0, 10, "[시뮬레이션 결과]", ln=True)
-    pdf.set_font('nanumgothic', '', 11)
+    try:
+        pdf.set_font('nanumgothic', '', 11)
+    except:
+        pdf.set_font('Arial', '', 11)
     for k, v in results.items():
         pdf.cell(0, 8, f"- {k}: {v}", ln=True)
     pdf.ln(2)
-    pdf.set_font('nanumgothic', 'b', 13)
+    try:
+        pdf.set_font('nanumgothic', 'b', 13)
+    except:
+        pdf.set_font('Arial', 'B', 13)
     pdf.cell(0, 10, "[AI 전략 리포트]", ln=True)
-    pdf.set_font('nanumgothic', '', 11)
+    try:
+        pdf.set_font('nanumgothic', '', 11)
+    except:
+        pdf.set_font('Arial', '', 11)
     pdf.multi_cell(0, 8, str(ai_report))
     return pdf.output(dest='S').encode('utf-8')
 
@@ -181,8 +212,8 @@ def generate_ai_strategy_report(success_rate, var_95, median_price, target_price
                 'detail': ai_text
             }
         except Exception as e:
-            # API 실패 시 fallback
-            pass
+            import streamlit as st
+            st.warning(f"AI 전략 리포트 생성 실패: {e}")
     # fallback: 기존 규칙 기반 리포트
     buy_vol = inputs['monthly_buy_volume']
     liquidity = inputs['liquidity_level']
