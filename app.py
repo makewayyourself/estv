@@ -33,31 +33,35 @@ from openai import OpenAI
 # [STRATEGIC KNOWLEDGE BASE]
 # 업로드된 4개 파일의 핵심 전략을 AI에게 Context로 주입합니다.
 
+
+# [STRATEGIC KNOWLEDGE BASE: ESTV OFFICIAL STRATEGY]
+# 업로드된 4개 파일(리스크, 마케팅, P2P, 설계)의 핵심 전략을 통합한 기준 데이터입니다.
+
 ESTV_STRATEGIC_CONTEXT = """
 [1. Project Identity: ESTV Nexus]
 - Vision: Web3 Media Protocol & DePIN-based P2P Mesh Network.
-- Core Assets: 160M+ connected devices, 50+ global platforms (Samsung TV Plus, Roku, etc.).
-- Value Flywheel: Viewers earn tokens -> Ad revenue buys back tokens -> Token value rises.
+- Core Asset: 160M+ connected devices (Samsung TV Plus, LG, Roku, etc.).
+- Value Model: 'Watch & Earn' 2.0 + 'Host & Earn' (DePIN Node).
 
-[2. Critical Risk Management (from 'Risk & Avoidance Strategy.pdf')]
-- Major Risk: High discount gap between Private Sale ($0.05) and Listing Price ($0.50). [cite: 198]
+[2. Critical Risk Management (출처: 코인 상장 리스크 및 회피 전략.pdf)]
+- Risk Factor: Private Sale ($0.05) vs Listing Price ($0.50) -> 10x Gap causes dumping risk.
 - 3-Layer Defense Strategy:
-    1. Legal: Anti-hedging & No-OTC clauses in SAFT to prevent dumping. 
-    2. Technical: KPI-based Dynamic Vesting (Unlock only if Price > $1.0 or MAU > 1M). [cite: 422]
-    3. Economic: Soft Lock-up via Staking Bonus (High APY for voluntary holding). [cite: 423]
-- Target Stability: Maintain $500k+ bid depth (Tier 2 standard) to absorb sell pressure. 
+    1. Legal: SAFT contains 'No-OTC' & 'Anti-Hedging' clauses.
+    2. Technical: 'KPI-based Dynamic Vesting' (Unlock pauses if Price < $0.80 or MAU < 1M).
+    3. Economic: 'Soft Lock-up' (High APY Staking to induce voluntary holding).
+- Liquidity Target: Minimum $500,000 depth (Tier 2 Standard) to absorb shock.
 
-[3. Marketing Roadmap & Budget (from 'Marketing Strategy.pdf')]
-- Total Budget: $1M USD (Allocated: Short-term 40%, Mid-term 30%, Long-term 30%). [cite: 479]
+[3. Marketing Roadmap (출처: ESTV 코인 상장 후 마케팅 전략.pdf)]
+- Total Budget: $1,000,000 (Phase 1: 40%, Phase 2: 30%, Phase 3: 30%).
 - Key Phases:
-    - Phase 1 (D-7~D+30): 'Proof of Engagement' via Wallet Abstraction & Airdrops. [cite: 941]
-    - Phase 2 (D+31~D+90): Staking Incentive Open (APR 15%). [cite: 485]
-    - Phase 3 (Post-TGE): Real Yield Disclosure (30% of Ad Revenue for Buyback). [cite: 969]
-- KPI Targets: 50k Active Holders, $5M Initial Liquidity. [cite: 976, 987]
+    - Phase 1 (D-7 ~ D+30): Wallet Abstraction, Airdrop for 'Proof of Engagement'.
+    - Phase 2 (D+31 ~ D+90): Staking Open (APR 15%), Influencer Campaign.
+    - Phase 3 (Post-TGE): 'Real Yield' Disclosure (30% of Ad Revenue used for Buyback).
+- Goal: Secure 50k Active Holders.
 
-[4. P2P & DePIN Strategy (from 'P2P Strategy.pdf')]
-- DePIN Model: 'Host & Earn' - Users act as CDN nodes to reduce infrastructure costs. [cite: 82]
-- Cost Efficiency: Infrastructure cost savings are redirected to Token Buyback. [cite: 140]
+[4. P2P DePIN Strategy (출처: ESTV P2P 통합 전략.pdf)]
+- Concept: Users act as CDN nodes (Host) to reduce server costs.
+- Flywheel: More Users -> Lower Cost -> Higher Buyback from Savings -> Token Price Up.
 """
 
 RUN_SIM_BUTTON_LABEL = "🚀 시뮬레이션 결과 확인하기"
@@ -4680,11 +4684,19 @@ if st.session_state.get("simulation_active", False):
         type=["json"],
         key="full_snapshot_file"
     )
-    if st.button("📂 전체 분석 불러오기"):
-        if uploaded_snapshot is None:
-            st.info("불러올 JSON 파일을 선택하세요.")
-        else:
-            payload = json.load(uploaded_snapshot)
-            load_full_snapshot(payload)
-            st.success("전체 분석을 불러오는 중입니다.")
-            st.rerun()
+
+    # --- 처음으로 돌아가기 버튼 ---
+    def reset_to_start():
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.session_state.update({
+            "tutorial_step": 0,
+            "step0_completed": False,
+            "simulation_active": False
+        })
+        st.success("초기화되었습니다. 처음 화면으로 돌아갑니다.")
+        st.rerun()
+
+    st.markdown("---")
+    if st.button("🏠 처음으로 돌아가기", help="모든 입력과 결과를 초기화하고 첫 화면으로 이동합니다."):
+        reset_to_start()
