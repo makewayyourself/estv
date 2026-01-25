@@ -1616,7 +1616,7 @@ def create_full_report(inputs, series, score, target_price):
     }
     grade, summary, liq_msg = generate_insight_text(result_summary, inputs)
 
-    pdf.set_font(pdf.font_name, "B", 24)
+    pdf.set_font("Arial", "B", 24)
     pdf.cell(0, 20, pdf._safe_text("전략 시뮬레이션 결과 보고서"), 0, 1, "C")
     pdf.ln(10)
 
