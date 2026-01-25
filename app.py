@@ -271,7 +271,9 @@ def main():
             "scenario_preset": "사용자 정의",
             # ESTV_Tokenomics 기준 예시 (필요시 확장)
             "initial_investor_lockup": "6개월 락업, 6개월 베스팅 (월 17%)",
-            "initial_investor_amount": 100_000_000
+            "initial_investor_amount": 100_000_000,
+            "initial_price": 0.5,
+            "target_price": 0.5
         }
     else:
         default_inputs = {
