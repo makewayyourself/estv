@@ -348,56 +348,49 @@ def main():
             else:
                 st.error(f"**{strategy['sentiment']}**\n\n📌 **Action:** {strategy['action']}\n\n{strategy['detail']}")
             st.markdown("---")
-            col_chart1, col_chart2 = st.columns([2, 1])
-            with col_chart1:
-                st.subheader("📈 시나리오별 가격 경로 (365일)")
-                fig_traj = go.Figure()
-                days_axis = list(range(365))
-                fig_traj.add_trace(go.Scatter(
-                    x=days_axis + days_axis[::-1],
-                    y=list(p90_trend) + list(p10_trend)[::-1],
-                    fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.2)',
-                    line=dict(color='rgba(255,255,255,0)'),
-                    name='예측 범위 (80% Confidence)',
-                    showlegend=True
-                ))
-                fig_traj.add_trace(go.Scatter(
-                    x=days_axis,
-                    y=median_trend,
-                    line=dict(color='#4f46e5', width=3),
-                    name='중위값 (Median Path)'
-                ))
-                fig_traj.add_hline(y=target_price, line_dash="dash", line_color="green", annotation_text="Target")
-                fig_traj.update_layout(
-                    height=400,
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis_title="Days",
-                    yaxis_title="Price ($)",
-                    hovermode="x unified"
-                )
-                st.plotly_chart(fig_traj, width='stretch')
-            with col_chart2:
-                st.subheader("📊 최종 가격 분포")
-                fig_dist = go.Figure()
-                fig_dist.add_trace(go.Histogram(
-                    x=all_final_prices,
-                    nbinsx=15,
-                    marker_color='#6366f1',
-                    opacity=0.75
-                ))
-                fig_dist.add_vline(x=target_price, line_dash="dash", line_color="green")
-                fig_dist.update_layout(
-                    height=400,
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis_title="Final Price ($)",
-                    yaxis_title="Frequency",
-                    showlegend=False
-                )
+            st.subheader("📈 시나리오별 가격 경로 (365일)")
+            fig_traj = go.Figure()
+            days_axis = list(range(1, len(median_trend)+1))
+            # 0.5에서 시작하도록 첫 값 보정
+            median_trend_adj = np.insert(median_trend, 0, 0.5)
+            p10_trend_adj = np.insert(p10_trend, 0, 0.5)
+            p90_trend_adj = np.insert(p90_trend, 0, 0.5)
+            days_axis_adj = [0] + days_axis
+            # 예측 범위 영역
+            fig_traj.add_trace(go.Scatter(
+                x=days_axis_adj + days_axis_adj[::-1],
+                y=list(p90_trend_adj) + list(p10_trend_adj)[::-1],
+                fill='toself',
+                fillcolor='rgba(200, 200, 200, 0.18)',
+                line=dict(color='rgba(255,255,255,0)'),
+                name='예측 범위 (80% Confidence)',
+                showlegend=True
+            ))
+            # 중위값 경로
+            fig_traj.add_trace(go.Scatter(
+                x=days_axis_adj,
+                y=median_trend_adj,
+                line=dict(color='#4f46e5', width=3, shape='spline', smoothing=1.3),
+                name='중위값 (Median Path)',
+                mode='lines'
+            ))
+            # 타겟선
+            fig_traj.add_hline(y=target_price, line_dash="dash", line_color="green", annotation_text="Target")
+            # X/Y축 자동 줌아웃
+            y_min = min(np.min(p10_trend_adj), 0.5) * 0.98
+            y_max = max(np.max(p90_trend_adj), target_price) * 1.05
+            fig_traj.update_layout(
+                height=420,
+                margin=dict(l=20, r=20, t=30, b=20),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis_title="Days",
+                yaxis_title="Price ($)",
+                hovermode="x unified",
+                xaxis=dict(range=[0, len(days_axis_adj)-1]),
+                yaxis=dict(range=[y_min, y_max])
+            )
+            st.plotly_chart(fig_traj, use_container_width=True)
                 st.plotly_chart(fig_dist, width='stretch')
             st.markdown("### 💾 분석 기록 저장")
             col_save1, col_save2 = st.columns([1, 1])
