@@ -1,3 +1,45 @@
+# 몬테카를로 시뮬레이션 (확률적 사고)
+def run_monte_carlo_simulation(base_inputs, iterations=50):
+    """
+    Chaos Labs Benchmark:
+    단일 결과가 아니라 '최악의 시나리오(VaR)'와 '성공 확률'을 도출함.
+    """
+    final_prices = []
+    min_prices = []
+    success_count = 0
+
+    progress_bar = st.progress(0)
+
+    for i in range(iterations):
+        # 입력값에 랜덤 노이즈 추가 (시장 불확실성 반영)
+        sim_inputs = base_inputs.copy()
+
+        # 1. 시장 심리 랜덤화
+        noise_panic = np.random.uniform(0.8, 1.5)
+        sim_inputs['market_sentiment_config']['panic_sensitivity'] *= noise_panic
+
+        # 2. 매수 유입 랜덤화 (±20%)
+        noise_inflow = np.random.uniform(0.8, 1.2)
+        sim_inputs['monthly_buy_volume'] *= noise_inflow
+
+        # 엔진 실행
+        engine = TokenSimulationEngine()
+        res = engine.run(sim_inputs)
+
+        final_prices.append(res['final_price'])
+        min_prices.append(min(res['daily_price_trend']))
+
+        if res['final_price'] >= base_inputs.get('target_price', 0.5): # 목표가 달성 여부
+            success_count += 1
+        
+        progress_bar.progress((i + 1) / iterations)
+
+    return {
+        "success_prob": (success_count / iterations) * 100,
+        "avg_final_price": np.mean(final_prices),
+        "worst_case_price": np.percentile(min_prices, 5), # 하위 5% (VaR 95%)
+        "best_case_price": np.percentile(final_prices, 95)
+    }
 # 전략적 개입 에이전트 (StrategicInterventionAgent)
 class StrategicInterventionAgent:
     """
