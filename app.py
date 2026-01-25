@@ -391,7 +391,6 @@ def main():
                 yaxis=dict(range=[y_min, y_max])
             )
             st.plotly_chart(fig_traj, use_container_width=True)
-                st.plotly_chart(fig_dist, width='stretch')
             st.markdown("### 💾 분석 기록 저장")
             col_save1, col_save2 = st.columns([1, 1])
             snapshot = {
