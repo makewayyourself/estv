@@ -1,13 +1,45 @@
 # app_merged.py의 UI/UX 및 핵심 기능을 통합
+
 import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-
 import json
 from datetime import datetime
 import os
 import openai
+from fpdf import FPDF
+def generate_strategy_pdf(inputs, results, ai_report):
+    from fpdf import FPDF
+    import os
+    font_path = os.path.join("assets", "fonts", "NanumGothic.ttf")
+    pdf = FPDF()
+    pdf.add_page()
+    # 한글 폰트 등록 및 사용
+    pdf.add_font('NanumGothic', '', font_path, uni=True)
+    pdf.set_font('NanumGothic', '', 16)
+    pdf.cell(0, 10, "ESTV 전략 리포트", ln=True, align='C')
+    pdf.ln(8)
+    pdf.set_font('NanumGothic', '', 12)
+    pdf.cell(0, 10, f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+    pdf.ln(4)
+    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.cell(0, 10, "[입력 변수]", ln=True)
+    pdf.set_font('NanumGothic', '', 11)
+    for k, v in inputs.items():
+        pdf.cell(0, 8, f"- {k}: {v}", ln=True)
+    pdf.ln(2)
+    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.cell(0, 10, "[시뮬레이션 결과]", ln=True)
+    pdf.set_font('NanumGothic', '', 11)
+    for k, v in results.items():
+        pdf.cell(0, 8, f"- {k}: {v}", ln=True)
+    pdf.ln(2)
+    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.cell(0, 10, "[AI 전략 리포트]", ln=True)
+    pdf.set_font('NanumGothic', '', 11)
+    pdf.multi_cell(0, 8, str(ai_report))
+    return pdf.output(dest='S').encode('utf-8')
 
 st.set_page_config(
     page_title="ESTV Strategic AI Advisor",
@@ -366,7 +398,7 @@ def main():
                 )
                 st.plotly_chart(fig_dist, width='stretch')
             st.markdown("### 💾 분석 기록 저장")
-            col_save1, col_save2 = st.columns(2)
+            col_save1, _ = st.columns([1, 0.01])
             with col_save1:
                 snapshot = {
                     "timestamp": datetime.now().isoformat(),
@@ -383,6 +415,20 @@ def main():
                     data=json_snapshot,
                     file_name="estv_strategy_report.json",
                     mime="application/json"
+                )
+                # PDF 다운로드 버튼 (AI 전략 리포트 포함)
+                ai_report_text = strategy['detail'] if isinstance(strategy, dict) and 'detail' in strategy else str(strategy)
+                pdf_bytes = generate_strategy_pdf(inputs, {
+                    "목표가 달성 확률(%)": f"{success_rate:.1f}",
+                    "중위값 최종가($)": f"{median_final_price:.3f}",
+                    "VaR(95%)($)": f"{var_95:.3f}",
+                    "목표가($)": f"{target_price:.3f}"
+                }, ai_report_text)
+                st.download_button(
+                    label="📄 AI 전략 리포트 PDF 다운로드",
+                    data=pdf_bytes,
+                    file_name="estv_ai_strategy_report.pdf",
+                    mime="application/pdf"
                 )
     else:
         st.info("👈 좌측 사이드바에서 시나리오 변수를 설정하고 '시뮬레이션 실행' 버튼을 눌러주세요.")
