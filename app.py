@@ -41,6 +41,59 @@ def run_monte_carlo_simulation(base_inputs, iterations=50):
         "best_case_price": np.percentile(final_prices, 95)
     }
 # 전략적 개입 에이전트 (StrategicInterventionAgent)
+class HolderAgent:
+    """
+    장기 보유자 (Holder) 에이전트: 가격이 급락해도 잘 팔지 않음, 장기적 관점에서만 매도
+    """
+    def __init__(self, holding_tokens):
+        self.holding_tokens = holding_tokens
+
+    def evaluate(self, market_state):
+        price = market_state['price']
+        roi = market_state['roi']
+        # 장기 보유자는 -50% 이상 급락, 혹은 2배 이상 상승 시 일부 매도
+        sell_ratio = 0.0
+        if roi < -50:
+            sell_ratio = 0.05  # 극단적 급락 시 5% 매도
+        elif roi > 100:
+            sell_ratio = 0.10  # 2배 이상 상승 시 10% 매도
+        return sell_ratio * self.holding_tokens
+
+class TraderAgent:
+    """
+    단기 트레이더 (Trader) 에이전트: 변동성에 민감, 단기 수익 실현
+    """
+    def __init__(self, trading_tokens):
+        self.trading_tokens = trading_tokens
+
+    def evaluate(self, market_state):
+        price = market_state['price']
+        volatility = market_state['volatility']
+        # 변동성 크면 일부 매도, 평소엔 보유
+        sell_ratio = 0.0
+        if volatility > 0.08:
+            sell_ratio = 0.15  # 변동성 클 때 15% 매도
+        elif volatility > 0.03:
+            sell_ratio = 0.05  # 보통 변동성엔 5% 매도
+        return sell_ratio * self.trading_tokens
+
+class SniperBot:
+    """
+    스나이퍼 봇: 상장 직후 단기 매도, 초기 유통량에 큰 영향
+    """
+    def __init__(self, sniper_tokens):
+        self.sniper_tokens = sniper_tokens
+        self.has_sold = False
+
+    def evaluate(self, market_state):
+        day = market_state.get('day', 1)
+        price = market_state['price']
+        # 상장 첫 3일 내, 가격이 10% 이상 오르면 즉시 매도
+        if not self.has_sold and day <= 3 and price > 0.55:
+            self.has_sold = True
+            return self.sniper_tokens  # 전량 매도
+        return 0.0
+
 class StrategicInterventionAgent:
     """
     Benchmarks: Gauntlet's Dynamic Risk Engine
@@ -57,11 +110,14 @@ class StrategicInterventionAgent:
         1. 현재 가격 추세(Momentum)가 하락세인가?
         2. 오더북 깊이(Depth)가 얇아져서 개입 효과가 극대화되는 시점인가?
         3. 남은 예산으로 방어가 가능한가?
+        4. Economic Stress Test: 가격이 -50% 빠졌을 때 재단 자산도 같이 빠지는가? (Death Spiral)
         """
         price = market_state['price']
         roi = market_state['roi']
         volatility = market_state['volatility']
         depth_health = market_state['depth_ratio']
+        foundation_assets = market_state.get('foundation_assets', None)
+        foundation_initial_assets = market_state.get('foundation_initial_assets', None)
         
         # 판단 스코어링 (0.0 ~ 1.0)
         urgency_score = 0.0
@@ -80,6 +136,14 @@ class StrategicInterventionAgent:
         elif self.strategy_mode == "AGGRESSIVE":
             if volatility > 0.05: urgency_score += 0.2 # 변동성 있으면 공격적 개입
 
+        # Gauntlet-style Death Spiral Check
+        death_spiral = False
+        if roi < -50:
+            # 가격이 50% 이상 하락
+            if foundation_assets is not None and foundation_initial_assets is not None:
+                asset_drop = (foundation_assets - foundation_initial_assets) / max(foundation_initial_assets, 1e-9) * 100
+                if asset_drop < -50:
+                    death_spiral = True
         # 행동 결정
         action = "HOLD"
         amount = 0.0
@@ -91,7 +155,7 @@ class StrategicInterventionAgent:
             amount = self.budget * allocation_ratio
             self.budget -= amount
             
-        return action, amount, urgency_score
+        return action, amount, urgency_score, death_spiral
 # app.py 파일에 이 내용을 복사해 넣으세요
 import streamlit as st
 from dotenv import load_dotenv
@@ -758,7 +822,7 @@ class TokenSimulationEngine:
         fomo_sensitivity = market_cfg.get('fomo_sensitivity', 1.2)
         private_sale_price = market_cfg.get('private_sale_price', 0.05)
         profit_taking_multiple = market_cfg.get('profit_taking_multiple', 5.0)
-        arbitrage_threshold = market_cfg.get('arbitrage_threshold', 0.02)
+        arbitrage_threshold = market_cfg.get('arbitrage_threshold', 0.0)
         min_depth_ratio = market_cfg.get('min_depth_ratio', 0.3)
         campaigns = inputs.get('campaigns', [])
         triggers = inputs.get('triggers', [])
@@ -2039,7 +2103,7 @@ else:
             )
             monthly_buyback_usdt = st.sidebar.number_input(
                 "월간 바이백 예산($)",
-                value=int(st.session_state.get("monthly_buyback_usdt", 0)),
+                value=0,
                 step=100000,
                 key="monthly_buyback_usdt",
                 help="시장 방어를 위한 월간 바이백 예산입니다."
@@ -2311,879 +2375,6 @@ if is_expert and current_step > 0:
         st.session_state["apply_target_scenario"] = True
 
     st.sidebar.button("목표 시나리오 적용", on_click=apply_target_scenario)
-
-    st.sidebar.markdown("---")
-    st.sidebar.header("⚖️ 펀더멘탈: 공급과 수요")
-
-    st.sidebar.subheader("📉 공급 부담(매도 리스크)")
-    input_supply = st.sidebar.slider(
-        "1. 초기 유통량 (%)",
-        min_value=0.0,
-        max_value=100.0,
-        value=float(st.session_state.get("input_supply", 3.0)),
-        step=0.5,
-        help="초기 유통되는 토큰 비율입니다. 높을수록 시장 유통 물량이 많아져 가격 방어가 어려울 수 있습니다.",
-        key="input_supply"
-    )
-    if input_supply > 3.0:
-        st.sidebar.error("🚨 특약 제5조 위반! (3% 초과)")
-
-    supply_expander = st.sidebar.expander("📉 공급 상세 (언본딩/매도율)", expanded=is_expert)
-    input_unbonding = supply_expander.slider(
-        "2. 언본딩 기간 (일)",
-        min_value=0,
-        max_value=90,
-        value=30,
-        step=10,
-        help="언본딩 대기 기간입니다. 길수록 매도 지연이 커져 단기 하락 압력이 완화됩니다.",
-        key="input_unbonding"
-    )
-    if input_unbonding < 30:
-        supply_expander.warning("⚠️ 특약 권장 사항 미달 (<30일)")
-
-    input_sell_ratio = supply_expander.slider(
-        "3. 락업 해제 시 매도율 (%)",
-        10,
-        100,
-        50,
-        help="락업 해제 물량 중 실제로 매도되는 비율입니다. 높을수록 가격 하방 압력이 커집니다.",
-        key="input_sell_ratio"
-    )
-
-    investor_expander = st.sidebar.expander("🔒 초기 투자자 상세 베스팅", expanded=is_expert)
-    initial_investor_lock_months = investor_expander.slider(
-        "3-1. 초기 투자자 락업 기간 (개월)",
-        min_value=0,
-        max_value=60,
-        value=12,
-        step=1,
-        help="초기 투자자 물량이 시장에 풀리기 전까지 묶이는 기간입니다.",
-        key="initial_investor_lock_months"
-    )
-    initial_investor_locked_tokens = investor_expander.number_input(
-        "3-2. 락업 물량 (토큰 수)",
-        min_value=0.0,
-        value=0.0,
-        step=1_000_000.0,
-        help="초기 투자자에게 배정된 락업 토큰 수량입니다. 0이면 미적용됩니다.",
-        key="initial_investor_locked_tokens"
-    )
-    initial_investor_vesting_months = investor_expander.slider(
-        "3-3. 베스팅 기간 (개월)",
-        min_value=0,
-        max_value=60,
-        value=12,
-        step=1,
-        help="락업 종료 후 몇 개월에 걸쳐 해제할지 선택합니다.",
-        key="initial_investor_vesting_months"
-    )
-    initial_investor_release_percent = investor_expander.slider(
-        "3-4. 월별 해제 비율 (%)",
-        min_value=1.0,
-        max_value=100.0,
-        value=10.0,
-        step=1.0,
-        help="락업 물량 중 매월 해제되는 비율입니다. 설정값에 따라 실제 베스팅 기간이 자동 보정됩니다.",
-        key="initial_investor_release_percent"
-    )
-    initial_investor_release_interval = investor_expander.slider(
-        "3-5. 해제 주기 (개월)",
-        min_value=1,
-        max_value=12,
-        value=1,
-        step=1,
-        help="해제 주기를 설정합니다. 예: 3개월이면 분기 단위로 해제됩니다.",
-        key="initial_investor_release_interval"
-    )
-    initial_investor_sell_ratio = investor_expander.slider(
-        "3-6. 초기 투자자 해제 매도율 (%)",
-        min_value=0,
-        max_value=100,
-        value=50,
-        step=5,
-        help="언락된 물량 중 실제로 매도되는 비율입니다. 공격적일수록 높게 설정하세요.",
-        key="initial_investor_sell_ratio"
-    )
-
-    TOTAL_SUPPLY = float(total_supply_input)
-    initial_investor_locked_percent = (initial_investor_locked_tokens / TOTAL_SUPPLY) * 100.0 if initial_investor_locked_tokens > 0 else 0.0
-    if initial_investor_locked_percent > 100.0:
-        investor_expander.error("락업 물량이 총 공급량을 초과했습니다.")
-
-    derived_vesting_months = max(1, int(math.ceil(100.0 / max(initial_investor_release_percent, 1.0))))
-    if initial_investor_vesting_months > 0 and initial_investor_vesting_months != derived_vesting_months:
-        investor_expander.info(f"월별 해제 비율 기준으로 베스팅 기간이 {derived_vesting_months}개월로 보정됩니다.")
-    if initial_investor_locked_tokens > 0:
-        estimated_lock_value = initial_investor_locked_tokens * 0.50
-        vesting_months_used = derived_vesting_months if initial_investor_vesting_months > 0 else 1
-        safe_months = max(1, vesting_months_used)
-        monthly_unlock_theoretical = initial_investor_locked_tokens / safe_months
-        final_monthly_sell = monthly_unlock_theoretical * (initial_investor_sell_ratio / 100.0)
-        st.session_state["calculated_monthly_sell_pressure"] = final_monthly_sell
-
-        investor_expander.markdown("---")
-        investor_expander.subheader("📉 매도 압력 자동 산출 (Auto-Calculated)")
-        c1, c2 = investor_expander.columns(2)
-        c1.metric(
-            label="월간 언락 물량 (Max)",
-            value=f"{monthly_unlock_theoretical:,.0f} 개",
-            help="베스팅 스케줄에 따라 매월 풀리는 최대 물량입니다."
-        )
-        c2.metric(
-            label="실제 예상 매도 압력",
-            value=f"{final_monthly_sell:,.0f} 개",
-            delta=f"매도율 {initial_investor_sell_ratio:.0f}% 적용",
-            delta_color="inverse",
-            help="시뮬레이션에 반영되는 월간 매도 수량입니다."
-        )
-        investor_expander.caption(
-            f"락업 물량: {int(initial_investor_locked_tokens):,}개 "
-            f"(총 공급의 {initial_investor_locked_percent:.2f}%) / "
-            f"예상 평가액: ${estimated_lock_value:,.0f}"
-        )
-
-    st.sidebar.subheader("📈 수요 힘(매수 유입)")
-    input_buy_volume = st.sidebar.number_input(
-        "4. 월간 매수 유입 자금 ($)",
-        value=200000,
-        step=50000,
-        help="월간 기본 매수 유입 자금입니다. 클수록 매수 압력이 증가해 가격 상승 요인이 됩니다.",
-        key="input_buy_volume"
-    )
-    inflow_expander = st.sidebar.expander("📌 유입 상세(전환율/패턴/기간)", expanded=is_expert)
-    use_buy_inflow_pattern = inflow_expander.checkbox(
-        "월간 매수 유입 시계열 패턴 사용",
-        value=False,
-        help="월별 매수 유입을 패턴(초기 급증→조정→안정)으로 반영합니다.",
-        key="use_buy_inflow_pattern"
-    )
-    pattern_month4_avg_krw = inflow_expander.slider(
-        "월 4+ 평균 유입(억 KRW)",
-        min_value=40,
-        max_value=60,
-        value=50,
-        step=5,
-        help="월 4 이후 장기 평균 유입 규모(억 원)입니다.",
-        key="pattern_month4_avg_krw"
-    )
-    simulation_unit = inflow_expander.selectbox(
-        "4-1. 시뮬레이션 기간 단위",
-        options=["일", "월", "년"],
-        index=1,
-        help="기간 단위를 선택합니다. 월 단위는 30일 기준으로 환산됩니다.",
-        key="simulation_unit"
-    )
-    simulation_value = inflow_expander.number_input(
-        "4-2. 시뮬레이션 기간 값",
-        min_value=1,
-        value=1 if simulation_unit == "월" else 30,
-        step=1,
-        help="선택한 단위에 맞는 기간 값을 입력합니다.",
-        key="simulation_value"
-    )
-    if simulation_unit == "일":
-        total_days = simulation_value
-    elif simulation_unit == "년":
-        total_days = simulation_value * 365
-    else:
-        total_days = simulation_value * 30
-    simulation_months = max(1, int(math.ceil(total_days / 30)))
-
-    krw_rate = st.session_state.get("krw_per_usd", 1300)
-    base_daily_buy_schedule = []
-    if use_buy_inflow_pattern:
-        monthly_krw_series = [
-            30_000_000_000,
-            15_000_000_000,
-            8_000_000_000
-        ]
-        month4_krw = pattern_month4_avg_krw * 100_000_000
-        total_months = max(1, int(math.ceil(total_days / 30)))
-        while len(monthly_krw_series) < total_months:
-            monthly_krw_series.append(month4_krw)
-        for day in range(total_days):
-            month_idx = min(day // 30, len(monthly_krw_series) - 1)
-            monthly_usd = monthly_krw_series[month_idx] / max(krw_rate, 1)
-            base_daily_buy_schedule.append(monthly_usd / 30.0)
-
-    inflow_expander.markdown("---")
-    inflow_expander.subheader("👥 기존 회원 유입 (Demand Side)")
-    estv_total_users = 160_000_000
-    inflow_expander.caption("기존 회원 수는 보수적으로 1억 6천만 명 기준을 사용합니다.")
-    inflow_help = inflow_expander.expander("ℹ️ 유입 시나리오 도움말", expanded=is_expert)
-    inflow_help.markdown("""
-**1억 6천만명 유입 퍼널**
-1. 인지(Awareness): 플랫폼 토큰 상장 인지 (약 30~50%)
-2. 관심(Interest): 관심을 갖는 비율 (약 10~20%)
-3. 행동(Action - KYC): 계좌 개설/인증까지 도달 (약 5%)
-4. 구매(Purchase): 실제 매수 전환 (최종 타깃)
-
-**시나리오별 추천 값(월간 매수 압력 추정)**
-| 시나리오 | 전환율 | 1인당 매수액 | 특징 |
-|---|---:|---:|---|
-| A (보수적) | 0.05% | $50 | 유기적 유입 |
-| B (현실적) | 0.50% | $100 | 기본값 권장 |
-| C (공격적) | 2.00% | $200 | 공격적 캠페인 |
-""")
-
-    preset_map = {
-        "직접 입력": None,
-        "Scenario A (보수적)": {"conversion_rate": 0.05, "avg_ticket": 50},
-        "Scenario B (현실적)": {"conversion_rate": 0.50, "avg_ticket": 100},
-        "Scenario C (공격적)": {"conversion_rate": 2.00, "avg_ticket": 200},
-    }
-    def apply_preset():
-        preset = st.session_state.get("scenario_preset", "직접 입력")
-        if preset_map.get(preset):
-            st.session_state["conversion_rate"] = preset_map[preset]["conversion_rate"]
-            st.session_state["avg_ticket"] = preset_map[preset]["avg_ticket"]
-
-    scenario_preset = inflow_expander.selectbox(
-        "시나리오 프리셋",
-        options=list(preset_map.keys()),
-        index=0,
-        key="scenario_preset",
-        on_change=apply_preset,
-        help="전환율/객단가를 빠르게 설정하는 프리셋입니다."
-    )
-
-    conversion_rate = inflow_expander.slider(
-        "5. 회원 거래소 유입 전환율 (%)",
-        min_value=0.01,
-        max_value=2.00,
-        value=0.10,
-        step=0.01,
-        format="%.2f%%",
-        key="conversion_rate",
-        help="기존 회원 중 거래소로 유입되는 비율입니다. 높을수록 신규 유입 매수 자금이 커집니다."
-    )
-
-    avg_ticket = inflow_expander.number_input(
-        "6. 1인당 평균 매수 금액 ($)",
-        value=50,
-        step=10,
-        key="avg_ticket",
-        help="신규 유입 1인당 평균 매수 금액입니다. 클수록 월간 추가 매수세가 증가합니다."
-    )
-
-    enable_dual_pipeline = inflow_expander.checkbox(
-        "듀얼 파이프라인 유입 사용",
-        value=False,
-        key="enable_dual_pipeline",
-        help="기존 회원/신규 회원 유입을 서로 다른 속도로 선형 증가시키는 방식입니다."
-    )
-    migration_target = 50_000
-    migration_ramp_months = 3
-    acquisition_target = 10_000
-    acquisition_ramp_months = 12
-    if enable_dual_pipeline:
-        migration_target = inflow_expander.number_input(
-            "기존 회원 목표(명/월)",
-            min_value=0,
-            value=50_000,
-            step=1000,
-            key="migration_target",
-            help="기존 회원 유입 목표치를 월 기준으로 설정합니다."
-        )
-        migration_ramp_months = inflow_expander.slider(
-            "기존 회원 도달 기간(개월)",
-            min_value=1,
-            max_value=12,
-            value=3,
-            step=1,
-            key="migration_ramp_months",
-            help="기존 회원 유입 목표에 도달하는 기간입니다."
-        )
-        acquisition_target = inflow_expander.number_input(
-            "신규 회원 목표(명/월)",
-            min_value=0,
-            value=10_000,
-            step=1000,
-            key="acquisition_target",
-            help="신규 회원 유입 목표치를 월 기준으로 설정합니다."
-        )
-        acquisition_ramp_months = inflow_expander.slider(
-            "신규 회원 도달 기간(개월)",
-            min_value=1,
-            max_value=24,
-            value=12,
-            step=1,
-            key="acquisition_ramp_months",
-            help="신규 회원 유입 목표에 도달하는 기간입니다."
-        )
-
-    onboarding_months = 12
-    total_new_buyers = estv_total_users * (conversion_rate / 100.0)
-    total_inflow_money = total_new_buyers * avg_ticket
-    monthly_user_buy_volume = total_inflow_money / onboarding_months
-    total_inflow_days = onboarding_months * 30
-    base_daily_user_buy = total_inflow_money / max(total_inflow_days, 1)
-
-    use_phase_inflow = inflow_expander.checkbox(
-        "유입 스케줄(Phase) 적용",
-        value=False,
-        help="Master MD의 Phase 흐름을 반영해 초기 30일 유입을 강화합니다.",
-        key="use_phase_inflow"
-    )
-    phase2_days = 30
-    phase2_multiplier = 2.0
-    prelisting_days = 30
-    prelisting_multiplier = 1.5
-    prelisting_release_days = 7
-    if use_phase_inflow:
-        phase2_days = inflow_expander.slider(
-            "Phase 2 기간(일)",
-            min_value=7,
-            max_value=60,
-            value=30,
-            step=1,
-            key="phase2_days",
-            help="상장 직후 집중 유입이 유지되는 기간입니다."
-        )
-        phase2_multiplier = inflow_expander.slider(
-            "Phase 2 유입 배수",
-            min_value=1.0,
-            max_value=5.0,
-            value=2.0,
-            step=0.1,
-            key="phase2_multiplier",
-            help="상장 직후 유입을 몇 배로 증폭할지 설정합니다."
-        )
-        prelisting_days = inflow_expander.slider(
-            "Phase 1 대기 기간(일)",
-            min_value=7,
-            max_value=60,
-            value=30,
-            step=1,
-            key="prelisting_days",
-            help="상장 전 유입이 대기(잠재 수요로 누적)되는 기간입니다."
-        )
-        prelisting_multiplier = inflow_expander.slider(
-            "Phase 1 대기 수요 배수",
-            min_value=1.0,
-            max_value=5.0,
-            value=1.5,
-            step=0.1,
-            key="prelisting_multiplier",
-            help="대기 수요가 상장 직후 유입될 때의 증폭 정도입니다."
-        )
-        prelisting_release_days = inflow_expander.slider(
-            "Phase 1 방출 기간(일)",
-            min_value=1,
-            max_value=30,
-            value=7,
-            step=1,
-            key="prelisting_release_days",
-            help="대기 수요가 상장 후 며칠에 걸쳐 분산 방출되는지 설정합니다."
-        )
-
-    total_sim_months = simulation_months
-    if enable_dual_pipeline:
-        schedule_volatility = float(st.session_state.get("volume_volatility", 0.5))
-        schedule_weekend = bool(st.session_state.get("weekend_dip", True))
-        schedule_migration = create_realistic_schedule(
-            migration_target,
-            migration_ramp_months,
-            total_sim_months,
-            avg_ticket,
-            schedule_volatility,
-            schedule_weekend
-        )
-        schedule_acquisition = create_realistic_schedule(
-            acquisition_target,
-            acquisition_ramp_months,
-            total_sim_months,
-            avg_ticket,
-            schedule_volatility,
-            schedule_weekend
-        )
-        final_daily_buy_schedule = [
-            a + b for a, b in zip(schedule_migration, schedule_acquisition)
-        ]
-        daily_user_buy_schedule = final_daily_buy_schedule[:total_days]
-        total_inflow_days = max(1, len(daily_user_buy_schedule))
-        total_inflow_money = float(sum(daily_user_buy_schedule))
-        monthly_user_buy_volume = float(sum(daily_user_buy_schedule[:min(30, total_inflow_days)]))
-        base_daily_user_buy = monthly_user_buy_volume / 30.0
-        use_phase_inflow = False
-    else:
-        phase2_days = min(phase2_days, total_inflow_days)
-        prelisting_days = min(prelisting_days, total_inflow_days)
-        prelisting_release_days = max(1, min(prelisting_release_days, total_inflow_days))
-        prelisting_daily = base_daily_user_buy * prelisting_multiplier
-        prelisting_total = prelisting_daily * prelisting_days
-        phase2_daily = base_daily_user_buy * phase2_multiplier
-        phase2_total = phase2_daily * phase2_days
-        remaining_total = max(total_inflow_money - prelisting_total - phase2_total, 0.0)
-        remaining_days = max(total_inflow_days - prelisting_days - phase2_days, 1)
-        phase3_daily = remaining_total / remaining_days
-
-        selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
-        ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
-        schedule_volatility = float(st.session_state.get("volume_volatility", ref_data["default"]))
-        schedule_weekend = bool(st.session_state.get("weekend_dip", True))
-        monthly_user_target = total_new_buyers / max(onboarding_months, 1)
-
-        if use_phase_inflow:
-            daily_user_buy_schedule = []
-            for d in range(total_days):
-                if d < total_inflow_days:
-                    if d < prelisting_days:
-                        daily_user_buy_schedule.append(0.0)
-                    elif d < prelisting_days + phase2_days:
-                        release_day = d - prelisting_days
-                        release_ratio = min((release_day + 1) / prelisting_release_days, 1.0)
-                        daily_user_buy_schedule.append(phase2_daily + (prelisting_daily * release_ratio))
-                    else:
-                        daily_user_buy_schedule.append(phase3_daily)
-                else:
-                    daily_user_buy_schedule.append(0.0)
-        else:
-            daily_user_buy_schedule = create_realistic_schedule(
-                monthly_user_target,
-                onboarding_months,
-                simulation_months,
-                avg_ticket,
-                schedule_volatility,
-                schedule_weekend
-            )[:total_days]
-            total_inflow_days = max(1, len(daily_user_buy_schedule))
-            total_inflow_money = float(sum(daily_user_buy_schedule))
-            monthly_user_buy_volume = float(sum(daily_user_buy_schedule[:min(30, total_inflow_days)]))
-            base_daily_user_buy = monthly_user_buy_volume / 30.0
-
-    if enable_dual_pipeline:
-        inflow_expander.info(
-            "📊 **유입 분석 결과 (듀얼 파이프라인)**\n"
-            f"- 기존 회원 목표: {int(migration_target):,}명/월 (도달 {migration_ramp_months}개월)\n"
-            f"- 신규 회원 목표: {int(acquisition_target):,}명/월 (도달 {acquisition_ramp_months}개월)\n"
-            f"- **월간 추가 매수세(첫 달 기준): +${int(monthly_user_buy_volume):,}**"
-        )
-        inflow_expander.caption("듀얼 파이프라인 사용 시 Phase 유입 스케줄은 적용되지 않습니다.")
-    else:
-        inflow_expander.info(f"""
-📊 **유입 분석 결과**
-- 신규 유입 인원: {int(total_new_buyers):,}명
-- 총 매수 대기 자금: ${int(total_inflow_money):,}
-- **월간 추가 매수세: +${int(monthly_user_buy_volume):,}**
-""")
-    if use_phase_inflow:
-        inflow_expander.caption(
-            f"Phase 1 대기(상장 전 {prelisting_days}일): 유입 대기 → "
-            f"상장 직후 {prelisting_release_days}일 완화 방출 / "
-            f"상장 직후 일 ${int(phase2_daily + prelisting_daily):,} 유입 / "
-            f"Phase 3 이후: 일 ${int(phase3_daily):,} 유입"
-        )
-
-    st.sidebar.markdown("---")
-    st.sidebar.header("🏗️ 시장 구조/유동성")
-    market_expander = st.sidebar.expander("가격 모델 & 오더북", expanded=is_expert)
-    selected_type = st.session_state.get("project_type", "New Listing (신규 상장)")
-    ref_data = COIN_TYPE_VOLATILITY.get(selected_type, COIN_TYPE_VOLATILITY["New Listing (신규 상장)"])
-    if st.session_state.get("volatility_project_type") != selected_type:
-        st.session_state["volume_volatility"] = float(ref_data["default"])
-        st.session_state["volatility_project_type"] = selected_type
-    volume_volatility = market_expander.slider(
-        "📊 거래량 변동성 (Volatility)",
-        min_value=0.1,
-        max_value=3.0,
-        value=float(st.session_state.get("volume_volatility", ref_data["default"])),
-        step=0.1,
-        help=f"선택하신 '{selected_type}'의 권장 변동성은 {ref_data['range']} 입니다.\n({ref_data['desc']})",
-        key="volume_volatility"
-    )
-    weekend_dip = market_expander.checkbox(
-        "주말 거래량 감소 반영",
-        value=bool(st.session_state.get("weekend_dip", True)),
-        key="weekend_dip",
-        help="주말 거래량 감소를 반영해 일시적 수요 약화를 시뮬레이션합니다."
-    )
-    price_model = market_expander.selectbox(
-        "가격 모델",
-        options=["AMM", "CEX", "HYBRID"],
-        index=0,
-        help="AMM은 풀의 상수곱(x*y=k)로 가격을 계산합니다. CEX는 오더북 깊이에 따라 체결 슬리피지를 반영합니다. HYBRID는 CEX 방식에 월별 오더북 깊이 증가를 더해 유동성 확장을 모사합니다.",
-        key="price_model"
-    )
-    depth_usdt_1pct = market_expander.number_input(
-        "오더북 1% 깊이($)",
-        value=1_000_000,
-        step=100_000,
-        help="CEX 모델에서 ±1% 구간의 매수/매도 깊이입니다.",
-        key="depth_usdt_1pct"
-    )
-    depth_usdt_2pct = market_expander.number_input(
-        "오더북 2% 깊이($)",
-        value=3_000_000,
-        step=100_000,
-        help="CEX 모델에서 ±2% 구간의 매수/매도 깊이입니다.",
-        key="depth_usdt_2pct"
-    )
-    depth_growth_rate = market_expander.slider(
-        "오더북 깊이 성장률(월, %)",
-        min_value=0.0,
-        max_value=10.0,
-        value=2.0,
-        step=0.5,
-        help="HYBRID 모델에서 월별 오더북 깊이 증가율입니다.",
-        key="depth_growth_rate"
-    )
-    steps_per_month = market_expander.selectbox(
-        "거래 분할 단위",
-        options=[30, 7],
-        index=0,
-        format_func=lambda x: f"{x}일 분할",
-        help="월간 매수/매도를 일/주 단위로 분할해 변동성을 완화합니다.",
-        key="steps_per_month"
-    )
-    turnover_ratio = market_expander.slider(
-        "신규 유입 회전율(총합, %)",
-        min_value=0.0,
-        max_value=50.0,
-        value=5.0,
-        step=0.5,
-        help="신규 유입 매수·매도 총 회전율입니다. 비대칭 비율로 매수/매도 분배합니다.",
-        key="turnover_ratio"
-    )
-    turnover_buy_share = market_expander.slider(
-        "회전율 매수 비중(%)",
-        min_value=0.0,
-        max_value=100.0,
-        value=50.0,
-        step=5.0,
-        help="회전율 중 매수로 반영되는 비중입니다. 나머지는 매도로 반영됩니다.",
-        key="turnover_buy_share"
-    )
-    lp_growth_rate = market_expander.slider(
-        "LP 성장률(월 기준, %)",
-        min_value=0.0,
-        max_value=5.0,
-        value=1.0,
-        step=0.1,
-        help=(
-            "LP는 Liquidity Pool(유동성 풀)의 약자입니다. "
-            "가격이 오를 때 LP에 유입되는 유동성 비율을 뜻합니다. "
-            "값이 높을수록 풀의 깊이가 커져 슬리피지가 줄고 급등락이 완화됩니다."
-        ),
-        key="lp_growth_rate"
-    )
-    max_buy_usdt_ratio = market_expander.slider(
-        "매수 캡(풀 USDT 대비, %)",
-        min_value=0.0,
-        max_value=20.0,
-        value=5.0,
-        step=0.5,
-        help=(
-            "풀 USDT는 유동성 풀에 쌓여 있는 USDT 잔액을 뜻합니다. "
-            "풀 USDT 대비 1회 매수 상한을 제한하며, 낮을수록 대규모 매수가 분할되어 "
-            "가격 급등이 완만해집니다."
-        ),
-        key="max_buy_usdt_ratio"
-    )
-    max_sell_token_ratio = market_expander.slider(
-        "매도 캡(풀 토큰 대비, %)",
-        min_value=0.0,
-        max_value=20.0,
-        value=5.0,
-        step=0.5,
-        help=(
-            "풀 토큰은 유동성 풀에 쌓여 있는 토큰 잔액을 뜻합니다. "
-            "풀 토큰 대비 1회 매도 상한을 제한하며, 낮을수록 급격한 덤핑을 제한해 "
-            "가격 하락 폭을 줄입니다."
-        ),
-        key="max_sell_token_ratio"
-    )
-
-    st.sidebar.markdown("---")
-    st.sidebar.header("🛡️ 방어·부양 정책")
-    st.sidebar.subheader("🚀 Master Plan 모드")
-    use_master_plan = st.sidebar.checkbox(
-        "Master Plan 캠페인 활성화",
-        value=False,
-        help="Buy & Verify, Holding Challenge, Pay & Burn을 캠페인/트리거로 반영합니다.",
-        key="use_master_plan"
-    )
-    use_triggers = False
-    buy_verify_boost = 0.5
-    holding_suppress = 0.1
-    payburn_delta = 0.002
-    buyback_daily = 0.0
-    if use_master_plan:
-        campaign_expander = st.sidebar.expander("🔥 캠페인 및 트리거 상세", expanded=is_expert)
-        use_triggers = campaign_expander.checkbox(
-            "트리거 자동 가동",
-            value=True,
-            key="use_triggers",
-            help="가격 하락 시 사전에 정의된 캠페인을 자동 재가동하여 급락을 완화하기 위해 사용합니다."
-        )
-        buy_verify_boost = campaign_expander.slider(
-            "Buy & Verify 매수 증폭(+)",
-            0.0,
-            2.0,
-            0.5,
-            0.1,
-            key="buy_verify_boost",
-            help="매수 유인을 강화해 상장 초반 수요를 끌어올립니다."
-        )
-        holding_suppress = campaign_expander.slider(
-            "Holding 매도 억제(-)",
-            0.0,
-            0.3,
-            0.1,
-            0.01,
-            key="holding_suppress",
-            help="매도 심리를 억제해 단기 급락을 완화합니다."
-        )
-        payburn_delta = campaign_expander.slider(
-            "Pay & Burn 소각 증폭(+)",
-            0.0,
-            0.01,
-            0.002,
-            0.001,
-            key="payburn_delta",
-            help="소각을 강화해 유통량 감소 효과를 높입니다."
-        )
-        buyback_daily = campaign_expander.number_input(
-            "캠페인 일일 바이백($)",
-            value=0,
-            step=10000,
-            key="buyback_daily",
-            help="캠페인 기간에 실행하는 일일 바이백 예산입니다."
-        )
-
-    st.sidebar.subheader("💰 바이백/소각")
-    monthly_buyback_usdt = st.sidebar.number_input(
-        "월간 바이백 예산($)",
-        value=0,
-        step=100000,
-        help="광고/NFT/수수료 등 사업 수익으로 토큰을 시장에서 매수해 소각하는 예산입니다.",
-        key="monthly_buyback_usdt"
-    )
-    burn_expander = st.sidebar.expander("🔥 소각 상세", expanded=is_expert)
-    burn_fee_rate = burn_expander.slider(
-        "거래 수수료 소각률(%)",
-        min_value=0.0,
-        max_value=100.0,
-        value=float(st.session_state.get("burn_fee_rate", 0.3)),
-        step=0.5,
-        help="거래 수수료 중 일부를 토큰으로 소각합니다. 높을수록 유통량이 줄어 가격 상승 압력이 생깁니다.",
-        key="burn_fee_rate"
-    )
-
-    sentiment_expander = st.sidebar.expander("🧠 시장 심리/비선형", expanded=is_expert)
-    p_type = st.session_state.get("project_type", "New Listing (신규 상장)")
-    defaults = SENTIMENT_DEFAULTS.get(p_type, SENTIMENT_DEFAULTS["New Listing (신규 상장)"])
-    if st.session_state.get("sentiment_project_type") != p_type:
-        st.session_state["panic_sensitivity"] = defaults["panic"]
-        st.session_state["fomo_sensitivity"] = defaults["fomo"]
-        st.session_state["sentiment_project_type"] = p_type
-
-    sentiment_cols = sentiment_expander.columns(2)
-    panic_sensitivity = sentiment_cols[0].slider(
-        "😱 패닉 민감도 (Panic)",
-        min_value=0.5,
-        max_value=3.0,
-        value=float(st.session_state.get("panic_sensitivity", defaults["panic"])),
-        step=0.1,
-        help="하락장에서 매도세가 증폭되는 정도입니다. 신규 상장은 1.5 이상이 현실적입니다.",
-        key="panic_sensitivity"
-    )
-    fomo_sensitivity = sentiment_cols[1].slider(
-        "🤩 FOMO 민감도 (Greed)",
-        min_value=0.5,
-        max_value=5.0,
-        value=float(st.session_state.get("fomo_sensitivity", defaults["fomo"])),
-        step=0.1,
-        help="상승장에서 추격 매수가 붙는 정도입니다. 밈코인은 3.0 이상까지 치솟습니다.",
-        key="fomo_sensitivity"
-    )
-    private_sale_price = sentiment_expander.number_input(
-        "초기 투자자 평단가($)",
-        value=0.05,
-        step=0.01,
-        help="초기 투자자의 평균 매입 단가입니다. 이 가격 이하에서는 매도가 둔화됩니다.",
-        key="private_sale_price"
-    )
-    profit_taking_multiple = sentiment_expander.slider(
-        "이익실현 목표 배수",
-        min_value=1.0,
-        max_value=10.0,
-        value=5.0,
-        step=0.5,
-        help="초기 투자자가 평단가 대비 몇 배 상승 시 이익실현 매도를 강화할지 설정합니다.",
-        key="profit_taking_multiple"
-    )
-    arbitrage_threshold = sentiment_expander.slider(
-        "차익거래 임계값(%)",
-        min_value=0.0,
-        max_value=10.0,
-        value=2.0,
-        step=0.5,
-        help="가격 변동률이 이 값을 넘으면 차익거래 유입을 가정합니다.",
-        format="%.1f%%",
-        key="arbitrage_threshold"
-    )
-    min_depth_ratio = sentiment_expander.slider(
-        "패닉 시 오더북 깊이 하한",
-        min_value=0.0,
-        max_value=1.0,
-        value=float(st.session_state.get("min_depth_ratio", 0.3)),
-        step=0.01,
-        help="패닉 국면에서 오더북 깊이가 줄어드는 최소 비율입니다.",
-        key="min_depth_ratio"
-    )
-
-    market_sentiment_config = {
-        "panic_sensitivity": panic_sensitivity,
-        "fomo_sensitivity": fomo_sensitivity,
-        "private_sale_price": private_sale_price,
-        "profit_taking_multiple": profit_taking_multiple,
-        "arbitrage_threshold": arbitrage_threshold / 100.0,
-        "min_depth_ratio": min_depth_ratio
-    }
-
-    campaigns = []
-    triggers = []
-
-contract_mode = st.session_state.get("contract_mode", "사용자 조정")
-use_master_plan = bool(st.session_state.get("use_master_plan", False))
-
-if st.session_state.get("step0_completed", False) and use_master_plan:
-    phase2_start = prelisting_days
-    phase2_end = min(prelisting_days + phase2_days, total_days)
-    campaigns.extend([
-        {
-            "name": "Buy & Verify",
-            "start_day": phase2_start,
-            "end_day": phase2_end,
-            "buy_multiplier": buy_verify_boost,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 0.0,
-            "max_sell_token_ratio_delta": 0.0
-        },
-        {
-            "name": "Holding Challenge",
-            "start_day": phase2_start,
-            "end_day": phase2_end,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": holding_suppress,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 0.0,
-            "max_sell_token_ratio_delta": 0.0
-        },
-        {
-            "name": "Pay & Burn",
-            "start_day": phase2_end,
-            "end_day": total_days,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": payburn_delta,
-            "buyback_usdt_delta": buyback_daily,
-            "max_sell_token_ratio_delta": 0.0
-        }
-    ])
-
-    triggers = [
-        {
-            "name": "D31-Guard: Buy&Verify Season2 Warmup",
-            "day_start": 24,
-            "duration_days": 14,
-            "buy_multiplier": 0.35,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 0.0,
-            "max_sell_token_ratio_delta": 0.0
-        },
-        {
-            "name": "D31-Guard: Holding Extension (31~60 Lock-in)",
-            "day_start": 27,
-            "duration_days": 21,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": 0.12,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 0.0,
-            "max_sell_token_ratio_delta": 0.05
-        },
-        {
-            "name": "D31-Guard: Liquidity Buffer",
-            "day_start": 29,
-            "duration_days": 10,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 20000,
-            "max_sell_token_ratio_delta": 0.0
-        },
-        {
-            "name": "Buy & Verify 재가동",
-            "drawdown": 0.20,
-            "duration_days": 14,
-            "buy_multiplier": 0.3,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": buyback_daily,
-            "max_sell_token_ratio_delta": 0.0
-        },
-        {
-            "name": "Holding Challenge 시즌2",
-            "drawdown": 0.30,
-            "duration_days": 14,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": 0.1,
-            "burn_rate_delta": 0.0,
-            "buyback_usdt_delta": 0.0,
-            "max_sell_token_ratio_delta": 0.05
-        },
-        {
-            "name": "Pay & Burn 강화",
-            "drawdown": 0.40,
-            "duration_days": 30,
-            "buy_multiplier": 0.0,
-            "sell_suppression_delta": 0.0,
-            "burn_rate_delta": 0.003,
-            "buyback_usdt_delta": buyback_daily,
-            "max_sell_token_ratio_delta": 0.05
-        }
-    ]
-
-if is_expert and current_step > 0:
-    st.sidebar.markdown("---")
-    st.sidebar.header("📊 분석/비교")
-    st.sidebar.subheader("✅ 가격 변동추이 신뢰도")
-    enable_confidence = st.sidebar.checkbox(
-        "신뢰도 계산 활성화",
-        value=False,
-        help="입력값에 불확실성을 부여해 여러 번 시뮬레이션하고, 기준 추이와 유사한 비율을 신뢰도로 계산합니다.",
-        key="enable_confidence"
-    )
-    confidence_runs = st.sidebar.slider(
-        "시뮬레이션 횟수",
-        min_value=100,
-        max_value=1000,
-        value=300,
-        step=50,
-        help="횟수가 많을수록 안정적이지만 계산 시간이 늘어납니다.",
-        key="confidence_runs"
-    )
-    confidence_uncertainty = st.sidebar.slider(
-        "입력값 불확실성(±%)",
-        min_value=0.0,
-        max_value=30.0,
-        value=10.0,
-        step=1.0,
-        help="주요 입력값에 랜덤 변동을 주는 범위입니다.",
-        key="confidence_uncertainty"
-    )
-    confidence_mape = st.sidebar.slider(
-        "허용 변동폭(평균 오차, %)",
-        min_value=5.0,
-        max_value=30.0,
-        value=15.0,
-        step=1.0,
-        help="기준 추이와 평균 오차가 이 값 이하인 시뮬레이션의 비율을 신뢰도로 계산합니다.",
-        key="confidence_mape"
-    )
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🇰🇷 Upbit 평균 시나리오")
@@ -3869,7 +3060,7 @@ if go is not None:
                 prev_price = series[i - 1]
                 if prev_price <= 0:
                     continue
-                price_change = (series[i] - prev_price) / prev_price
+                price_change = (series[i] - prev_price) / max(prev_price, 1e-9)
                 sentiment = log["sentiment_index"][i]
                 whale_sell = log["whale_sell_volume"][i]
                 liquidity_depth = log["liquidity_depth_ratio"][i]
@@ -4197,7 +3388,7 @@ if go is not None:
                     "investor_unlock": "초기 투자자 물량",
                     "marketing_dump": "마케팅 물량",
                     "turnover_sell": "회전율 매도",
-                    "panic_sell": "심리 매도",
+                    "panic_sell": "심리적 투매",
                     "unlocked_overhang": "언락 오버행"
                 }
                 action_label = {
