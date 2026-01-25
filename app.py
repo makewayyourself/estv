@@ -387,8 +387,9 @@ def main():
                 xaxis_title="Days",
                 yaxis_title="Price ($)",
                 hovermode="x unified",
-                xaxis=dict(range=[0, len(days_axis_adj)-1]),
-                yaxis=dict(range=[y_min, y_max])
+                dragmode='zoom',
+                xaxis=dict(range=[0, len(days_axis_adj)-1], fixedrange=False),
+                yaxis=dict(range=[y_min, y_max], fixedrange=False)
             )
             st.plotly_chart(fig_traj, use_container_width=True)
             st.markdown("### 💾 분석 기록 저장")
