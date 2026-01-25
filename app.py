@@ -12,32 +12,34 @@ from fpdf import FPDF
 def generate_strategy_pdf(inputs, results, ai_report):
     from fpdf import FPDF
     import os
-    font_path = os.path.join("assets", "fonts", "NanumGothic.ttf")
+    font_path_regular = os.path.join("assets", "fonts", "NanumGothic.ttf")
+    font_path_bold = os.path.join("assets", "fonts", "NanumGothic-Bold.ttf")
     pdf = FPDF()
     pdf.add_page()
-    # 한글 폰트 등록 및 사용
-    pdf.add_font('NanumGothic', '', font_path, uni=True)
-    pdf.set_font('NanumGothic', '', 16)
+    # 한글 폰트 Regular/Bold 모두 소문자 family/style로 등록
+    pdf.add_font('nanumgothic', '', font_path_regular, uni=True)
+    pdf.add_font('nanumgothic', 'b', font_path_bold, uni=True)
+    pdf.set_font('nanumgothic', '', 16)
     pdf.cell(0, 10, "ESTV 전략 리포트", ln=True, align='C')
     pdf.ln(8)
-    pdf.set_font('NanumGothic', '', 12)
+    pdf.set_font('nanumgothic', '', 12)
     pdf.cell(0, 10, f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
     pdf.ln(4)
-    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.set_font('nanumgothic', 'b', 13)
     pdf.cell(0, 10, "[입력 변수]", ln=True)
-    pdf.set_font('NanumGothic', '', 11)
+    pdf.set_font('nanumgothic', '', 11)
     for k, v in inputs.items():
         pdf.cell(0, 8, f"- {k}: {v}", ln=True)
     pdf.ln(2)
-    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.set_font('nanumgothic', 'b', 13)
     pdf.cell(0, 10, "[시뮬레이션 결과]", ln=True)
-    pdf.set_font('NanumGothic', '', 11)
+    pdf.set_font('nanumgothic', '', 11)
     for k, v in results.items():
         pdf.cell(0, 8, f"- {k}: {v}", ln=True)
     pdf.ln(2)
-    pdf.set_font('NanumGothic', 'B', 13)
+    pdf.set_font('nanumgothic', 'b', 13)
     pdf.cell(0, 10, "[AI 전략 리포트]", ln=True)
-    pdf.set_font('NanumGothic', '', 11)
+    pdf.set_font('nanumgothic', '', 11)
     pdf.multi_cell(0, 8, str(ai_report))
     return pdf.output(dest='S').encode('utf-8')
 
