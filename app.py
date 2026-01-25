@@ -204,11 +204,10 @@ def generate_ai_strategy_report(success_rate, var_95, median_price, target_price
 
 def main():
     st.markdown("""
-    ### 📝 상황 설명 입력 (자연어)
-    아래 입력창에 현재 시장 상황, 원하는 전략, 이벤트 등을 자유롭게 설명하세요.\n
-    예시: "시장에 대규모 매도와 펌프가 동시에 발생할 수 있어. 인플레이션은 낮게, 보수적 전략으로 시뮬레이션해줘."
-    """
-    )
+### 📝 상황 설명 입력 (자연어)
+아래 입력창에 현재 시장 상황, 원하는 전략, 이벤트 등을 자유롭게 설명하세요.
+예시: "시장에 대규모 매도와 펌프가 동시에 발생할 수 있어. 인플레이션은 낮게, 보수적 전략으로 시뮬레이션해줘."
+""")
     user_scenario_text = st.text_area(
         "상황 설명 (자연어)",
         placeholder="시장 상황, 이벤트, 전략 등 자유롭게 입력...",
@@ -220,13 +219,13 @@ def main():
         "big_sell_event": False, "big_sell_prob": 5, "pump_event": False, "pump_prob": 3,
         "fund_inflow": 0, "inflation_policy": "없음", "ai_strategy": "중립적", "scenario_preset": "사용자 정의"
     }
-    ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
-        apply_btn = st.button("적용", type="primary")
-        show_result = False
-        if apply_btn and user_scenario_text.strip():
-            with st.spinner("전문가 시나리오를 AI가 설정하고 있습니다. 입력을 분석 중입니다..."):
-                ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
-                show_result = True
+    apply_btn = st.button("적용", type="primary")
+    ai_inputs = default_inputs.copy()
+    show_result = False
+    if apply_btn and user_scenario_text.strip():
+        with st.spinner("전문가 시나리오를 AI가 설정하고 있습니다. 입력을 분석 중입니다..."):
+            ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
+            show_result = True
 
     with st.sidebar:
         st.header("⚙️ 전문가 시나리오 설정")
@@ -438,6 +437,9 @@ def main():
     # 상황 설명 입력이 있으면 자동 실행, 아니면 기존 버튼 방식
     auto_run = user_scenario_text and user_scenario_text.strip() != ""
     if run_btn or auto_run:
+        # 자연어 입력값 파싱 실패 시 안내 메시지
+        if user_scenario_text and ai_inputs == default_inputs:
+            st.warning("AI 입력값 파싱에 실패했습니다. OpenAI API 키가 없거나, 입력값을 분석할 수 없습니다. 기본값으로 시뮬레이션을 진행합니다.")
         with st.spinner("AI가 수백 가지 시나리오를 시뮬레이션 중입니다..."):
             engine = TokenSimulationEngine()
             inputs = {
