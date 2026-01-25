@@ -174,8 +174,8 @@ def main():
             help="시뮬레이션 시작 시점의 토큰 가격입니다."
         )
         days = st.slider(
-            "시뮬레이션 기간 (일)", 30, 730, 365, step=30,
-            help="시뮬레이션을 진행할 전체 기간(일 단위)입니다."
+            "시나리오별 가격 경로 기간 (일)", 30, 730, 365, step=5,
+            help="시나리오별 가격 경로(그래프)의 기간을 직접 지정할 수 있습니다."
         )
         monthly_buy_volume = st.slider(
             "월간 매수 유입 (Unit)", 10000, 500000, 50000, step=5000,
@@ -348,13 +348,13 @@ def main():
             else:
                 st.error(f"**{strategy['sentiment']}**\n\n📌 **Action:** {strategy['action']}\n\n{strategy['detail']}")
             st.markdown("---")
-            st.subheader("📈 시나리오별 가격 경로 (365일)")
+            st.subheader(f"📈 시나리오별 가격 경로 ({days}일)")
             fig_traj = go.Figure()
-            days_axis = list(range(1, len(median_trend)+1))
+            days_axis = list(range(1, days+1))
             # 0.5에서 시작하도록 첫 값 보정
-            median_trend_adj = np.insert(median_trend, 0, 0.5)
-            p10_trend_adj = np.insert(p10_trend, 0, 0.5)
-            p90_trend_adj = np.insert(p90_trend, 0, 0.5)
+            median_trend_adj = np.insert(median_trend[:days], 0, 0.5)
+            p10_trend_adj = np.insert(p10_trend[:days], 0, 0.5)
+            p90_trend_adj = np.insert(p90_trend[:days], 0, 0.5)
             days_axis_adj = [0] + days_axis
             # 예측 범위 영역
             fig_traj.add_trace(go.Scatter(
@@ -391,7 +391,7 @@ def main():
                 xaxis=dict(range=[0, len(days_axis_adj)-1], fixedrange=False),
                 yaxis=dict(range=[y_min, y_max], fixedrange=False)
             )
-            st.plotly_chart(fig_traj, use_container_width=True)
+            st.plotly_chart(fig_traj, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True, "doubleClick": "reset"})
             st.markdown("### 💾 분석 기록 저장")
             col_save1, col_save2 = st.columns([1, 1])
             snapshot = {
