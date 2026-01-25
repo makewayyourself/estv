@@ -400,32 +400,32 @@ def main():
                 )
                 st.plotly_chart(fig_dist, width='stretch')
             st.markdown("### 💾 분석 기록 저장")
-            col_save1, _ = st.columns([1, 0.01])
-            with col_save1:
-                snapshot = {
-                    "timestamp": datetime.now().isoformat(),
-                    "inputs": inputs,
-                    "results": {
-                        "success_rate": success_rate,
-                        "median_price": median_final_price,
-                        "var_95": var_95
-                    }
+            col_save1, col_save2 = st.columns([1, 1])
+            snapshot = {
+                "timestamp": datetime.now().isoformat(),
+                "inputs": inputs,
+                "results": {
+                    "success_rate": success_rate,
+                    "median_price": median_final_price,
+                    "var_95": var_95
                 }
-                json_snapshot = json.dumps(snapshot, indent=2, default=str)
+            }
+            json_snapshot = json.dumps(snapshot, indent=2, default=str)
+            ai_report_text = strategy['detail'] if isinstance(strategy, dict) and 'detail' in strategy else str(strategy)
+            pdf_bytes = generate_strategy_pdf(inputs, {
+                "목표가 달성 확률(%)": f"{success_rate:.1f}",
+                "중위값 최종가($)": f"{median_final_price:.3f}",
+                "VaR(95%)($)": f"{var_95:.3f}",
+                "목표가($)": f"{target_price:.3f}"
+            }, ai_report_text)
+            with col_save1:
                 st.download_button(
                     label="📥 현재 분석결과 다운로드 (JSON)",
                     data=json_snapshot,
                     file_name="estv_strategy_report.json",
                     mime="application/json"
                 )
-                # PDF 다운로드 버튼 (AI 전략 리포트 포함)
-                ai_report_text = strategy['detail'] if isinstance(strategy, dict) and 'detail' in strategy else str(strategy)
-                pdf_bytes = generate_strategy_pdf(inputs, {
-                    "목표가 달성 확률(%)": f"{success_rate:.1f}",
-                    "중위값 최종가($)": f"{median_final_price:.3f}",
-                    "VaR(95%)($)": f"{var_95:.3f}",
-                    "목표가($)": f"{target_price:.3f}"
-                }, ai_report_text)
+            with col_save2:
                 st.download_button(
                     label="📄 AI 전략 리포트 PDF 다운로드",
                     data=pdf_bytes,
