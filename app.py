@@ -1,3 +1,43 @@
+def scenario_text_to_inputs(user_text, default_inputs=None):
+    """
+    자연어 상황 설명(user_text)을 시뮬레이터 입력값(dict)으로 변환
+    OpenAI GPT-4 API 활용, 실패 시 기본값 반환
+    """
+    import openai
+    import os
+    if not user_text or user_text.strip() == "":
+        return default_inputs or {}
+    api_key = os.getenv("OPENAI_API_KEY")
+    prompt = f"""
+아래는 토큰 시뮬레이터의 주요 입력값입니다. 사용자가 입력한 상황 설명을 분석해, 각 항목에 적합한 값을 한국어로 추출해 JSON(dict) 형태로 반환하세요.\n
+입력값 항목:\n- big_sell_event (bool)\n- big_sell_prob (int, 0~100)\n- pump_event (bool)\n- pump_prob (int, 0~100)\n- fund_inflow (int, 0~100000)\n- inflation_policy (str: 없음/연 2%/연 5%/연 10%)\n- ai_strategy (str: 공격적/중립적/방어적)\n- scenario_preset (str: 사용자 정의/보수적/공격적/혼합형)\n
+상황 설명:\n""" + user_text + """\n
+반환 예시:\n{"big_sell_event": true, "big_sell_prob": 10, "pump_event": true, "pump_prob": 5, "fund_inflow": 20000, "inflation_policy": "연 2%", "ai_strategy": "방어적", "scenario_preset": "보수적"}\n
+"""
+    if api_key:
+        try:
+            openai.api_key = api_key
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "당신은 Web3/토큰 시뮬레이터 입력값 추출 전문가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=400,
+                temperature=0.2
+            )
+            import json
+            text = response.choices[0].message.content.strip()
+            # JSON 파싱
+            try:
+                parsed = json.loads(text)
+                return parsed
+            except Exception:
+                # JSON 파싱 실패 시, 숫자/키워드 추출 보정
+                return default_inputs or {}
+        except Exception:
+            return default_inputs or {}
+    return default_inputs or {}
 # app_merged.py의 UI/UX 및 핵심 기능을 통합
 
 import streamlit as st
@@ -163,8 +203,28 @@ def generate_ai_strategy_report(success_rate, var_95, median_price, target_price
     return report
 
 def main():
+        st.markdown("""
+        ### 📝 상황 설명 입력 (자연어)
+        아래 입력창에 현재 시장 상황, 원하는 전략, 이벤트 등을 자유롭게 설명하세요.\n
+        예시: "시장에 대규모 매도와 펌프가 동시에 발생할 수 있어. 인플레이션은 낮게, 보수적 전략으로 시뮬레이션해줘."
+        """
+        )
+        user_scenario_text = st.text_area(
+            "상황 설명 (자연어)",
+            placeholder="시장 상황, 이벤트, 전략 등 자유롭게 입력...",
+            height=80
+        )
+        st.markdown("---")
+    # 1. 상황 설명 → AI 파싱 → 입력값 dict 생성
+    default_inputs = {
+        "big_sell_event": False, "big_sell_prob": 5, "pump_event": False, "pump_prob": 3,
+        "fund_inflow": 0, "inflation_policy": "없음", "ai_strategy": "중립적", "scenario_preset": "사용자 정의"
+    }
+    ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
+
     with st.sidebar:
         st.header("⚙️ 전문가 시나리오 설정")
+        # AI 파싱 결과를 sidebar 입력값의 기본값으로 자동 반영
         target_price = st.number_input(
             "목표 가격 ($)", value=0.5, step=0.05,
             help=(
@@ -288,7 +348,7 @@ def main():
         st.markdown("---")
         st.subheader("고급 이벤트/정책")
         big_sell_event = st.checkbox(
-            "대규모 매도 이벤트 발생", value=False,
+            "대규모 매도 이벤트 발생", value=ai_inputs.get("big_sell_event", False),
             help=(
                 "특정 시점에 대규모 매도(투매) 이벤트가 발생할 수 있습니다.\n"
                 "이벤트가 잦으면 투자자 신뢰 하락 및 상장 유지에 부정적 영향을 미칠 수 있습니다.\n"
@@ -297,7 +357,7 @@ def main():
             )
         )
         big_sell_prob = st.slider(
-            "대규모 매도 확률 (%)", 0, 100, 5, step=1,
+            "대규모 매도 확률 (%)", 0, 100, ai_inputs.get("big_sell_prob", 5), step=1,
             help=(
                 "시뮬레이션 기간 중 대규모 매도 이벤트가 발생할 확률입니다.\n"
                 "5% 이하는 안정, 10% 이상은 고위험 신호로 간주됩니다.\n"
@@ -306,7 +366,7 @@ def main():
             )
         )
         pump_event = st.checkbox(
-            "펌프(급등) 이벤트 발생", value=False,
+            "펌프(급등) 이벤트 발생", value=ai_inputs.get("pump_event", False),
             help=(
                 "특정 시점에 가격이 급등(펌프)하는 이벤트가 발생할 수 있습니다.\n"
                 "과도한 펌프는 시장 과열, 시세조작 의심 등으로 상장 유지에 악영향을 줄 수 있습니다.\n"
@@ -315,7 +375,7 @@ def main():
             )
         )
         pump_prob = st.slider(
-            "펌프 확률 (%)", 0, 100, 3, step=1,
+            "펌프 확률 (%)", 0, 100, ai_inputs.get("pump_prob", 3), step=1,
             help=(
                 "시뮬레이션 기간 중 펌프 이벤트가 발생할 확률입니다.\n"
                 "5% 이하는 정상, 10% 이상은 과열 신호로 간주됩니다.\n"
@@ -324,7 +384,7 @@ def main():
             )
         )
         fund_inflow = st.slider(
-            "외부 펀드 유입 ($/월)", 0, 100000, 0, step=1000,
+            "외부 펀드 유입 ($/월)", 0, 100000, ai_inputs.get("fund_inflow", 0), step=1000,
             help=(
                 "외부 투자자/기관 등에서 유입되는 추가 자금 규모입니다.\n"
                 "유동성 보강과 시장 신뢰도에 긍정적이나,\n"
@@ -335,6 +395,7 @@ def main():
         )
         inflation_policy = st.selectbox(
             "인플레이션 정책", ["없음", "연 2%", "연 5%", "연 10%"],
+            index=["없음", "연 2%", "연 5%", "연 10%"].index(ai_inputs.get("inflation_policy", "없음")),
             help=(
                 "토큰 공급량 증가(인플레이션) 정책을 선택합니다.\n"
                 "연 5% 이하는 저위험, 10% 이상은 고위험으로 평가됩니다.\n"
@@ -344,6 +405,7 @@ def main():
         )
         ai_strategy = st.selectbox(
             "AI 전략 모드", ["공격적", "중립적", "방어적"],
+            index=["공격적", "중립적", "방어적"].index(ai_inputs.get("ai_strategy", "중립적")),
             help=(
                 "AI가 시뮬레이션에서 적용할 전략적 성향입니다.\n"
                 "공격적/중립적/방어적 전략을 다양하게 테스트하는 것이\n"
@@ -353,6 +415,7 @@ def main():
         )
         scenario_preset = st.selectbox(
             "시나리오 프리셋", ["사용자 정의", "보수적", "공격적", "혼합형"],
+            index=["사용자 정의", "보수적", "공격적", "혼합형"].index(ai_inputs.get("scenario_preset", "사용자 정의")),
             help=(
                 "자주 쓰는 시나리오 조합을 빠르게 불러올 수 있습니다.\n"
                 "이것은 입력값 자동 세팅, 전략 비교 분석에 영향을 미칩니다.\n"
@@ -366,7 +429,9 @@ def main():
         run_btn = st.button("🚀 AI 시뮬레이션 실행", type="primary", use_container_width=True)
     st.title("ESTV Strategic AI Advisor")
     st.caption("Chaos Labs Benchmark Engine v2.5 | 전문가용 시나리오 시뮬레이터")
-    if run_btn:
+    # 상황 설명 입력이 있으면 자동 실행, 아니면 기존 버튼 방식
+    auto_run = user_scenario_text and user_scenario_text.strip() != ""
+    if run_btn or auto_run:
         with st.spinner("AI가 수백 가지 시나리오를 시뮬레이션 중입니다..."):
             engine = TokenSimulationEngine()
             inputs = {
