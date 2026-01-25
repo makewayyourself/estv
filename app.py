@@ -221,6 +221,12 @@ def main():
         "fund_inflow": 0, "inflation_policy": "없음", "ai_strategy": "중립적", "scenario_preset": "사용자 정의"
     }
     ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
+        apply_btn = st.button("적용", type="primary")
+        show_result = False
+        if apply_btn and user_scenario_text.strip():
+            with st.spinner("전문가 시나리오를 AI가 설정하고 있습니다. 입력을 분석 중입니다..."):
+                ai_inputs = scenario_text_to_inputs(user_scenario_text, default_inputs)
+                show_result = True
 
     with st.sidebar:
         st.header("⚙️ 전문가 시나리오 설정")
