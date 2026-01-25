@@ -1,3 +1,55 @@
+# 전략적 개입 에이전트 (StrategicInterventionAgent)
+class StrategicInterventionAgent:
+    """
+    Benchmarks: Gauntlet's Dynamic Risk Engine
+    역할: 단순 규칙 수행이 아니라, '자원 효율성'을 계산하여 개입 여부를 판단함.
+    """
+    def __init__(self, total_budget_usdt, strategy_mode="DEFENSIVE"):
+        self.budget = total_budget_usdt
+        self.strategy_mode = strategy_mode  # DEFENSIVE, AGGRESSIVE, BALANCED
+        self.intervention_history = []
+
+    def evaluate(self, market_state):
+        """
+        AI 판단 로직:
+        1. 현재 가격 추세(Momentum)가 하락세인가?
+        2. 오더북 깊이(Depth)가 얇아져서 개입 효과가 극대화되는 시점인가?
+        3. 남은 예산으로 방어가 가능한가?
+        """
+        price = market_state['price']
+        roi = market_state['roi']
+        volatility = market_state['volatility']
+        depth_health = market_state['depth_ratio']
+        
+        # 판단 스코어링 (0.0 ~ 1.0)
+        urgency_score = 0.0
+        
+        # 로직 1: 하락 가속도 감지 (떨어지는 칼날 잡지 않기 vs 지지선 방어)
+        if roi < -20 and volatility > 0.1: 
+            urgency_score += 0.4  # 급락 시 경계 태세
+            
+        # 로직 2: 유동성 고갈 감지 (이때가 개입 효율이 가장 높음 - 적은 돈으로 가격 올리기)
+        if depth_health < 0.6:
+            urgency_score += 0.3
+            
+        # 로직 3: 전략 모드에 따른 가중치
+        if self.strategy_mode == "DEFENSIVE":
+            if roi < -10: urgency_score += 0.2
+        elif self.strategy_mode == "AGGRESSIVE":
+            if volatility > 0.05: urgency_score += 0.2 # 변동성 있으면 공격적 개입
+
+        # 행동 결정
+        action = "HOLD"
+        amount = 0.0
+        
+        if urgency_score >= 0.7 and self.budget > 0:
+            action = "BUYBACK"
+            # 예산의 10% ~ 30%를 동적으로 할당 (급할수록 많이)
+            allocation_ratio = min(0.3, (urgency_score - 0.5)) 
+            amount = self.budget * allocation_ratio
+            self.budget -= amount
+            
+        return action, amount, urgency_score
 # app.py 파일에 이 내용을 복사해 넣으세요
 import streamlit as st
 from dotenv import load_dotenv
