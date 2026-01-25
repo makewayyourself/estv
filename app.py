@@ -41,6 +41,7 @@ def scenario_text_to_inputs(user_text, default_inputs=None):
 # app_merged.py의 UI/UX 및 핵심 기능을 통합
 
 import streamlit as st
+from dotenv import load_dotenv
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -48,6 +49,7 @@ import json
 from datetime import datetime
 import os
 import openai
+load_dotenv()
 from fpdf import FPDF
 def generate_strategy_pdf(inputs, results, ai_report):
     from fpdf import FPDF
@@ -225,7 +227,14 @@ def main():
                 reader = PyPDF2.PdfReader(uploaded_file)
                 uploaded_text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
             except Exception:
-                uploaded_text = "(PDF 텍스트 추출 실패)"
+                # PyPDF2 실패 시 pdfplumber로 재시도
+                try:
+                    import pdfplumber
+                    uploaded_file.seek(0)
+                    with pdfplumber.open(uploaded_file) as pdf:
+                        uploaded_text = "\n".join(page.extract_text() or '' for page in pdf.pages)
+                except Exception:
+                    uploaded_text = "(PDF 텍스트 추출 실패)"
         elif uploaded_file.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"]:
             try:
                 import pandas as pd
