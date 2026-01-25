@@ -257,10 +257,27 @@ def main():
         )
     st.markdown("---")
     # 1. 상황 설명 → AI 파싱 → 입력값 dict 생성
-    default_inputs = {
-        "big_sell_event": False, "big_sell_prob": 5, "pump_event": False, "pump_prob": 3,
-        "fund_inflow": 0, "inflation_policy": "없음", "ai_strategy": "중립적", "scenario_preset": "사용자 정의"
-    }
+    # 토큰 이름 입력 및 ESTV일 때 기본값 자동 세팅
+    token_name = st.sidebar.text_input("토큰 이름", value="ESTV", help="시뮬레이션할 토큰의 이름을 입력하세요. ESTV 입력 시 기본 방침 자동 적용")
+    if token_name.strip().upper() == "ESTV":
+        default_inputs = {
+            "big_sell_event": False,
+            "big_sell_prob": 5,
+            "pump_event": False,
+            "pump_prob": 3,
+            "fund_inflow": 0,
+            "inflation_policy": "없음",
+            "ai_strategy": "중립적",
+            "scenario_preset": "사용자 정의",
+            # ESTV_Tokenomics 기준 예시 (필요시 확장)
+            "initial_investor_lockup": "6개월 락업, 6개월 베스팅 (월 17%)",
+            "initial_investor_amount": 100_000_000
+        }
+    else:
+        default_inputs = {
+            "big_sell_event": False, "big_sell_prob": 5, "pump_event": False, "pump_prob": 3,
+            "fund_inflow": 0, "inflation_policy": "없음", "ai_strategy": "중립적", "scenario_preset": "사용자 정의"
+        }
     apply_btn = st.button("적용", type="primary")
     ai_inputs = default_inputs.copy()
     show_result = False
