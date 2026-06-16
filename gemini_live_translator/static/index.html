@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini Live Translator — Real-time Interpreter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .pulse-dot {
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.45;
+          transform: scale(0.82);
+        }
+      }
+      .transcript-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f5f transparent;
+      }
+      .transcript-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .transcript-scroll::-webkit-scrollbar-thumb {
+        background: #3f3f5f;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div class="mx-auto max-w-5xl px-5 py-8">
+      <!-- Header -->
+      <header class="mb-8 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">
+            <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+              Gemini Live Translator
+            </span>
+          </h1>
+          <p class="mt-1 text-sm text-slate-400">
+            Real-time audio-to-audio simultaneous interpreter · Korean ⇄ English
+          </p>
+        </div>
+        <div
+          id="statusBadge"
+          class="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm"
+        >
+          <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>
+          <span id="statusText" class="font-medium text-slate-300">Idle</span>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Controls -->
+        <section class="lg:col-span-1">
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Session Control
+            </h2>
+
+            <button
+              id="toggleBtn"
+              class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span id="toggleIcon">🎙️</span>
+              <span id="toggleLabel">Start Translating</span>
+            </button>
+
+            <div class="mt-6 space-y-4 text-sm">
+              <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Voice</label>
+                <select
+                  id="voiceSelect"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="Aoede">Aoede (natural)</option>
+                  <option value="Puck">Puck</option>
+                  <option value="Charon">Charon</option>
+                  <option value="Kore">Kore</option>
+                  <option value="Fenrir">Fenrir</option>
+                </select>
+                <p class="mt-1 text-xs text-slate-500">
+                  Voice is applied to the next session you start.
+                </p>
+              </div>
+
+              <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+                <div class="flex justify-between py-0.5">
+                  <span>Model</span><span id="modelInfo" class="font-mono text-slate-300">—</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Input</span><span class="font-mono text-slate-300">PCM16 · 16 kHz</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Output</span><span class="font-mono text-slate-300">PCM16 · 24 kHz</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Latency</span><span id="latencyInfo" class="font-mono text-slate-300">~100 ms chunks</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Transcript -->
+        <section class="lg:col-span-2">
+          <div class="flex h-[28rem] flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
+            <div class="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Live Transcript
+              </h2>
+              <button
+                id="clearBtn"
+                class="rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+              >
+                Clear
+              </button>
+            </div>
+            <div
+              id="transcript"
+              class="transcript-scroll flex-1 space-y-3 overflow-y-auto px-6 py-5"
+            >
+              <p id="placeholder" class="text-sm text-slate-600">
+                Press <span class="font-semibold text-slate-400">Start Translating</span>, allow
+                microphone access, and start speaking in Korean or English…
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="mt-6 text-center text-xs text-slate-600">
+        Powered by the Google Gemini Multimodal Live API · zero-inference audio pipeline
+      </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
