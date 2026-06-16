@@ -8,6 +8,9 @@ There is no STT → Translate → TTS chain. Microphone audio is streamed direct
 into Gemini's bidirectional live channel, and translated audio streams straight
 back out, which is what keeps latency low.
 
+> **📱 안드로이드 앱으로 쓰려면 → [`ANDROID.md`](./ANDROID.md) (한글 가이드)**
+> Capacitor로 APK를 빌드하고, 백엔드는 클라우드(Render)에 배포하는 전체 과정.
+
 ```
 [ Browser ]  ⇄ (PCM16 audio + JSON over WebSocket) ⇄  [ FastAPI ]  ⇄ (Live API) ⇄  [ Gemini ]
 ```
@@ -19,13 +22,24 @@ gemini_live_translator/
 ├── main.py                     # FastAPI app + /api/stream WebSocket bridge
 ├── services/
 │   └── gemini_live.py          # google-genai client + LiveConnectConfig
-├── static/
+├── static/                     # web bundle (also packaged into the APK)
 │   ├── index.html              # Tailwind dashboard (status, transcript, voice)
 │   ├── app.js                  # capture + playback + WebSocket controller
-│   └── audio-processor.js      # AudioWorklet: Float32 → PCM16 100 ms chunks
+│   ├── audio-processor.js      # AudioWorklet: Float32 → PCM16 100 ms chunks
+│   └── config.js               # build-time DEFAULT_SERVER_URL for the app
+├── Dockerfile                  # backend container (Render/Railway/Fly/Cloud Run)
+├── render.yaml                 # one-click cloud deploy blueprint
+├── capacitor.config.json       # Android wrapper config
+├── package.json                # Capacitor tooling
+├── scripts/patch-android.mjs   # injects mic permissions into the APK
+├── ANDROID.md                  # 📱 한글 앱 빌드/설치 가이드
 ├── requirements.txt
 └── .env.example
 ```
+
+> The frontend is served from the web **root** (`/`, `/app.js`, …) rather than
+> `/static`, so the exact same asset layout works both on the web and inside the
+> Capacitor app (which serves the bundle from the app root).
 
 ## Setup
 

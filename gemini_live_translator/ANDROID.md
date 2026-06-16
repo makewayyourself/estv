@@ -1,0 +1,88 @@
+# 안드로이드 앱으로 사용하기 (한글 가이드)
+
+이 문서는 **Gemini 실시간 통역기**를 안드로이드폰에 앱(APK)으로 설치해서
+쓰는 전체 과정을 설명합니다. 구조는 이렇습니다.
+
+```
+[ 안드로이드 앱(APK) ]  ⇄  wss(보안 웹소켓)  ⇄  [ 클라우드 백엔드 ]  ⇄  [ Gemini ]
+   마이크/스피커                                  (API 키 보관)
+```
+
+API 키는 앱이 아니라 **클라우드 백엔드**에 보관됩니다(안전). 앱은 그 서버에
+마이크 오디오를 보내고, 통역된 오디오를 받아서 재생만 합니다.
+
+순서는 딱 3단계입니다.
+**(1) 백엔드 클라우드 배포 → (2) APK 빌드 → (3) 폰에 설치하고 서버주소 입력**
+
+---
+
+## 1단계 — 백엔드를 클라우드에 배포 (Render, 무료)
+
+1. 이 저장소를 GitHub에 올립니다(이미 올라가 있으면 생략).
+2. <https://render.com> 가입 후 로그인.
+3. **New > Blueprint** 클릭 → 이 저장소 선택.
+   저장소의 `gemini_live_translator/render.yaml` 을 자동으로 인식합니다.
+4. 배포 중 `GEMINI_API_KEY` 입력란이 나오면 본인의 Gemini API 키를 붙여넣습니다.
+   (키 발급: <https://aistudio.google.com/apikey>)
+5. 배포가 끝나면 `https://gemini-live-translator.onrender.com` 같은 **공개 주소**가
+   생깁니다. 이 주소를 적어두세요. 브라우저에서 그 주소 뒤에 `/api/health` 를
+   붙여 열었을 때 `"status":"ok"` 가 보이면 정상입니다.
+
+> 무료 플랜은 한동안 안 쓰면 잠들었다가 첫 접속 때 10~30초 깨어나는 지연이
+> 있습니다. 바로 반응이 없으면 잠깐 기다렸다가 다시 시도하세요.
+
+---
+
+## 2단계 — APK 빌드 (GitHub Actions, 안드로이드 스튜디오 불필요)
+
+이 저장소에는 APK를 자동으로 만들어 주는 GitHub Actions가 들어 있습니다.
+
+1. GitHub 저장소의 **Actions** 탭으로 갑니다.
+2. 왼쪽에서 **Build Android APK** 워크플로 선택 → **Run workflow** 클릭.
+3. 5~10분 뒤 빌드가 끝나면, 그 실행 결과 페이지 맨 아래 **Artifacts** 에서
+   `gemini-translator-debug-apk` 를 내려받습니다(압축 안에 `app-debug.apk`).
+
+> 앱에 클라우드 주소를 미리 박아두고 싶으면, 빌드 전에
+> `gemini_live_translator/static/config.js` 의
+> `window.DEFAULT_SERVER_URL` 에 1단계의 주소를 적어두면 됩니다.
+> (비워두면 앱 안에서 직접 입력 — 한 번 입력하면 폰에 기억됩니다.)
+
+### 안드로이드 스튜디오로 직접 빌드하는 경우(선택)
+
+```bash
+cd gemini_live_translator
+npm install
+npx cap add android
+node scripts/patch-android.mjs   # 마이크 권한 주입
+npx cap sync android
+npx cap open android             # 안드로이드 스튜디오에서 Run
+```
+
+---
+
+## 3단계 — 폰에 설치하고 사용
+
+1. 받은 `app-debug.apk` 를 폰으로 옮겨 실행합니다.
+   "출처를 알 수 없는 앱 설치"를 허용해야 설치됩니다(설정에서 일시 허용).
+2. 앱을 열고, 마이크 권한 요청이 뜨면 **허용**.
+3. **Server URL** 칸에 1단계의 클라우드 주소(`https://...onrender.com`)를 넣고
+   **Save**. (config.js에 미리 넣었다면 이미 채워져 있습니다.)
+4. **Start Translating** 를 누르고 한국어 또는 영어로 말하면, 통역된 음성이
+   스피커로 나오고 화면에 원문/번역 자막이 실시간으로 뜹니다.
+
+> **이어폰(헤드셋) 사용을 권장합니다.** 스피커로 통역 음성을 크게 내보내면
+> 마이크가 그 소리를 다시 잡아 되먹임(에코)이 생길 수 있습니다.
+
+---
+
+## 자주 막히는 부분
+
+| 증상 | 원인 / 해결 |
+| --- | --- |
+| "Cannot reach server" | Server URL 오타, 또는 백엔드가 잠든 상태. 주소 확인 후 잠시 뒤 재시도. |
+| "API key not configured" | Render 환경변수 `GEMINI_API_KEY` 미설정. Render 대시보드에서 추가. |
+| 마이크가 안 잡힘 | 폰 설정 > 앱 > 권한 에서 마이크 허용 확인. |
+| 소리는 나오는데 자막이 늦음 | 정상입니다. 자막은 음성보다 약간 늦게 스트리밍됩니다. |
+| 통역이 끊김/되먹임 | 이어폰을 쓰세요(스피커 + 마이크 동시 사용 시 에코). |
+
+자세한 백엔드/아키텍처 설명은 [`README.md`](./README.md) 를 참고하세요.

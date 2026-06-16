@@ -28,7 +28,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.genai import types
 
@@ -50,11 +50,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="Gemini Live Translator")
 
-
-@app.get("/")
-async def index() -> RedirectResponse:
-    """Send people to the dashboard."""
-    return RedirectResponse(url="/static/index.html")
+# Allow the packaged Android app (capacitor://localhost / https://localhost) to
+# call the HTTP API. WebSocket handshakes are not subject to CORS, but the
+# health probe is, so we keep this permissive.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/health")
@@ -218,8 +222,11 @@ async def stream(ws: WebSocket) -> None:
         logger.info("Connection closed")
 
 
-# Mounted last so the API routes above take precedence.
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+# Mounted last (at the web root) so the explicit /api routes above take
+# precedence. Serving at "/" — rather than "/static" — makes the same asset
+# layout work both here and inside the packaged Capacitor app, where the web
+# bundle is served from the app root.
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":

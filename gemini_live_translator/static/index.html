@@ -74,6 +74,29 @@
 
             <div class="mt-6 space-y-4 text-sm">
               <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Server URL</label>
+                <div class="flex gap-2">
+                  <input
+                    id="serverUrl"
+                    type="url"
+                    inputmode="url"
+                    placeholder="https://your-app.onrender.com"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                  />
+                  <button
+                    id="saveServerBtn"
+                    class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-300 transition hover:bg-slate-700"
+                  >
+                    Save
+                  </button>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                  Cloud backend address. Required in the Android app; leave blank
+                  on the web to use this same server.
+                </p>
+              </div>
+
+              <div>
                 <label class="mb-1.5 block font-medium text-slate-400">Voice</label>
                 <select
                   id="voiceSelect"
@@ -140,6 +163,7 @@
       </footer>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
   </body>
 </html>

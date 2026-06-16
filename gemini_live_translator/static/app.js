@@ -47,6 +47,8 @@ class TranslatorClient {
       clearBtn: document.getElementById("clearBtn"),
       voiceSelect: document.getElementById("voiceSelect"),
       modelInfo: document.getElementById("modelInfo"),
+      serverUrl: document.getElementById("serverUrl"),
+      saveServerBtn: document.getElementById("saveServerBtn"),
     };
 
     this.els.toggleBtn.addEventListener("click", () => {
@@ -60,8 +62,41 @@ class TranslatorClient {
       this._translationLine = null;
     });
 
-    // Pre-fill model info from the health endpoint.
-    fetch("/api/health")
+    // Server URL: remembered on the device, pre-filled from the saved value or
+    // the build-time default in config.js.
+    this.els.serverUrl.value = this._serverBase();
+    this.els.saveServerBtn.addEventListener("click", () => {
+      const v = this.els.serverUrl.value.trim().replace(/\/+$/, "");
+      if (v) localStorage.setItem("serverUrl", v);
+      else localStorage.removeItem("serverUrl");
+      this._setStatus("idle", "Server URL saved");
+      this._refreshHealth();
+    });
+
+    this._refreshHealth();
+  }
+
+  /** Resolve the backend base URL (no trailing slash) for this device. */
+  _serverBase() {
+    const saved = (localStorage.getItem("serverUrl") || "").trim();
+    if (saved) return saved.replace(/\/+$/, "");
+    const fromConfig = (window.DEFAULT_SERVER_URL || "").trim();
+    if (fromConfig) return fromConfig.replace(/\/+$/, "");
+    // On the web (served over http/https) default to the current origin.
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      return location.origin;
+    }
+    return "";
+  }
+
+  /** Pull model / key status from the backend's health endpoint. */
+  _refreshHealth() {
+    const base = this._serverBase();
+    if (!base) {
+      this._setStatus("idle", "Set the server URL to begin");
+      return;
+    }
+    fetch(`${base}/api/health`)
       .then((r) => r.json())
       .then((d) => {
         this.els.modelInfo.textContent = d.model || "—";
@@ -69,7 +104,7 @@ class TranslatorClient {
           this._setStatus("error", "API key not configured on server");
         }
       })
-      .catch(() => {});
+      .catch(() => this._setStatus("error", "Cannot reach server"));
   }
 
   // --- Status helpers ------------------------------------------------------
@@ -152,10 +187,19 @@ class TranslatorClient {
 
   // --- WebSocket -----------------------------------------------------------
 
+  _wsUrl() {
+    const base = this._serverBase();
+    if (!base) {
+      throw new Error("No server URL set — enter your cloud backend address");
+    }
+    // http(s)://host -> ws(s)://host/api/stream
+    const wsBase = base.replace(/^http/i, "ws");
+    return `${wsBase}/api/stream`;
+  }
+
   _openSocket() {
     return new Promise((resolve, reject) => {
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/api/stream`);
+      const ws = new WebSocket(this._wsUrl());
       ws.binaryType = "arraybuffer";
 
       ws.onopen = () => {
@@ -238,7 +282,7 @@ class TranslatorClient {
     this.captureContext = new (window.AudioContext || window.webkitAudioContext)(
       { sampleRate: INPUT_SAMPLE_RATE }
     );
-    await this.captureContext.audioWorklet.addModule("/static/audio-processor.js");
+    await this.captureContext.audioWorklet.addModule("./audio-processor.js");
 
     this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
     this.workletNode = new AudioWorkletNode(
