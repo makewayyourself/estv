@@ -43,6 +43,7 @@ class TranslatorClient {
     this.micSource = null;
     this.mediaStream = null;
     this.running = false;
+    this._lastError = "";
 
     // Playback scheduling cursor (in playbackContext time).
     this.nextPlayTime = 0;
@@ -743,6 +744,7 @@ class TranslatorClient {
 
   async start() {
     try {
+      this._lastError = "";
       this._setStatus("connecting", "Connecting…");
       this.els.toggleBtn.disabled = true;
 
@@ -843,13 +845,23 @@ class TranslatorClient {
         );
         resolve();
       };
-      ws.onerror = () => reject(new Error("WebSocket connection failed"));
-      ws.onclose = () => {
+      ws.onerror = () => reject(new Error("WebSocket connection failed (서버 주소/네트워크 확인)"));
+      ws.onclose = (ev) => {
         if (this.running) {
           this.running = false;
-          this._setStatus("idle", "Disconnected");
+          // Surface the real reason: a server error message if we got one,
+          // otherwise the close code (1008 = wrong access token).
+          let why = this._lastError;
+          if (!why) {
+            why =
+              ev.code === 1008
+                ? "Access Token이 서버와 불일치"
+                : `연결 끊김 (code ${ev.code})`;
+          }
+          this._setStatus("error", why);
           this.els.toggleLabel.textContent = "Start Translating";
           this.els.toggleIcon.textContent = "🎙️";
+          this.els.pauseBtn.disabled = true;
           this._teardown();
         }
       };
@@ -894,7 +906,8 @@ class TranslatorClient {
         this._flushPlayback();
         break;
       case "error":
-        this._setStatus("error", msg.message || "Server error");
+        this._lastError = msg.message || "Server error";
+        this._setStatus("error", this._lastError);
         break;
     }
   }
