@@ -26,11 +26,12 @@ import logging
 import os
 import secrets
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from typing import List
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.genai import types
@@ -48,11 +49,13 @@ from services.gemini_live import (
     SUPPORTED_LANGUAGES,
     build_config,
     build_pronounce_prompt,
+    build_qa_prompt,
     build_risk_prompt,
     build_summary_prompt,
     get_client,
     normalize_lang,
 )
+from services.exporters import EXPORTERS
 
 # Cap how much transcript we send to the summarizer (keep the most recent part).
 MAX_SUMMARY_CHARS = 40_000
@@ -149,13 +152,17 @@ class RiskLevel(str, enum.Enum):
 
 
 class RiskAnalysis(BaseModel):
-    """Structured risk-detection result (enforced as the model's JSON schema)."""
+    """Structured per-turn analysis (risk + meaning clarification)."""
 
     risk_level: RiskLevel
     risk_types: List[str]
     subtitle_alert: str
     reason: str
     suggested_question: str
+    # Meaning-clarification (mis-recognition due to unclear pronunciation).
+    clarify_suspected: bool
+    clarify_did_you_mean: str
+    clarify_corrected_translation: str
 
 
 class AnalyzeRequest(BaseModel):
@@ -163,6 +170,7 @@ class AnalyzeRequest(BaseModel):
     translation: str = ""
     alert_language: str = DEFAULT_LANG_A
     context: str = ""
+    history: str = ""
     token: str | None = None
 
 
@@ -186,7 +194,11 @@ async def analyze(req: AnalyzeRequest) -> dict:
 
     alert_language = normalize_lang(req.alert_language, DEFAULT_LANG_A)
     prompt = build_risk_prompt(
-        original[:2000], (req.translation or "")[:2000], alert_language, req.context[:200]
+        original[:2000],
+        (req.translation or "")[:2000],
+        alert_language,
+        req.context[:200],
+        (req.history or "")[:4000],
     )
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -199,11 +211,96 @@ async def analyze(req: AnalyzeRequest) -> dict:
         )
         data = json.loads(response.text or "{}")
     except Exception as exc:  # noqa: BLE001 — never break the UI on analysis failure
-        logger.warning("Risk analysis failed: %s", exc)
-        return {"risk_level": "none", "risk_types": [], "subtitle_alert": "",
-                "reason": "", "suggested_question": ""}
+        logger.warning("Per-turn analysis failed: %s", exc)
+        return {
+            "risk_level": "none", "risk_types": [], "subtitle_alert": "",
+            "reason": "", "suggested_question": "", "clarify_suspected": False,
+            "clarify_did_you_mean": "", "clarify_corrected_translation": "",
+        }
 
     return data
+
+
+class AskRequest(BaseModel):
+    transcript: str
+    question: str
+    language: str = DEFAULT_LANG_A
+    token: str | None = None
+
+
+@app.post("/api/ask")
+async def ask(req: AskRequest) -> dict:
+    """Answer a question grounded in the saved conversation transcript."""
+    _check_token(req.token)
+
+    transcript = (req.transcript or "").strip()
+    question = (req.question or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Transcript is empty")
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is empty")
+    if len(transcript) > MAX_SUMMARY_CHARS:
+        transcript = transcript[-MAX_SUMMARY_CHARS:]
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    language = normalize_lang(req.language, DEFAULT_LANG_A)
+    prompt = build_qa_prompt(transcript, question[:1000], language)
+    try:
+        response = await client.aio.models.generate_content(
+            model=SUMMARY_MODEL, contents=prompt
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Q&A failed")
+        raise HTTPException(status_code=502, detail=f"Q&A failed: {exc}")
+
+    return {"answer": (response.text or "").strip()}
+
+
+class ExportEntry(BaseModel):
+    time: str = ""
+    source: str = ""
+    translation: str = ""
+    risk: str = ""
+
+
+class ExportRequest(BaseModel):
+    title: str = "회의 노트 / Meeting Notes"
+    entries: List[ExportEntry] = []
+    summary: str = ""
+    format: str = "md"  # md | docx | pdf
+    token: str | None = None
+
+
+@app.post("/api/export")
+async def export(req: ExportRequest) -> Response:
+    """Render the meeting notes as a downloadable md / docx / pdf file."""
+    _check_token(req.token)
+
+    fmt = (req.format or "md").lower()
+    if fmt not in EXPORTERS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {fmt}")
+    if not req.entries:
+        raise HTTPException(status_code=400, detail="No notes to export")
+
+    builder, media_type, ext = EXPORTERS[fmt]
+    entries = [e.model_dump() for e in req.entries]
+    try:
+        content = builder(req.title, entries, req.summary)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Export failed")
+        raise HTTPException(status_code=500, detail=f"Export failed: {exc}")
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M")
+    filename = f"meeting-notes-{stamp}.{ext}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class PronounceRequest(BaseModel):

@@ -9,10 +9,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App source (backend + static frontend).
+# App source (backend + static frontend + PDF fonts).
 COPY main.py .
 COPY services ./services
 COPY static ./static
+COPY assets ./assets
 
 # Most platforms set $PORT; default to 8000 for local `docker run`.
 ENV PORT=8000

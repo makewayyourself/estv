@@ -172,13 +172,17 @@ def build_pronounce_prompt(text: str, script: str) -> str:
 
 
 def build_risk_prompt(
-    original: str, translation: str, alert_language: str, context: str = ""
+    original: str,
+    translation: str,
+    alert_language: str,
+    context: str = "",
+    history: str = "",
 ) -> str:
-    """Build the risk-detection prompt for one finalized utterance.
+    """Build the per-turn analysis prompt (risk detection + meaning clarify).
 
-    The model returns structured JSON (enforced via response_schema). The
-    ``subtitle_alert`` and ``suggested_question`` are written in
-    ``alert_language`` so the user reads guidance in their own language.
+    Returns structured JSON (enforced via response_schema). All human-readable
+    fields are written in ``alert_language``. ``history`` carries the recent
+    conversation so the model can judge mis-recognition from context.
     """
     lang_name = SUPPORTED_LANGUAGES.get(alert_language, "English")
     context_line = ""
@@ -188,19 +192,43 @@ def build_risk_prompt(
             "terms (e.g. for oil/commodity trading: LOI, SCO, FCO, POP, SGS/BV, "
             "Platts, CIF/FOB, upfront fee, allocation, mandate) and flag them.\n"
         )
+    history_line = ""
+    if history.strip():
+        history_line = f"\nRecent conversation (for context):\n{history.strip()}\n"
+
     return (
-        "You are a real-time business-interpreting safety assistant. Analyze the "
-        "utterance below for things the listener should double-check before "
-        "acting, across these areas: money/payment, contracts & liability, "
-        "guarantees/exclusivity/penalties/advance-payment, numbers·dates·"
-        "quantities·currency·units, culturally rude or overly blunt phrasing, "
-        "personal/sensitive data, and low translation confidence.\n"
-        "Be conservative: set risk_level to 'none' for ordinary small talk. Only "
-        "raise medium/high when there is a real business risk to verify. Keep "
-        f"subtitle_alert short and actionable. Write subtitle_alert and "
-        f"suggested_question in {lang_name}.{context_line}\n"
-        f"ORIGINAL (source language): {original}\n"
-        f"TRANSLATION: {translation}\n"
+        "You are a real-time business-interpreting copilot. You do TWO things "
+        "for the latest utterance.\n\n"
+        "PART A — Risk: flag anything the listener should double-check before "
+        "acting (money/payment, contracts & liability, guarantees/exclusivity/"
+        "penalties/advance-payment, numbers·dates·quantities·currency·units, "
+        "culturally rude or overly blunt phrasing, personal/sensitive data, low "
+        "translation confidence). Be conservative — 'none' for ordinary small "
+        "talk; medium/high only for a real business risk.\n\n"
+        "PART B — Meaning clarification: the audio is transcribed live, so "
+        "unclear or slurred pronunciation can produce a wrong or nonsensical "
+        "translation. Using the recent conversation as context, judge whether "
+        "the utterance was likely MIS-RECOGNIZED. If you suspect so, set "
+        "clarify_suspected=true, put the most likely intended meaning in "
+        "clarify_did_you_mean phrased as a confirmation (e.g. 'Did you mean: …?'), "
+        "and give a fixed translation in clarify_corrected_translation. If the "
+        "utterance is clear, set clarify_suspected=false and leave those empty.\n\n"
+        f"Write subtitle_alert, clarify_did_you_mean and clarify_corrected_"
+        f"translation in {lang_name}.{context_line}{history_line}\n"
+        f"LATEST ORIGINAL (source language): {original}\n"
+        f"LATEST TRANSLATION: {translation}\n"
+    )
+
+
+def build_qa_prompt(transcript: str, question: str, language: str) -> str:
+    """Build a grounded Q&A prompt over the saved conversation transcript."""
+    lang_name = SUPPORTED_LANGUAGES.get(language, "English")
+    return (
+        "You are a meeting assistant. Answer the user's QUESTION using ONLY the "
+        "TRANSCRIPT below. If the answer is not present, say you cannot find it "
+        f"in the conversation. Be concise and specific. Answer in {lang_name}.\n\n"
+        f"=== TRANSCRIPT ===\n{transcript}\n\n"
+        f"=== QUESTION ===\n{question}\n"
     )
 
 

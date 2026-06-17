@@ -32,10 +32,18 @@ back out, which is what keeps latency low.
 
 **Meeting notes & summary:** every finalized turn is logged with a timestamp
 (bilingual original → translation) and persisted on the device, so the record
-survives an app restart. A **Summarize** button sends the running transcript to
-a Gemini text model and returns structured notes (one-line summary, key points,
-decisions, action items) in the language you choose, and **Export** downloads
-the whole thing as Markdown.
+survives an app restart. **Summarize** returns structured notes (one-line
+summary, key points, decisions, action items). **Export** saves the notes +
+summary as **Markdown, Word (.docx) or PDF** (`POST /api/export`; PDF uses a
+bundled Korean font). **Ask** answers questions grounded in the saved
+conversation (`POST /api/ask`).
+
+**🔎 Clarify (mis-hearing guard):** because speech is transcribed live, unclear
+or slurred pronunciation can produce a wrong translation. With Clarify on, each
+turn is checked against the recent context and — if a mis-recognition is
+suspected — a card proposes *"Did you mean …?"* with a corrected translation.
+It shares the single per-turn analysis call with Risk Guard, so it adds no
+extra latency to the live translation.
 
 > **📱 안드로이드 앱으로 쓰려면 → [`ANDROID.md`](./ANDROID.md) (한글 가이드)**
 > Capacitor로 APK를 빌드하고, 백엔드는 클라우드(Render)에 배포하는 전체 과정.

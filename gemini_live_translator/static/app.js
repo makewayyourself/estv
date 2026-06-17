@@ -85,10 +85,21 @@ class TranslatorClient {
       noteCount: document.getElementById("noteCount"),
       summaryLang: document.getElementById("summaryLang"),
       summarizeBtn: document.getElementById("summarizeBtn"),
-      exportBtn: document.getElementById("exportBtn"),
+      exportMdBtn: document.getElementById("exportMdBtn"),
+      exportDocxBtn: document.getElementById("exportDocxBtn"),
+      exportPdfBtn: document.getElementById("exportPdfBtn"),
       newMeetingBtn: document.getElementById("newMeetingBtn"),
       summaryBox: document.getElementById("summaryBox"),
       summaryContent: document.getElementById("summaryContent"),
+      askInput: document.getElementById("askInput"),
+      askBtn: document.getElementById("askBtn"),
+      askAnswer: document.getElementById("askAnswer"),
+      // Clarify
+      clarifyToggle: document.getElementById("clarifyToggle"),
+      clarifyAlert: document.getElementById("clarifyAlert"),
+      clarifyText: document.getElementById("clarifyText"),
+      clarifyCorrected: document.getElementById("clarifyCorrected"),
+      clarifyDismiss: document.getElementById("clarifyDismiss"),
       // Quick actions
       pauseBtn: document.getElementById("pauseBtn"),
       replayBtn: document.getElementById("replayBtn"),
@@ -281,9 +292,30 @@ class TranslatorClient {
       const q = this.els.riskQuestion.textContent || "";
       if (q && navigator.clipboard) navigator.clipboard.writeText(q).catch(() => {});
     });
+
+    // Meaning-clarification toggle (shares the per-turn analysis call).
+    this.els.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
+    this.els.clarifyToggle.addEventListener("change", () => {
+      localStorage.setItem("clarify", this.els.clarifyToggle.checked ? "1" : "0");
+      if (!this.els.clarifyToggle.checked) this.els.clarifyAlert.classList.add("hidden");
+    });
+    this.els.clarifyDismiss.addEventListener("click", () =>
+      this.els.clarifyAlert.classList.add("hidden")
+    );
   }
 
-  /** Analyze one finalized turn for risks (off the real-time path). */
+  /** Recent transcript text (last few turns) for context-aware analysis. */
+  _recentHistory(n = 6) {
+    return this.meetingLog
+      .slice(-n)
+      .map((e) => `${e.source}${e.translation ? "  → " + e.translation : ""}`)
+      .join("\n");
+  }
+
+  /**
+   * Per-turn analysis (risk + meaning clarification), off the real-time path.
+   * One model call returns both; we render only what the user enabled.
+   */
   async _analyzeTurn(entry) {
     const base = this._serverBase();
     if (!base || !entry.source) return;
@@ -296,23 +328,55 @@ class TranslatorClient {
           translation: entry.translation,
           alert_language: this.els.summaryLang.value,
           context: this.els.riskContext.value.trim(),
+          history: this._recentHistory(),
           token: this._accessToken() || undefined,
         }),
       });
       if (!res.ok) return;
-      const risk = await res.json();
-      if (!risk || risk.risk_level === "none") return;
+      const data = await res.json();
+      if (!data) return;
 
-      entry.risk = risk; // attach to the note + persist
-      try {
-        localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
-      } catch {
-        /* ignore */
+      let changed = false;
+
+      // Risk (only if Risk Guard is on).
+      if (this.els.riskToggle.checked && data.risk_level && data.risk_level !== "none") {
+        entry.risk = {
+          risk_level: data.risk_level,
+          risk_types: data.risk_types,
+          subtitle_alert: data.subtitle_alert,
+          reason: data.reason,
+          suggested_question: data.suggested_question,
+        };
+        this._renderRiskAlert(entry.risk);
+        changed = true;
       }
-      this._renderRiskAlert(risk);
+
+      // Meaning clarification (only if Clarify is on).
+      if (this.els.clarifyToggle.checked && data.clarify_suspected) {
+        entry.clarify = {
+          did_you_mean: data.clarify_did_you_mean,
+          corrected: data.clarify_corrected_translation,
+        };
+        this._renderClarify(entry.clarify);
+        changed = true;
+      }
+
+      if (changed) {
+        try {
+          localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
+        } catch {
+          /* ignore */
+        }
+      }
     } catch {
       /* analysis is best-effort; never disturb the conversation */
     }
+  }
+
+  _renderClarify(c) {
+    this.els.clarifyText.textContent = c.did_you_mean || "";
+    this.els.clarifyCorrected.textContent = c.corrected || "";
+    this.els.clarifyAlert.classList.remove("hidden");
   }
 
   _renderRiskAlert(risk) {
@@ -362,8 +426,14 @@ class TranslatorClient {
     this._renderNotes();
 
     this.els.summarizeBtn.addEventListener("click", () => this._summarize());
-    this.els.exportBtn.addEventListener("click", () => this._exportNotes());
+    this.els.exportMdBtn.addEventListener("click", () => this._export("md"));
+    this.els.exportDocxBtn.addEventListener("click", () => this._export("docx"));
+    this.els.exportPdfBtn.addEventListener("click", () => this._export("pdf"));
     this.els.newMeetingBtn.addEventListener("click", () => this._newMeeting());
+    this.els.askBtn.addEventListener("click", () => this._ask());
+    this.els.askInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") this._ask();
+    });
   }
 
   /** Append a finalized turn to the meeting log and persist it. */
@@ -391,8 +461,10 @@ class TranslatorClient {
     }
     this._renderNotes();
 
-    // Fire-and-forget risk analysis (does not block translation).
-    if (this.els.riskToggle.checked) this._analyzeTurn(entry);
+    // Fire-and-forget per-turn analysis (does not block translation).
+    if (this.els.riskToggle.checked || this.els.clarifyToggle.checked) {
+      this._analyzeTurn(entry);
+    }
   }
 
   _renderNotes() {
@@ -498,37 +570,100 @@ class TranslatorClient {
     }
   }
 
-  _exportNotes() {
+  /** Build the structured entry list the export endpoint expects. */
+  _exportEntries() {
+    return this.meetingLog.map((e) => ({
+      time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      source: e.source || "",
+      translation: e.translation || "",
+      risk:
+        e.risk && e.risk.risk_level && e.risk.risk_level !== "none"
+          ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`
+          : "",
+    }));
+  }
+
+  /** Export the notes as md / docx / pdf via the server, then download. */
+  async _export(format) {
     if (!this.meetingLog.length) {
       this._setStatus("idle", "Nothing to export");
       return;
     }
-    const date = new Date().toLocaleString();
-    let md = `# 회의 노트 / Meeting Notes\n\n_${date}_\n\n`;
-    if (this._lastSummary) {
-      md += `## 요약 / Summary\n\n${this._lastSummary}\n\n`;
+    const base = this._serverBase();
+    if (!base) {
+      this._setStatus("error", "Set the server URL first");
+      return;
     }
-    md += `## 전체 기록 / Full transcript\n\n`;
-    for (const e of this.meetingLog) {
-      const time = new Date(e.t).toLocaleTimeString();
-      md += `- **[${time}]** ${e.source}`;
-      if (e.translation) md += `\n  - → ${e.translation}`;
-      if (e.risk && e.risk.risk_level && e.risk.risk_level !== "none") {
-        md += `\n  - ⚠️ **[${e.risk.risk_level}]** ${e.risk.subtitle_alert || ""}`;
-        if (e.risk.suggested_question) md += `\n    - ❓ ${e.risk.suggested_question}`;
+    this._setStatus(this.running ? "live" : "idle", `Exporting ${format.toUpperCase()}…`);
+    try {
+      const res = await fetch(`${base}/api/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "회의 노트 / Meeting Notes",
+          entries: this._exportEntries(),
+          summary: this._lastSummary || "",
+          format,
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      md += `\n`;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `meeting-notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      this._setStatus(this.running ? "live" : "idle", `${format.toUpperCase()} saved`);
+    } catch (e) {
+      this._setStatus("error", `Export failed: ${e.message}`);
     }
+  }
 
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `meeting-notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.md`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  /** Ask a question grounded in the saved conversation. */
+  async _ask() {
+    const question = this.els.askInput.value.trim();
+    if (!question) return;
+    if (!this.meetingLog.length) {
+      this._setStatus("idle", "No conversation to ask about yet");
+      return;
+    }
+    const base = this._serverBase();
+    if (!base) {
+      this._setStatus("error", "Set the server URL first");
+      return;
+    }
+    this.els.askBtn.disabled = true;
+    this.els.askAnswer.classList.remove("hidden");
+    this.els.askAnswer.textContent = "…";
+    try {
+      const res = await fetch(`${base}/api/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: this._transcriptText(),
+          question,
+          language: this.els.summaryLang.value,
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      this.els.askAnswer.textContent = data.answer || "(no answer)";
+    } catch (e) {
+      this.els.askAnswer.textContent = `질문 실패: ${e.message}`;
+    } finally {
+      this.els.askBtn.disabled = false;
+    }
   }
 
   _newMeeting() {
@@ -542,6 +677,9 @@ class TranslatorClient {
     localStorage.removeItem("meetingLog");
     this.els.summaryContent.textContent = "";
     this.els.summaryBox.classList.add("hidden");
+    this.els.clarifyAlert.classList.add("hidden");
+    this.els.riskAlert.classList.add("hidden");
+    this.els.askAnswer.classList.add("hidden");
     this._renderNotes();
     this._setStatus(this.running ? "live" : "idle", "New meeting started");
   }
