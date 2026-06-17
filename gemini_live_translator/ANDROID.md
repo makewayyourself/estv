@@ -21,7 +21,8 @@ API 키는 앱이 아니라 **클라우드 백엔드**에 보관됩니다(안전
 1. 이 저장소를 GitHub에 올립니다(이미 올라가 있으면 생략).
 2. <https://render.com> 가입 후 로그인.
 3. **New > Blueprint** 클릭 → 이 저장소 선택.
-   저장소의 `gemini_live_translator/render.yaml` 을 자동으로 인식합니다.
+   저장소 **루트의 `render.yaml`** 을 자동으로 인식합니다(코드는 하위 폴더에
+   있지만 루트 render.yaml이 가리킵니다).
 4. 배포 중 `GEMINI_API_KEY` 입력란이 나오면 본인의 Gemini API 키를 붙여넣습니다.
    (키 발급: <https://aistudio.google.com/apikey>)
 5. 배포가 끝나면 `https://gemini-live-translator.onrender.com` 같은 **공개 주소**가

@@ -1,0 +1,28 @@
+# Render Blueprint (repo root) — deploys the Gemini Live Translator backend,
+# whose code lives in the gemini_live_translator/ subdirectory.
+#
+# Render looks for render.yaml at the repository root, so this file points at
+# the subdirectory's Dockerfile and build context.
+#
+# Usage: Render dashboard → New → Blueprint → pick this repo → paste your
+# GEMINI_API_KEY when prompted. Render generates ACCESS_TOKEN automatically
+# (copy it from the service's Environment tab into the app).
+services:
+  - type: web
+    name: interpretation
+    runtime: docker
+    plan: free
+    dockerfilePath: ./gemini_live_translator/Dockerfile
+    dockerContext: ./gemini_live_translator
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # prompted on deploy, stored as a secret
+      - key: GEMINI_LIVE_MODEL
+        value: gemini-3.5-live-translate-preview
+      - key: GEMINI_VOICE
+        value: Aoede
+      # Gate the WebSocket so only your app can use it (auto-generated secret;
+      # copy it from the Environment tab into the app's "Access Token" field).
+      - key: ACCESS_TOKEN
+        generateValue: true
