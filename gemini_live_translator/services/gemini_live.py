@@ -36,6 +36,10 @@ from google.genai import types
 DEFAULT_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.0-flash-exp")
 DEFAULT_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 
+# Text model used to summarize the accumulated meeting transcript. A regular
+# (non-live) fast model is ideal here.
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-2.0-flash")
+
 # Audio format constants shared with the client. Input is what we feed Gemini;
 # output is what Gemini hands back to us.
 INPUT_SAMPLE_RATE = 16_000
@@ -92,6 +96,26 @@ def build_system_instruction(lang_a: str, lang_b: str) -> str:
         "for word. Output ONLY the spoken translation itself. Never add "
         "conversational filler such as 'Sure', 'Okay', or 'Here is the "
         "translation', and never explain what you are doing."
+    )
+
+
+def build_summary_prompt(transcript: str, language: str) -> str:
+    """Build a meeting-notes summarization prompt in the requested language."""
+    lang_name = SUPPORTED_LANGUAGES.get(language, "English")
+    return (
+        "You are a precise meeting-notes assistant. The transcript below is from "
+        "a live interpreted meeting; each turn may contain the original utterance "
+        "and its translation — treat them as the same content, do not duplicate.\n\n"
+        f"Write ALL of your output, including the section headings, in {lang_name}.\n"
+        "Use this structure with Markdown headings:\n"
+        "1. A one-line summary of the meeting.\n"
+        "2. Key discussion points (concise bullets).\n"
+        "3. Decisions made.\n"
+        "4. Action items — for each: owner, task, and due date if mentioned.\n\n"
+        "Be faithful to the transcript; do not invent facts. If a section has "
+        "nothing, state that briefly.\n\n"
+        "=== TRANSCRIPT ===\n"
+        f"{transcript}"
     )
 
 

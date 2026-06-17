@@ -193,6 +193,61 @@
         </section>
       </div>
 
+      <!-- Meeting Notes -->
+      <section class="mt-6">
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/60">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-4">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Meeting Notes <span id="noteCount" class="ml-1 text-slate-600">(0)</span>
+            </h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-xs text-slate-500">Summary in</label>
+              <select
+                id="summaryLang"
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+              ></select>
+              <button
+                id="summarizeBtn"
+                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              >
+                Summarize
+              </button>
+              <button
+                id="exportBtn"
+                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700"
+              >
+                Export
+              </button>
+              <button
+                id="newMeetingBtn"
+                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-400 transition hover:bg-slate-700"
+              >
+                New
+              </button>
+            </div>
+          </div>
+
+          <!-- Summary -->
+          <div id="summaryBox" class="hidden border-b border-slate-800 px-6 py-4">
+            <div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+              Summary
+            </div>
+            <div id="summaryContent" class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200"></div>
+          </div>
+
+          <!-- Full timestamped log -->
+          <div
+            id="notes"
+            class="transcript-scroll max-h-[24rem] space-y-2 overflow-y-auto px-6 py-4"
+          >
+            <p id="notesPlaceholder" class="text-sm text-slate-600">
+              회의가 시작되면 발화가 시간순으로 여기에 기록됩니다. 기록은 이 기기에
+              저장되어 앱을 닫아도 유지됩니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <footer class="mt-6 text-center text-xs text-slate-600">
         Powered by the Google Gemini Multimodal Live API · zero-inference audio pipeline
       </footer>

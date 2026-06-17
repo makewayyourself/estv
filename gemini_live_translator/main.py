@@ -28,10 +28,11 @@ from contextlib import suppress
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.genai import types
+from pydantic import BaseModel
 
 from services.gemini_live import (
     DEFAULT_LANG_A,
@@ -40,11 +41,16 @@ from services.gemini_live import (
     INPUT_MIME_TYPE,
     INPUT_SAMPLE_RATE,
     OUTPUT_SAMPLE_RATE,
+    SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
     build_config,
+    build_summary_prompt,
     get_client,
     normalize_lang,
 )
+
+# Cap how much transcript we send to the summarizer (keep the most recent part).
+MAX_SUMMARY_CHARS = 40_000
 
 load_dotenv()
 
@@ -78,6 +84,54 @@ async def health() -> dict:
         "input_sample_rate": INPUT_SAMPLE_RATE,
         "output_sample_rate": OUTPUT_SAMPLE_RATE,
     }
+
+
+def _check_token(provided: str | None) -> None:
+    """Raise 401 if an ACCESS_TOKEN is configured and the value doesn't match."""
+    expected = os.getenv("ACCESS_TOKEN")
+    if expected and not secrets.compare_digest(provided or "", expected):
+        raise HTTPException(status_code=401, detail="Unauthorized: invalid access token")
+
+
+class SummarizeRequest(BaseModel):
+    transcript: str
+    language: str = DEFAULT_LANG_A
+    token: str | None = None
+
+
+@app.post("/api/summarize")
+async def summarize(req: SummarizeRequest) -> dict:
+    """Summarize the accumulated meeting transcript into structured notes.
+
+    Runs on the server (where the Gemini key lives) and is gated by the same
+    ACCESS_TOKEN as the audio stream.
+    """
+    _check_token(req.token)
+
+    transcript = (req.transcript or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Transcript is empty")
+    # Keep the most recent portion if the meeting is very long.
+    if len(transcript) > MAX_SUMMARY_CHARS:
+        transcript = transcript[-MAX_SUMMARY_CHARS:]
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    language = normalize_lang(req.language, DEFAULT_LANG_A)
+    prompt = build_summary_prompt(transcript, language)
+
+    try:
+        response = await client.aio.models.generate_content(
+            model=SUMMARY_MODEL, contents=prompt
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Summarization failed")
+        raise HTTPException(status_code=502, detail=f"Summarization failed: {exc}")
+
+    return {"summary": response.text or "", "model": SUMMARY_MODEL, "language": language}
 
 
 async def _send_json(ws: WebSocket, payload: dict) -> None:

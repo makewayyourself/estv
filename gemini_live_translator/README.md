@@ -14,6 +14,13 @@ There is no STT → Translate → TTS chain. Microphone audio is streamed direct
 into Gemini's bidirectional live channel, and translated audio streams straight
 back out, which is what keeps latency low.
 
+**Meeting notes & summary:** every finalized turn is logged with a timestamp
+(bilingual original → translation) and persisted on the device, so the record
+survives an app restart. A **Summarize** button sends the running transcript to
+a Gemini text model and returns structured notes (one-line summary, key points,
+decisions, action items) in the language you choose, and **Export** downloads
+the whole thing as Markdown.
+
 > **📱 안드로이드 앱으로 쓰려면 → [`ANDROID.md`](./ANDROID.md) (한글 가이드)**
 > Capacitor로 APK를 빌드하고, 백엔드는 클라우드(Render)에 배포하는 전체 과정.
 
@@ -108,7 +115,8 @@ These are deliberate corrections so the app actually runs against the real API:
 | Variable            | Default               | Purpose                              |
 | ------------------- | --------------------- | ------------------------------------ |
 | `GEMINI_API_KEY`    | —                     | **Required.** Your Gemini API key.   |
-| `GEMINI_LIVE_MODEL` | `gemini-2.0-flash-exp`| Live model id.                       |
+| `GEMINI_LIVE_MODEL` | `gemini-2.0-flash-exp`| Live (audio) model id.               |
+| `SUMMARY_MODEL`     | `gemini-2.0-flash`    | Text model for meeting summaries.    |
 | `GEMINI_VOICE`      | `Aoede`               | Prebuilt TTS voice.                  |
 | `ACCESS_TOKEN`      | _(empty)_             | Gate the WebSocket; client must send `?token=`. **Set this for any public deploy.** |
 | `HOST` / `PORT`     | `0.0.0.0` / `8000`    | Server bind address.                 |

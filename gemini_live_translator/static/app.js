@@ -47,6 +47,11 @@ class TranslatorClient {
     // Playback scheduling cursor (in playbackContext time).
     this.nextPlayTime = 0;
 
+    // Meeting notes: persisted log of finalized turns + in-progress accumulators.
+    this.meetingLog = [];
+    this._curSource = "";
+    this._curTranslation = "";
+
     this._bindUI();
   }
 
@@ -67,9 +72,20 @@ class TranslatorClient {
       saveServerBtn: document.getElementById("saveServerBtn"),
       langA: document.getElementById("langA"),
       langB: document.getElementById("langB"),
+      // Meeting notes
+      notes: document.getElementById("notes"),
+      notesPlaceholder: document.getElementById("notesPlaceholder"),
+      noteCount: document.getElementById("noteCount"),
+      summaryLang: document.getElementById("summaryLang"),
+      summarizeBtn: document.getElementById("summarizeBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      newMeetingBtn: document.getElementById("newMeetingBtn"),
+      summaryBox: document.getElementById("summaryBox"),
+      summaryContent: document.getElementById("summaryContent"),
     };
 
     this._setupLanguages();
+    this._setupMeetingNotes();
 
     this.els.toggleBtn.addEventListener("click", () => {
       if (this.running) this.stop();
@@ -123,6 +139,187 @@ class TranslatorClient {
     };
     this.els.langA.addEventListener("change", remember);
     this.els.langB.addEventListener("change", remember);
+  }
+
+  /** Set up the meeting-notes panel: restore saved log, wire the buttons. */
+  _setupMeetingNotes() {
+    // Summary language dropdown mirrors the supported languages.
+    const sel = this.els.summaryLang;
+    sel.innerHTML = "";
+    for (const [code, label] of Object.entries(LANGUAGES)) {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    }
+    sel.value = localStorage.getItem("summaryLang") || localStorage.getItem("langA") || DEFAULT_LANG_A;
+    sel.addEventListener("change", () =>
+      localStorage.setItem("summaryLang", sel.value)
+    );
+
+    // Restore persisted meeting log.
+    try {
+      this.meetingLog = JSON.parse(localStorage.getItem("meetingLog") || "[]");
+    } catch {
+      this.meetingLog = [];
+    }
+    this._renderNotes();
+
+    this.els.summarizeBtn.addEventListener("click", () => this._summarize());
+    this.els.exportBtn.addEventListener("click", () => this._exportNotes());
+    this.els.newMeetingBtn.addEventListener("click", () => this._newMeeting());
+  }
+
+  /** Append a finalized turn to the meeting log and persist it. */
+  _commitTurn() {
+    const source = this._curSource.trim();
+    const translation = this._curTranslation.trim();
+    this._curSource = "";
+    this._curTranslation = "";
+    if (!source && !translation) return;
+
+    this.meetingLog.push({ t: Date.now(), source, translation });
+    try {
+      localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
+    } catch {
+      /* storage full — keep going in memory */
+    }
+    this._renderNotes();
+  }
+
+  _renderNotes() {
+    const n = this.meetingLog.length;
+    this.els.noteCount.textContent = `(${n})`;
+    if (this.els.notesPlaceholder) {
+      this.els.notesPlaceholder.style.display = n ? "none" : "";
+    }
+    // Re-render the log list (skip the placeholder node).
+    this.els.notes
+      .querySelectorAll("[data-note]")
+      .forEach((el) => el.remove());
+
+    for (const entry of this.meetingLog) {
+      const time = new Date(entry.t).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const row = document.createElement("div");
+      row.dataset.note = "1";
+      row.className = "rounded-lg bg-slate-950/50 px-3 py-2 text-sm";
+      row.innerHTML = `
+        <div class="mb-0.5 text-[10px] font-mono text-slate-600">${time}</div>
+        <div class="text-slate-400">${this._escape(entry.source)}</div>
+        <div class="text-slate-100">${this._escape(entry.translation)}</div>`;
+      this.els.notes.appendChild(row);
+    }
+    this.els.notes.scrollTop = this.els.notes.scrollHeight;
+  }
+
+  _escape(s) {
+    const d = document.createElement("div");
+    d.textContent = s || "";
+    return d.innerHTML;
+  }
+
+  /** Build a plain-text transcript for the summarizer / export. */
+  _transcriptText() {
+    return this.meetingLog
+      .map((e) => {
+        const time = new Date(e.t).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const parts = [];
+        if (e.source) parts.push(e.source);
+        if (e.translation) parts.push(`→ ${e.translation}`);
+        return `[${time}] ${parts.join("  ")}`;
+      })
+      .join("\n");
+  }
+
+  async _summarize() {
+    if (!this.meetingLog.length) {
+      this._setStatus("idle", "No notes to summarize yet");
+      return;
+    }
+    const base = this._serverBase();
+    if (!base) {
+      this._setStatus("error", "Set the server URL first");
+      return;
+    }
+
+    this.els.summarizeBtn.disabled = true;
+    const prevLabel = this.els.summarizeBtn.textContent;
+    this.els.summarizeBtn.textContent = "Summarizing…";
+    try {
+      const res = await fetch(`${base}/api/summarize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: this._transcriptText(),
+          language: this.els.summaryLang.value,
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      this._lastSummary = data.summary || "";
+      this.els.summaryContent.textContent = this._lastSummary;
+      this.els.summaryBox.classList.remove("hidden");
+      this._setStatus(this.running ? "live" : "idle", "Summary updated");
+    } catch (e) {
+      this._setStatus("error", `Summary failed: ${e.message}`);
+    } finally {
+      this.els.summarizeBtn.disabled = false;
+      this.els.summarizeBtn.textContent = prevLabel;
+    }
+  }
+
+  _exportNotes() {
+    if (!this.meetingLog.length) {
+      this._setStatus("idle", "Nothing to export");
+      return;
+    }
+    const date = new Date().toLocaleString();
+    let md = `# 회의 노트 / Meeting Notes\n\n_${date}_\n\n`;
+    if (this._lastSummary) {
+      md += `## 요약 / Summary\n\n${this._lastSummary}\n\n`;
+    }
+    md += `## 전체 기록 / Full transcript\n\n`;
+    for (const e of this.meetingLog) {
+      const time = new Date(e.t).toLocaleTimeString();
+      md += `- **[${time}]** ${e.source}`;
+      if (e.translation) md += `\n  - → ${e.translation}`;
+      md += `\n`;
+    }
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `meeting-notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  _newMeeting() {
+    if (this.meetingLog.length && !confirm("현재 회의 노트를 지우고 새로 시작할까요?")) {
+      return;
+    }
+    this.meetingLog = [];
+    this._curSource = "";
+    this._curTranslation = "";
+    this._lastSummary = "";
+    localStorage.removeItem("meetingLog");
+    this.els.summaryContent.textContent = "";
+    this.els.summaryBox.classList.add("hidden");
+    this._renderNotes();
+    this._setStatus(this.running ? "live" : "idle", "New meeting started");
   }
 
   /** Resolve the backend base URL (no trailing slash) for this device. */
@@ -317,6 +514,7 @@ class TranslatorClient {
         this._appendTranscript(msg.role, msg.text);
         break;
       case "turn_complete":
+        this._commitTurn(); // save this turn into the meeting notes
         this._sourceLine = null;
         this._translationLine = null;
         break;
@@ -428,6 +626,10 @@ class TranslatorClient {
 
     const isTranslation = role === "translation";
     const lineKey = isTranslation ? "_translationLine" : "_sourceLine";
+
+    // Accumulate the raw text so the turn can be saved to the meeting notes.
+    if (isTranslation) this._curTranslation += text;
+    else this._curSource += text;
 
     // Stream incremental tokens into the same bubble until the turn completes.
     if (!this[lineKey]) {
