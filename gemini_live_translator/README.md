@@ -4,12 +4,13 @@ A real-time, low-latency, **audio-to-audio** bidirectional interpreter built on
 the Google Gemini **Multimodal Live API**. Pick any two languages; speak in
 either one and immediately hear the other — with live text transcripts on screen.
 
-**Supported languages:** Korean, English, Japanese, Mandarin Chinese, French,
-Spanish, Arabic, Russian. You choose a pair (A ⇄ B) in the UI; the model
-auto-detects which of the two is spoken and translates into the other. Set
-Language A to **🌐 Auto-detect** to translate *any* spoken language into
-Language B (comprehension mode). To add more, extend `SUPPORTED_LANGUAGES` in
-`services/gemini_live.py` (and `LANGUAGES` in `static/app.js`).
+**Supported languages:** the default translate model handles **70+ languages**
+with the source auto-detected — you just pick **Language B = the language you
+want to hear**. The UI lists 8 common languages (Korean, English, Japanese,
+Mandarin, French, Spanish, Arabic, Russian); add more by extending `LANGUAGES`
+in `static/app.js` and `SUPPORTED_LANGUAGES` in `services/gemini_live.py`. On the
+persona model (`gemini-2.0-flash-exp`) the pair is two-way A ⇄ B, and Language A
+can be **🌐 Auto-detect**.
 
 **Controls:** male/female voice selection, playback **speed** (0.5×–1.5×, live),
 **Pause/Resume** (mutes the mic without dropping the session), **Replay** the
@@ -111,9 +112,15 @@ The interpreter persona, voice, and transcription config live in
 
 These are deliberate corrections so the app actually runs against the real API:
 
-- **Model name.** "Gemini 3.5" is not a public model. The Live API is served by
-  models like `gemini-2.0-flash-exp` (default) and `gemini-live-2.5-flash-preview`.
-  Override with `GEMINI_LIVE_MODEL` in `.env`.
+- **Model.** The default is `gemini-3.5-live-translate-preview` — Google's
+  dedicated low-latency speech-to-speech **translation** model (public preview,
+  70+ languages, ~$0.023/min, needs billing). It is configured with
+  `translation_config(target_language_code=…, echo_target_language=True)`: the
+  source is auto-detected and **Language B is the language you hear**; it also
+  preserves the speaker's own voice (so the voice picker doesn't apply). For a
+  free-tier, persona-based two-way interpreter with a selectable voice, set
+  `GEMINI_LIVE_MODEL=gemini-2.0-flash-exp`. The backend auto-switches its config
+  shape based on the model id.
 - **Response modalities.** The Live API accepts a *single* modality. To get both
   spoken output and on-screen text we request `AUDIO` and additionally enable
   `input_audio_transcription` + `output_audio_transcription`. (`["AUDIO","TEXT"]`
@@ -130,7 +137,7 @@ These are deliberate corrections so the app actually runs against the real API:
 | Variable            | Default               | Purpose                              |
 | ------------------- | --------------------- | ------------------------------------ |
 | `GEMINI_API_KEY`    | —                     | **Required.** Your Gemini API key.   |
-| `GEMINI_LIVE_MODEL` | `gemini-2.0-flash-exp`| Live (audio) model id.               |
+| `GEMINI_LIVE_MODEL` | `gemini-3.5-live-translate-preview` | Live model id (translate or persona). |
 | `SUMMARY_MODEL`     | `gemini-2.0-flash`    | Text model for meeting summaries.    |
 | `GEMINI_VOICE`      | `Aoede`               | Prebuilt TTS voice.                  |
 | `ACCESS_TOKEN`      | _(empty)_             | Gate the WebSocket; client must send `?token=`. **Set this for any public deploy.** |

@@ -8,11 +8,14 @@ that talks to the browser (that lives in ``main.py``). Its only job is to:
   2. Build a ``LiveConnectConfig`` that turns Gemini into a real-time
      simultaneous interpreter (audio-in -> translated audio-out + transcripts).
 
-A few important real-world notes (the original spec was slightly aspirational):
+A few important real-world notes:
 
-* "Gemini 3.5" does not exist as a public model. The Live API is served by
-  models such as ``gemini-2.0-flash-exp`` and ``gemini-live-2.5-flash-preview``.
-  The model id is configurable via the ``GEMINI_LIVE_MODEL`` env var.
+* The default model is ``gemini-3.5-live-translate-preview`` — Google's dedicated
+  low-latency speech-to-speech translation model (public preview, 70+ languages).
+  It is configured via ``translation_config`` (a target language) rather than a
+  persona prompt, and preserves the speaker's own voice. The general persona
+  path (e.g. ``gemini-2.0-flash-exp``) is still supported as a fallback. Switch
+  with the ``GEMINI_LIVE_MODEL`` env var.
 
 * The Live API accepts **exactly one** value in ``response_modalities`` —
   either ``AUDIO`` or ``TEXT``, not both. To get *audio output AND live text*
@@ -33,7 +36,10 @@ from google.genai import types
 
 # --- Configuration ---------------------------------------------------------
 
-DEFAULT_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.0-flash-exp")
+# Default to the dedicated low-latency speech-to-speech translation model
+# (public preview, 70+ languages). Override with GEMINI_LIVE_MODEL. For the
+# general persona-based path, set e.g. gemini-2.0-flash-exp.
+DEFAULT_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.5-live-translate-preview")
 DEFAULT_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 
 # Text model used to summarize the accumulated meeting transcript. A regular
@@ -209,20 +215,54 @@ def get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
+# Map our language codes to the BCP-47 target codes the translate model wants.
+# Anything not listed is passed through unchanged (our codes are ISO 639-1).
+TRANSLATE_TARGET_CODES: dict[str, str] = {
+    "zh": "cmn-CN",  # Mandarin Chinese
+}
+
+
+def is_translate_model(model: str) -> bool:
+    """True for the dedicated speech-to-speech translate model family."""
+    return "translate" in (model or "").lower()
+
+
+def _target_code(lang: str) -> str:
+    return TRANSLATE_TARGET_CODES.get(lang, lang)
+
+
 def build_config(
     voice_name: str | None = None,
     lang_a: str = DEFAULT_LANG_A,
     lang_b: str = DEFAULT_LANG_B,
     system_instruction: str | None = None,
+    model: str | None = None,
 ) -> types.LiveConnectConfig:
-    """Build the Live session configuration.
+    """Build the Live session configuration for the active model.
 
-    Args:
-        voice_name: Prebuilt voice for the synthesized translation.
-        lang_a: First language code of the interpreting pair.
-        lang_b: Second language code of the interpreting pair.
-        system_instruction: Explicit persona override (skips lang_a/lang_b).
+    Two shapes depending on the model:
+
+    * Dedicated translate model (``gemini-3.5-live-translate-preview``): uses
+      ``translation_config`` with a target language. The source language is
+      auto-detected (70+ languages) and the model preserves the speaker's own
+      voice, so no persona prompt or prebuilt voice is sent. ``lang_b`` is the
+      language you want to hear.
+    * General live model (e.g. ``gemini-2.0-flash-exp``): persona-based two-way
+      interpreting between ``lang_a`` and ``lang_b`` with a selectable voice.
     """
+    model = model or DEFAULT_MODEL
+
+    if is_translate_model(model):
+        return types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            translation_config=types.TranslationConfig(
+                target_language_code=_target_code(lang_b),
+                echo_target_language=True,
+            ),
+        )
+
     voice = voice_name or DEFAULT_VOICE
     instruction = system_instruction or build_system_instruction(lang_a, lang_b)
 
