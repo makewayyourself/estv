@@ -64,20 +64,43 @@ DEFAULT_LANG_A = "ko"
 DEFAULT_LANG_B = "en"
 
 
-def normalize_lang(code: str | None, fallback: str) -> str:
-    """Return a supported language code, falling back if unknown/empty."""
+AUTO_DETECT = "auto"  # special lang_a value: detect any language -> lang_b
+
+
+def normalize_lang(code: str | None, fallback: str, allow_auto: bool = False) -> str:
+    """Return a supported language code, falling back if unknown/empty.
+
+    When ``allow_auto`` is set, the special ``"auto"`` value is accepted (used
+    for the source side to mean "detect any language").
+    """
     code = (code or "").strip().lower()
+    if allow_auto and code == AUTO_DETECT:
+        return AUTO_DETECT
     return code if code in SUPPORTED_LANGUAGES else fallback
 
 
 def build_system_instruction(lang_a: str, lang_b: str) -> str:
-    """Build a two-way interpreter persona between two languages.
+    """Build the interpreter persona.
 
-    The model auto-detects which of the two languages is being spoken and
-    translates into the other one. ``lang_a``/``lang_b`` are language codes.
+    * If ``lang_a`` is ``"auto"``: detect any incoming language and translate it
+      into ``lang_b`` (one-directional comprehension mode).
+    * Otherwise: two-way between ``lang_a`` and ``lang_b`` (auto-detect which of
+      the two is spoken and translate into the other).
     """
-    a = SUPPORTED_LANGUAGES.get(lang_a, "Korean")
     b = SUPPORTED_LANGUAGES.get(lang_b, "English")
+
+    if lang_a == AUTO_DETECT:
+        return (
+            "You are a highly professional, real-time simultaneous interpreter. "
+            "Detect the language of the incoming speech and immediately translate "
+            f"it into natural, fluent {b}. If the speech is already in {b}, simply "
+            f"restate it clearly in {b}. Preserve tone, idioms and cultural nuance "
+            "rather than translating word for word. Output ONLY the spoken "
+            "translation itself. Never add conversational filler such as 'Sure' or "
+            "'Here is the translation', and never explain what you are doing."
+        )
+
+    a = SUPPORTED_LANGUAGES.get(lang_a, "Korean")
 
     if a == b:
         # Degenerate pair: nothing to translate between. Keep it harmless.
@@ -116,6 +139,26 @@ def build_summary_prompt(transcript: str, language: str) -> str:
         "nothing, state that briefly.\n\n"
         "=== TRANSCRIPT ===\n"
         f"{transcript}"
+    )
+
+
+def build_pronounce_prompt(text: str, script: str) -> str:
+    """Build a transliteration prompt: how to *pronounce* the text (no meaning).
+
+    ``script`` is "hangul" (Korean phonetic) or "roman" (Latin romanization).
+    """
+    if script == "hangul":
+        target = (
+            "Korean Hangul characters that approximate how it sounds to a Korean "
+            "speaker"
+        )
+    else:
+        target = "Latin-alphabet (romanized) letters showing how it sounds"
+    return (
+        "You are a pronunciation guide. Transliterate the following text using "
+        f"{target}. Do NOT translate the meaning — show ONLY how it is "
+        "pronounced. Output only the pronunciation on a single line, nothing "
+        "else.\n\nTEXT:\n" + text
     )
 
 

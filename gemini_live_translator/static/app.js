@@ -52,6 +52,13 @@ class TranslatorClient {
     this._curSource = "";
     this._curTranslation = "";
 
+    // Quick-action state.
+    this.paused = false; // when true, mic audio is not sent upstream
+    this.playbackRate = parseFloat(localStorage.getItem("playbackRate") || "1.0");
+    this._curAudioChunks = []; // Float32 pieces of the current turn's output audio
+    this._lastAudio = null; // concatenated Float32Array of the last turn
+    this._lastTranslationText = ""; // text of the last finalized translation
+
     this._bindUI();
   }
 
@@ -82,10 +89,20 @@ class TranslatorClient {
       newMeetingBtn: document.getElementById("newMeetingBtn"),
       summaryBox: document.getElementById("summaryBox"),
       summaryContent: document.getElementById("summaryContent"),
+      // Quick actions
+      pauseBtn: document.getElementById("pauseBtn"),
+      replayBtn: document.getElementById("replayBtn"),
+      pronounceBtn: document.getElementById("pronounceBtn"),
+      pronounceBox: document.getElementById("pronounceBox"),
+      pronounceContent: document.getElementById("pronounceContent"),
+      scriptSelect: document.getElementById("scriptSelect"),
+      speedRange: document.getElementById("speedRange"),
+      speedValue: document.getElementById("speedValue"),
     };
 
     this._setupLanguages();
     this._setupMeetingNotes();
+    this._setupControls();
 
     this.els.toggleBtn.addEventListener("click", () => {
       if (this.running) this.stop();
@@ -120,9 +137,12 @@ class TranslatorClient {
 
   /** Populate the two language dropdowns and restore the saved pair. */
   _setupLanguages() {
-    const fill = (sel, selected) => {
+    const fill = (sel, selected, withAuto) => {
       sel.innerHTML = "";
-      for (const [code, label] of Object.entries(LANGUAGES)) {
+      const entries = withAuto
+        ? [["auto", "🌐 자동 감지 (Auto-detect)"], ...Object.entries(LANGUAGES)]
+        : Object.entries(LANGUAGES);
+      for (const [code, label] of entries) {
         const opt = document.createElement("option");
         opt.value = code;
         opt.textContent = label;
@@ -130,8 +150,9 @@ class TranslatorClient {
         sel.appendChild(opt);
       }
     };
-    fill(this.els.langA, localStorage.getItem("langA") || DEFAULT_LANG_A);
-    fill(this.els.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
+    // Language A may be "auto" (detect any language -> Language B).
+    fill(this.els.langA, localStorage.getItem("langA") || DEFAULT_LANG_A, true);
+    fill(this.els.langB, localStorage.getItem("langB") || DEFAULT_LANG_B, false);
 
     const remember = () => {
       localStorage.setItem("langA", this.els.langA.value);
@@ -139,6 +160,93 @@ class TranslatorClient {
     };
     this.els.langA.addEventListener("change", remember);
     this.els.langB.addEventListener("change", remember);
+  }
+
+  /** Wire the quick-action controls: speed, pause, replay, pronounce. */
+  _setupControls() {
+    // Playback speed.
+    this.els.speedRange.value = String(this.playbackRate);
+    this.els.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
+    this.els.speedRange.addEventListener("input", () => {
+      this.playbackRate = parseFloat(this.els.speedRange.value);
+      this.els.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
+      localStorage.setItem("playbackRate", String(this.playbackRate));
+    });
+
+    this.els.pauseBtn.addEventListener("click", () => this._togglePause());
+    this.els.replayBtn.addEventListener("click", () => this._replayLast());
+    this.els.pronounceBtn.addEventListener("click", () => this._pronounce());
+    this.els.scriptSelect.addEventListener("change", () => {
+      if (this._lastTranslationText) this._pronounce();
+    });
+  }
+
+  _togglePause() {
+    if (!this.running) return;
+    this.paused = !this.paused;
+    this.els.pauseBtn.textContent = this.paused ? "▶️ 재개" : "⏸️ 일시정지";
+    this._setStatus(this.paused ? "connecting" : "live", this.paused ? "Paused" : "Live — speak now");
+    if (this.paused) this._flushPlayback(); // stop any audio currently playing
+  }
+
+  /** Play a Float32 PCM buffer (24 kHz) honoring the current speed. */
+  _playBuffer(float32) {
+    if (!float32 || !float32.length) return;
+    let ctx = this.playbackContext;
+    if (!ctx || ctx.state === "closed") {
+      ctx = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: OUTPUT_SAMPLE_RATE,
+      });
+    }
+    const buffer = ctx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
+    buffer.copyToChannel(float32, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = this.playbackRate;
+    source.connect(ctx.destination);
+    source.start();
+  }
+
+  _replayLast() {
+    if (!this._lastAudio) {
+      this._setStatus(this.running ? "live" : "idle", "Nothing to replay yet");
+      return;
+    }
+    this._playBuffer(this._lastAudio);
+  }
+
+  async _pronounce() {
+    const text = this._lastTranslationText.trim();
+    if (!text) {
+      this._setStatus(this.running ? "live" : "idle", "No sentence to pronounce yet");
+      return;
+    }
+    const base = this._serverBase();
+    if (!base) {
+      this._setStatus("error", "Set the server URL first");
+      return;
+    }
+    this.els.pronounceBox.classList.remove("hidden");
+    this.els.pronounceContent.textContent = "…";
+    try {
+      const res = await fetch(`${base}/api/pronounce`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          script: this.els.scriptSelect.value,
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      this.els.pronounceContent.textContent = data.pronunciation || "(none)";
+    } catch (e) {
+      this.els.pronounceContent.textContent = `발음 변환 실패: ${e.message}`;
+    }
   }
 
   /** Set up the meeting-notes panel: restore saved log, wire the buttons. */
@@ -176,6 +284,14 @@ class TranslatorClient {
     const translation = this._curTranslation.trim();
     this._curSource = "";
     this._curTranslation = "";
+
+    // Finalize the turn's audio for "다시 듣기".
+    this._finalizeTurnAudio();
+    if (translation) {
+      this._lastTranslationText = translation;
+      this.els.pronounceBtn.disabled = false;
+    }
+
     if (!source && !translation) return;
 
     this.meetingLog.push({ t: Date.now(), source, translation });
@@ -387,9 +503,12 @@ class TranslatorClient {
       this._initPlayback();
 
       this.running = true;
+      this.paused = false;
       this.els.toggleLabel.textContent = "Stop";
       this.els.toggleIcon.textContent = "⏹️";
       this.els.toggleBtn.disabled = false;
+      this.els.pauseBtn.disabled = false;
+      this.els.pauseBtn.textContent = "⏸️ 일시정지";
       this._setStatus("live", "Live — speak now");
     } catch (err) {
       console.error(err);
@@ -401,12 +520,16 @@ class TranslatorClient {
 
   async stop() {
     this.running = false;
+    this.paused = false;
     // Tell the server this turn is finished, then close down audio.
     this._sendControl({ action: "end" });
     await this._teardown();
 
     this.els.toggleLabel.textContent = "Start Translating";
     this.els.toggleIcon.textContent = "🎙️";
+    this.els.pauseBtn.disabled = true;
+    this.els.pauseBtn.textContent = "⏸️ 일시정지";
+    // Replay / pronounce remain available for the last sentence.
     this._setStatus("idle", "Idle");
   }
 
@@ -552,7 +675,9 @@ class TranslatorClient {
     );
 
     // Each message is a transferable ArrayBuffer of PCM16 samples.
+    // While paused we simply drop the audio (the session stays open).
     this.workletNode.port.onmessage = (e) => {
+      if (this.paused) return;
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(e.data);
       }
@@ -586,6 +711,9 @@ class TranslatorClient {
       float32[i] = pcm16[i] / 0x8000;
     }
 
+    // Keep a copy so the turn can be replayed ("다시 듣기").
+    this._curAudioChunks.push(float32);
+
     const buffer = this.playbackContext.createBuffer(
       1,
       float32.length,
@@ -595,16 +723,32 @@ class TranslatorClient {
 
     const source = this.playbackContext.createBufferSource();
     source.buffer = buffer;
+    source.playbackRate.value = this.playbackRate;
     source.connect(this.playbackContext.destination);
 
     // Schedule sequentially so chunks play gaplessly. If we've fallen behind,
-    // resync to "now" plus a small safety margin.
+    // resync to "now" plus a small safety margin. Duration scales with speed.
     const now = this.playbackContext.currentTime;
     if (this.nextPlayTime < now) {
       this.nextPlayTime = now + 0.05;
     }
     source.start(this.nextPlayTime);
-    this.nextPlayTime += buffer.duration;
+    this.nextPlayTime += buffer.duration / this.playbackRate;
+  }
+
+  /** Merge the current turn's audio chunks into one replayable buffer. */
+  _finalizeTurnAudio() {
+    if (!this._curAudioChunks.length) return;
+    const total = this._curAudioChunks.reduce((n, c) => n + c.length, 0);
+    const merged = new Float32Array(total);
+    let off = 0;
+    for (const c of this._curAudioChunks) {
+      merged.set(c, off);
+      off += c.length;
+    }
+    this._lastAudio = merged;
+    this._curAudioChunks = [];
+    this.els.replayBtn.disabled = false;
   }
 
   _flushPlayback() {

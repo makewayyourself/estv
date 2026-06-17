@@ -44,6 +44,7 @@ from services.gemini_live import (
     SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
     build_config,
+    build_pronounce_prompt,
     build_summary_prompt,
     get_client,
     normalize_lang,
@@ -134,6 +135,40 @@ async def summarize(req: SummarizeRequest) -> dict:
     return {"summary": response.text or "", "model": SUMMARY_MODEL, "language": language}
 
 
+class PronounceRequest(BaseModel):
+    text: str
+    script: str = "roman"  # "roman" or "hangul"
+    token: str | None = None
+
+
+@app.post("/api/pronounce")
+async def pronounce(req: PronounceRequest) -> dict:
+    """Return a phonetic transliteration (pronunciation) of a sentence."""
+    _check_token(req.token)
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is empty")
+    text = text[:2000]
+    script = "hangul" if req.script == "hangul" else "roman"
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    prompt = build_pronounce_prompt(text, script)
+    try:
+        response = await client.aio.models.generate_content(
+            model=SUMMARY_MODEL, contents=prompt
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Pronunciation failed")
+        raise HTTPException(status_code=502, detail=f"Pronunciation failed: {exc}")
+
+    return {"pronunciation": (response.text or "").strip(), "script": script}
+
+
 async def _send_json(ws: WebSocket, payload: dict) -> None:
     """Best-effort JSON send that never raises on a closed socket."""
     with suppress(Exception):
@@ -166,7 +201,7 @@ async def stream(ws: WebSocket) -> None:
     # later message). All fall back to server defaults.
     voice = ws.query_params.get("voice") or os.getenv("GEMINI_VOICE", "Aoede")
     lang_a = normalize_lang(
-        ws.query_params.get("a"), os.getenv("LANG_A", DEFAULT_LANG_A)
+        ws.query_params.get("a"), os.getenv("LANG_A", DEFAULT_LANG_A), allow_auto=True
     )
     lang_b = normalize_lang(
         ws.query_params.get("b"), os.getenv("LANG_B", DEFAULT_LANG_B)

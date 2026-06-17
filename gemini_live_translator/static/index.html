@@ -72,6 +72,46 @@
               <span id="toggleLabel">Start Translating</span>
             </button>
 
+            <!-- Quick actions -->
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <button
+                id="pauseBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                ⏸️ 일시정지
+              </button>
+              <button
+                id="replayBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                🔁 다시 듣기
+              </button>
+              <button
+                id="pronounceBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                🗣️ 발음
+              </button>
+            </div>
+
+            <!-- Pronunciation result -->
+            <div id="pronounceBox" class="mt-3 hidden rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+              <div class="mb-1 flex items-center justify-between">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-400">발음 / Pronunciation</span>
+                <select
+                  id="scriptSelect"
+                  class="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200 focus:outline-none"
+                >
+                  <option value="roman">로마자</option>
+                  <option value="hangul">한글</option>
+                </select>
+              </div>
+              <div id="pronounceContent" class="text-sm text-slate-200"></div>
+            </div>
+
             <div class="mt-6 space-y-4 text-sm">
               <div>
                 <label class="mb-1.5 block font-medium text-slate-400">Server URL</label>
@@ -131,19 +171,45 @@
               </div>
 
               <div>
-                <label class="mb-1.5 block font-medium text-slate-400">Voice</label>
+                <label class="mb-1.5 block font-medium text-slate-400">Voice (목소리)</label>
                 <select
                   id="voiceSelect"
                   class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
                 >
-                  <option value="Aoede">Aoede (natural)</option>
-                  <option value="Puck">Puck</option>
-                  <option value="Charon">Charon</option>
-                  <option value="Kore">Kore</option>
-                  <option value="Fenrir">Fenrir</option>
+                  <optgroup label="여성 / Female">
+                    <option value="Aoede">Aoede (여성·자연스러움)</option>
+                    <option value="Kore">Kore (여성)</option>
+                    <option value="Leda">Leda (여성)</option>
+                    <option value="Zephyr">Zephyr (여성)</option>
+                  </optgroup>
+                  <optgroup label="남성 / Male">
+                    <option value="Puck">Puck (남성)</option>
+                    <option value="Charon">Charon (남성)</option>
+                    <option value="Fenrir">Fenrir (남성)</option>
+                    <option value="Orus">Orus (남성)</option>
+                  </optgroup>
                 </select>
                 <p class="mt-1 text-xs text-slate-500">
-                  Voice is applied to the next session you start.
+                  Voice applies to the next session you start.
+                </p>
+              </div>
+
+              <div>
+                <label class="mb-1.5 flex items-center justify-between font-medium text-slate-400">
+                  <span>Speed (빠르기)</span>
+                  <span id="speedValue" class="font-mono text-slate-300">1.0×</span>
+                </label>
+                <input
+                  id="speedRange"
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value="1.0"
+                  class="w-full accent-indigo-500"
+                />
+                <p class="mt-1 text-xs text-slate-500">
+                  Adjusts playback speed of the translated voice (live).
                 </p>
               </div>
 

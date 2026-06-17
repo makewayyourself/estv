@@ -6,9 +6,15 @@ either one and immediately hear the other — with live text transcripts on scre
 
 **Supported languages:** Korean, English, Japanese, Mandarin Chinese, French,
 Spanish, Arabic, Russian. You choose a pair (A ⇄ B) in the UI; the model
-auto-detects which of the two is spoken and translates into the other. To add
-more, extend `SUPPORTED_LANGUAGES` in `services/gemini_live.py` (and `LANGUAGES`
-in `static/app.js`).
+auto-detects which of the two is spoken and translates into the other. Set
+Language A to **🌐 Auto-detect** to translate *any* spoken language into
+Language B (comprehension mode). To add more, extend `SUPPORTED_LANGUAGES` in
+`services/gemini_live.py` (and `LANGUAGES` in `static/app.js`).
+
+**Controls:** male/female voice selection, playback **speed** (0.5×–1.5×, live),
+**Pause/Resume** (mutes the mic without dropping the session), **Replay** the
+last translated sentence, and **Pronounce** — a phonetic transliteration of the
+last translation in romaji or Hangul (`POST /api/pronounce`).
 
 There is no STT → Translate → TTS chain. Microphone audio is streamed directly
 into Gemini's bidirectional live channel, and translated audio streams straight
