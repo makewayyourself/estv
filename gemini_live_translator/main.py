@@ -101,8 +101,8 @@ async def health() -> dict:
 
 def _check_token(provided: str | None) -> None:
     """Raise 401 if an ACCESS_TOKEN is configured and the value doesn't match."""
-    expected = os.getenv("ACCESS_TOKEN")
-    if expected and not secrets.compare_digest(provided or "", expected):
+    expected = (os.getenv("ACCESS_TOKEN") or "").strip()
+    if expected and not secrets.compare_digest((provided or "").strip(), expected):
         raise HTTPException(status_code=401, detail="Unauthorized: invalid access token")
 
 
@@ -408,9 +408,9 @@ async def stream(ws: WebSocket) -> None:
     # present the matching ?token=... — this stops strangers who merely learn
     # the public URL from spending your Gemini quota. We reject *before* opening
     # a Gemini session, so an unauthorized connection costs nothing.
-    expected_token = os.getenv("ACCESS_TOKEN")
+    expected_token = (os.getenv("ACCESS_TOKEN") or "").strip()
     if expected_token:
-        provided = ws.query_params.get("token", "")
+        provided = ws.query_params.get("token", "").strip()
         if not secrets.compare_digest(provided, expected_token):
             logger.warning("Rejected connection: invalid or missing token")
             await _send_json(
