@@ -23,6 +23,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 from contextlib import suppress
 from pathlib import Path
 
@@ -68,6 +69,7 @@ async def health() -> dict:
         "status": "ok",
         "model": DEFAULT_MODEL,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
+        "auth_required": bool(os.getenv("ACCESS_TOKEN")),
         "input_sample_rate": INPUT_SAMPLE_RATE,
         "output_sample_rate": OUTPUT_SAMPLE_RATE,
     }
@@ -83,6 +85,22 @@ async def _send_json(ws: WebSocket, payload: dict) -> None:
 async def stream(ws: WebSocket) -> None:
     await ws.accept()
     logger.info("Client connected")
+
+    # --- Access control -----------------------------------------------------
+    # If ACCESS_TOKEN is set on the server, reject any connection that does not
+    # present the matching ?token=... — this stops strangers who merely learn
+    # the public URL from spending your Gemini quota. We reject *before* opening
+    # a Gemini session, so an unauthorized connection costs nothing.
+    expected_token = os.getenv("ACCESS_TOKEN")
+    if expected_token:
+        provided = ws.query_params.get("token", "")
+        if not secrets.compare_digest(provided, expected_token):
+            logger.warning("Rejected connection: invalid or missing token")
+            await _send_json(
+                ws, {"type": "error", "message": "Unauthorized: invalid access token"}
+            )
+            await ws.close(code=1008)  # policy violation
+            return
 
     # Allow the client to optionally pass a config message first (voice, etc.).
     voice = os.getenv("GEMINI_VOICE", "Aoede")

@@ -97,6 +97,21 @@
               </div>
 
               <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Access Token</label>
+                <input
+                  id="accessToken"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="server access token"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                />
+                <p class="mt-1 text-xs text-slate-500">
+                  Must match <code>ACCESS_TOKEN</code> on the server. Saved with
+                  the URL via the Save button. Leave blank if the server has none.
+                </p>
+              </div>
+
+              <div>
                 <label class="mb-1.5 block font-medium text-slate-400">Voice</label>
                 <select
                   id="voiceSelect"

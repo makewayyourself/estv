@@ -104,4 +104,19 @@ These are deliberate corrections so the app actually runs against the real API:
 | `GEMINI_API_KEY`    | —                     | **Required.** Your Gemini API key.   |
 | `GEMINI_LIVE_MODEL` | `gemini-2.0-flash-exp`| Live model id.                       |
 | `GEMINI_VOICE`      | `Aoede`               | Prebuilt TTS voice.                  |
+| `ACCESS_TOKEN`      | _(empty)_             | Gate the WebSocket; client must send `?token=`. **Set this for any public deploy.** |
 | `HOST` / `PORT`     | `0.0.0.0` / `8000`    | Server bind address.                 |
+
+## Security / billing
+
+The API key lives **only** in the server's environment (`GEMINI_API_KEY`), never
+in the code or the APK — so a public GitHub repo does not leak it.
+
+The real exposure is the deployed endpoint: without protection, anyone who
+learns the public URL can stream audio and spend your Gemini quota. Set
+**`ACCESS_TOKEN`** on the server (Render's blueprint auto-generates a strong
+one) and enter the same value in the app's *Access Token* field. Connections
+without a matching `?token=` are rejected before any Gemini session is opened,
+so they cost nothing. The token is never committed to the repo. As extra safety
+nets, consider making the repo private and setting a billing cap in Google AI
+Studio.

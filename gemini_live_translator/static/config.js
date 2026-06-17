@@ -12,3 +12,11 @@
  *     (it is then remembered on the device).
  */
 window.DEFAULT_SERVER_URL = "";
+
+/**
+ * Optional: the server access token (must match ACCESS_TOKEN on the backend).
+ * You normally leave this blank and type the token into the app's "Access
+ * Token" field once — it is then remembered on the device. Do NOT commit a
+ * real token to a public repository.
+ */
+window.DEFAULT_ACCESS_TOKEN = "";

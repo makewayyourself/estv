@@ -22,3 +22,8 @@ services:
         value: gemini-2.0-flash-exp
       - key: GEMINI_VOICE
         value: Aoede
+      # Gate the WebSocket so only your app can use it. Render generates a
+      # strong random value; copy it from the dashboard (Environment tab) into
+      # the app's "Access Token" field.
+      - key: ACCESS_TOKEN
+        generateValue: true

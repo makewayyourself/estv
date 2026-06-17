@@ -48,6 +48,7 @@ class TranslatorClient {
       voiceSelect: document.getElementById("voiceSelect"),
       modelInfo: document.getElementById("modelInfo"),
       serverUrl: document.getElementById("serverUrl"),
+      accessToken: document.getElementById("accessToken"),
       saveServerBtn: document.getElementById("saveServerBtn"),
     };
 
@@ -62,14 +63,20 @@ class TranslatorClient {
       this._translationLine = null;
     });
 
-    // Server URL: remembered on the device, pre-filled from the saved value or
-    // the build-time default in config.js.
+    // Server URL + access token: remembered on the device, pre-filled from the
+    // saved value or the build-time defaults in config.js.
     this.els.serverUrl.value = this._serverBase();
+    this.els.accessToken.value = this._accessToken();
     this.els.saveServerBtn.addEventListener("click", () => {
       const v = this.els.serverUrl.value.trim().replace(/\/+$/, "");
       if (v) localStorage.setItem("serverUrl", v);
       else localStorage.removeItem("serverUrl");
-      this._setStatus("idle", "Server URL saved");
+
+      const tok = this.els.accessToken.value.trim();
+      if (tok) localStorage.setItem("accessToken", tok);
+      else localStorage.removeItem("accessToken");
+
+      this._setStatus("idle", "Settings saved");
       this._refreshHealth();
     });
 
@@ -87,6 +94,13 @@ class TranslatorClient {
       return location.origin;
     }
     return "";
+  }
+
+  /** Resolve the server access token for this device (may be empty). */
+  _accessToken() {
+    const saved = (localStorage.getItem("accessToken") || "").trim();
+    if (saved) return saved;
+    return (window.DEFAULT_ACCESS_TOKEN || "").trim();
   }
 
   /** Pull model / key status from the backend's health endpoint. */
@@ -194,7 +208,9 @@ class TranslatorClient {
     }
     // http(s)://host -> ws(s)://host/api/stream
     const wsBase = base.replace(/^http/i, "ws");
-    return `${wsBase}/api/stream`;
+    const token = this._accessToken();
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    return `${wsBase}/api/stream${query}`;
   }
 
   _openSocket() {
