@@ -83,7 +83,7 @@ gemini_live_translator/
 │   ├── audio-processor.js      # AudioWorklet: Float32 → PCM16 100 ms chunks
 │   └── config.js               # build-time DEFAULT_SERVER_URL for the app
 ├── Dockerfile                  # backend container (Render/Railway/Fly/Cloud Run)
-├── render.yaml                 # one-click cloud deploy blueprint
+│   (Render blueprint lives at the repo root: ../render.yaml)
 ├── capacitor.config.json       # Android wrapper config
 ├── package.json                # Capacitor tooling
 ├── scripts/patch-android.mjs   # injects mic permissions into the APK
