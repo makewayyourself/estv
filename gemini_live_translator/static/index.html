@@ -2,489 +2,254 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gemini Live Translator — Real-time Interpreter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Gemini 통역기</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      .pulse-dot {
-        animation: pulse 1.4s ease-in-out infinite;
-      }
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 0.45;
-          transform: scale(0.82);
-        }
-      }
-      .transcript-scroll {
-        scrollbar-width: thin;
-        scrollbar-color: #3f3f5f transparent;
-      }
-      .transcript-scroll::-webkit-scrollbar {
-        width: 6px;
-      }
-      .transcript-scroll::-webkit-scrollbar-thumb {
-        background: #3f3f5f;
-        border-radius: 3px;
-      }
+      .pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
+      @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(.82)} }
+      .scroll-thin { scrollbar-width: thin; scrollbar-color: #3f3f5f transparent; }
+      .scroll-thin::-webkit-scrollbar { width: 6px; }
+      .scroll-thin::-webkit-scrollbar-thumb { background: #3f3f5f; border-radius: 3px; }
+      [data-view][hidden] { display: none; }
+      /* font scale on transcript areas */
+      .fs-sm { font-size: 0.9rem; } .fs-md { font-size: 1rem; } .fs-lg { font-size: 1.15rem; } .fs-xl { font-size: 1.3rem; }
 
-      /* ---- Light theme: override the dark slate palette when body.light ---- */
-      body.light {
-        background: #eef2f7;
-        color: #0f172a;
-      }
-      body.light .bg-slate-950,
-      body.light .bg-slate-900,
-      body.light .bg-slate-900\/60 {
-        background: #ffffff !important;
-      }
-      body.light .bg-slate-950\/60,
-      body.light .bg-slate-950\/50,
-      body.light .bg-slate-800 {
-        background: #f1f5f9 !important;
-      }
-      body.light .border-slate-800,
-      body.light .border-slate-700 {
-        border-color: #e2e8f0 !important;
-      }
-      body.light .text-slate-100,
-      body.light .text-slate-200 {
-        color: #0f172a !important;
-      }
-      body.light .text-slate-300 {
-        color: #334155 !important;
-      }
-      body.light .text-slate-400 {
-        color: #475569 !important;
-      }
-      body.light .text-slate-500 {
-        color: #64748b !important;
-      }
-      body.light .text-slate-600 {
-        color: #94a3b8 !important;
-      }
-      body.light .placeholder\:text-slate-500::placeholder {
-        color: #94a3b8 !important;
-      }
-      body.light .bg-black\/20 {
-        background: rgba(15, 23, 42, 0.06) !important;
-      }
-      body.light .transcript-scroll {
-        scrollbar-color: #cbd5e1 transparent;
-      }
-      body.light .transcript-scroll::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-      }
+      /* Light theme overrides */
+      body.light { background:#eef2f7; color:#0f172a; }
+      body.light .bg-slate-950,body.light .bg-slate-900,body.light .bg-slate-900\/60{background:#fff!important}
+      body.light .bg-slate-950\/60,body.light .bg-slate-950\/50,body.light .bg-slate-800{background:#f1f5f9!important}
+      body.light .border-slate-800,body.light .border-slate-700{border-color:#e2e8f0!important}
+      body.light .text-slate-100,body.light .text-slate-200{color:#0f172a!important}
+      body.light .text-slate-300{color:#334155!important}
+      body.light .text-slate-400{color:#475569!important}
+      body.light .text-slate-500{color:#64748b!important}
+      body.light .text-slate-600{color:#94a3b8!important}
+      body.light .placeholder\:text-slate-500::placeholder{color:#94a3b8!important}
+      body.light .bg-black\/20{background:rgba(15,23,42,.06)!important}
     </style>
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-    <div class="mx-auto max-w-5xl px-5 py-8">
-      <!-- Header -->
-      <header class="mb-8 flex items-center justify-between gap-3">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight">
-            <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
-              Gemini Live Translator
-            </span>
-          </h1>
-          <p class="mt-1 text-sm text-slate-400" data-i18n="subtitle">
-            실시간 음성-대-음성 동시통역 · 다국어
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <select
-            id="uiLang"
-            title="Language"
-            class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:outline-none"
-          >
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-          </select>
-          <button
-            id="themeToggle"
-            title="Theme"
-            class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-200 transition hover:bg-slate-700"
-          >
-            🌙
-          </button>
-          <div
-            id="statusBadge"
-            class="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm"
-          >
-            <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>
-            <span id="statusText" class="font-medium text-slate-300">—</span>
-          </div>
+    <div class="mx-auto flex min-h-screen max-w-2xl flex-col">
+      <!-- App bar -->
+      <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur">
+        <button id="backBtn" class="hidden rounded-full px-2 py-1 text-xl text-slate-300 hover:bg-slate-800">‹</button>
+        <h1 id="viewTitle" class="flex-1 text-lg font-bold">
+          <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">Gemini 통역기</span>
+        </h1>
+        <div id="statusBadge" class="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs">
+          <span id="statusDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
+          <span id="statusText" class="font-medium text-slate-300">—</span>
         </div>
       </header>
 
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <!-- Controls -->
-        <section class="lg:col-span-1">
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400" data-i18n="session">
-              세션 제어
-            </h2>
-
-            <!-- Output mode: hear audio + captions, or captions only -->
-            <div class="mb-3 grid grid-cols-2 gap-2 text-xs">
-              <button id="modeAudioBtn" data-i18n="mode.audio" class="rounded-lg border px-2 py-2 font-medium transition">
-                🔊 음성+자막
-              </button>
-              <button id="modeTextBtn" data-i18n="mode.text" class="rounded-lg border px-2 py-2 font-medium transition">
-                📝 자막만
-              </button>
-            </div>
-
-            <button
-              id="toggleBtn"
-              class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span id="toggleIcon">🎙️</span>
-              <span id="toggleLabel" data-i18n="ctrl.start">통역 시작</span>
+      <main class="flex-1 px-4 py-5">
+        <!-- ============ HOME ============ -->
+        <section data-view="home">
+          <div class="space-y-3">
+            <button data-go="translate" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
+              <span class="text-3xl">🎙️</span>
+              <span class="flex-1">
+                <span class="block font-semibold" data-i18n="home.translate">빠른 통역</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.translateDesc">즉석 실시간 통역·자막 (저장 안 함)</span>
+              </span>
+              <span class="text-slate-600">›</span>
             </button>
+            <button data-go="notes" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
+              <span class="text-3xl">📝</span>
+              <span class="flex-1">
+                <span class="block font-semibold" data-i18n="home.notes">회의 노트</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.notesDesc">녹음·기록·요약 · 주제/날짜로 검색</span>
+              </span>
+              <span class="text-slate-600">›</span>
+            </button>
+            <button data-go="settings" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
+              <span class="text-3xl">⚙️</span>
+              <span class="flex-1">
+                <span class="block font-semibold" data-i18n="home.settings">설정</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.settingsDesc">언어·테마·서버·표시언어·보기모드</span>
+              </span>
+              <span class="text-slate-600">›</span>
+            </button>
+          </div>
+          <p class="mt-6 text-center text-xs text-slate-600" data-i18n="home.tagline">
+            Gemini Live Translate · 자동 언어 감지 · 다국어 자막
+          </p>
+        </section>
 
-            <!-- Quick actions -->
-            <div class="mt-3 grid grid-cols-3 gap-2">
-              <button
-                id="pauseBtn"
-                disabled
-                data-i18n="ctrl.pause"
-                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
-              >
-                ⏸️ 일시정지
-              </button>
-              <button
-                id="replayBtn"
-                disabled
-                data-i18n="ctrl.replay"
-                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
-              >
-                🔁 다시 듣기
-              </button>
-              <button
-                id="pronounceBtn"
-                disabled
-                data-i18n="ctrl.pronounce"
-                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
-              >
-                🗣️ 발음
-              </button>
-            </div>
-
-            <!-- Pronunciation result -->
-            <div id="pronounceBox" class="mt-3 hidden rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-              <div class="mb-1 flex items-center justify-between">
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-400" data-i18n="pron.title">발음</span>
-                <select
-                  id="scriptSelect"
-                  class="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200 focus:outline-none"
-                >
-                  <option value="roman" data-i18n="pron.roman">로마자</option>
-                  <option value="hangul" data-i18n="pron.hangul">한글</option>
-                </select>
-              </div>
-              <div id="pronounceContent" class="text-sm text-slate-200"></div>
-            </div>
-
-            <div class="mt-6 space-y-4 text-sm">
-              <div>
-                <label class="mb-1.5 block font-medium text-slate-400" data-i18n="field.serverUrl">서버 주소</label>
-                <div class="flex gap-2">
-                  <input
-                    id="serverUrl"
-                    type="url"
-                    inputmode="url"
-                    placeholder="https://your-app.onrender.com"
-                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
-                  />
-                  <button
-                    id="saveServerBtn"
-                    data-i18n="btn.save"
-                    class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-300 transition hover:bg-slate-700"
-                  >
-                    저장
-                  </button>
-                </div>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.serverUrl">
-                  클라우드 백엔드 주소. 안드로이드 앱에선 필수, 웹에선 비워두면 현재 서버를 사용합니다.
-                </p>
-              </div>
-
-              <div>
-                <label class="mb-1.5 block font-medium text-slate-400" data-i18n="field.accessToken">접속 토큰</label>
-                <input
-                  id="accessToken"
-                  type="password"
-                  autocomplete="off"
-                  data-i18n-ph="ph.accessToken"
-                  placeholder="서버 접속 토큰"
-                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
-                />
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.accessToken">
-                  서버의 ACCESS_TOKEN과 일치해야 합니다. Save 버튼으로 주소와 함께 저장됩니다.
-                </p>
-              </div>
-
-              <div>
-                <label class="mb-1.5 block font-medium text-slate-400" data-i18n="field.languages">언어</label>
-                <div class="flex items-center gap-2">
-                  <select
-                    id="langA"
-                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-                  ></select>
-                  <span class="shrink-0 text-slate-500">⇄</span>
-                  <select
-                    id="langB"
-                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-                  ></select>
-                </div>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.languages">
-                  Language B = 들리는 언어(출력). 기본 통역 모델은 입력 언어를 자동 감지(70+)하므로 A는 자동으로 두어도 됩니다.
-                </p>
-
-                <label class="mb-1 mt-3 block text-xs font-medium text-slate-400" data-i18n="field.displayLangs">
-                  표시 언어 (각자 읽을 자막 · 최대 3)
-                </label>
-                <div class="grid grid-cols-3 gap-2">
-                  <select id="displayLang1" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
-                  <select id="displayLang2" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
-                  <select id="displayLang3" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
-                </div>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.displayLangs">
-                  설정하면 각 발화를 이 언어들로도 자막에 함께 표시합니다(참가자 각자 읽기). 음성은 위 출력 언어 1개로 나갑니다.
-                </p>
-              </div>
-
-              <div>
-                <label class="mb-1.5 block font-medium text-slate-400" data-i18n="field.voice">목소리</label>
-                <select
-                  id="voiceSelect"
-                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-                >
-                  <optgroup label="여성 / Female">
-                    <option value="Aoede">Aoede</option>
-                    <option value="Kore">Kore</option>
-                    <option value="Leda">Leda</option>
-                    <option value="Zephyr">Zephyr</option>
-                  </optgroup>
-                  <optgroup label="남성 / Male">
-                    <option value="Puck">Puck</option>
-                    <option value="Charon">Charon</option>
-                    <option value="Fenrir">Fenrir</option>
-                    <option value="Orus">Orus</option>
-                  </optgroup>
-                </select>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.voice">
-                  Persona 모델에서만 적용됩니다. 기본 통역 모델은 화자 본인의 목소리를 그대로 살립니다.
-                </p>
-              </div>
-
-              <div>
-                <label class="mb-1.5 flex items-center justify-between font-medium text-slate-400">
-                  <span data-i18n="field.speed">빠르기</span>
-                  <span id="speedValue" class="font-mono text-slate-300">1.0×</span>
-                </label>
-                <input
-                  id="speedRange"
-                  type="range"
-                  min="0.5"
-                  max="1.5"
-                  step="0.05"
-                  value="1.0"
-                  class="w-full accent-indigo-500"
-                />
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.speed">
-                  통역 음성의 재생 속도를 조절합니다(실시간).
-                </p>
-              </div>
-
-              <!-- Risk-detection copilot -->
-              <div class="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3">
-                <label class="flex cursor-pointer items-center justify-between">
-                  <span class="font-medium text-amber-300" data-i18n="risk.title">🛡️ 리스크 감지</span>
-                  <input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" />
-                </label>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.risk">
-                  발화가 끝난 뒤 별도로 분석합니다. 통역 속도에는 영향이 없습니다.
-                </p>
-                <input
-                  id="riskContext"
-                  type="text"
-                  data-i18n-ph="ph.riskContext"
-                  placeholder="분야 (예: oil trading, 알루미늄 수출)"
-                  class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-                <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2">
-                  <span class="font-medium text-sky-300" data-i18n="clarify.title">🔎 의미 확인</span>
-                  <input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" />
-                </label>
-                <p class="mt-1 text-xs text-slate-500" data-i18n="help.clarify">
-                  발음이 어눌해 잘못 통역된 것 같으면 문맥으로 "혹시 이런 뜻?"을 제안합니다.
-                </p>
-              </div>
-
-              <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
-                <div class="flex justify-between py-0.5">
-                  <span data-i18n="info.model">모델</span><span id="modelInfo" class="font-mono text-slate-300">—</span>
-                </div>
-                <div class="flex justify-between py-0.5">
-                  <span data-i18n="info.input">입력</span><span class="font-mono text-slate-300">PCM16 · 16 kHz</span>
-                </div>
-                <div class="flex justify-between py-0.5">
-                  <span data-i18n="info.output">출력</span><span class="font-mono text-slate-300">PCM16 · 24 kHz</span>
-                </div>
-                <div class="flex justify-between py-0.5">
-                  <span data-i18n="info.latency">지연</span><span id="latencyInfo" class="font-mono text-slate-300">~100 ms</span>
-                </div>
-              </div>
-            </div>
+        <!-- ============ TRANSLATE (quick) ============ -->
+        <section data-view="translate" hidden>
+          <div id="qkClarify" class="mb-3 hidden rounded-xl border border-sky-500/60 bg-sky-950/40 p-3 text-sky-100"></div>
+          <div id="qkRisk" class="mb-3 hidden rounded-xl border p-3"></div>
+          <div id="qkTranscript" class="scroll-thin fs-md min-h-[50vh] space-y-3">
+            <p class="qk-ph mt-10 text-center text-sm text-slate-600" data-i18n="tr.ph">
+              아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.
+            </p>
           </div>
         </section>
 
-        <!-- Transcript -->
-        <section class="lg:col-span-2">
-          <!-- Meaning clarification (latest) -->
-          <div id="clarifyAlert" class="mb-4 hidden rounded-2xl border border-sky-500/60 bg-sky-950/40 p-4 text-sky-100">
-            <div class="flex items-start justify-between gap-3">
-              <span class="text-xs font-bold uppercase tracking-wide" data-i18n="clarify.heading">🔎 혹시 이런 뜻이었나요?</span>
-              <button id="clarifyDismiss" class="text-xs opacity-60 hover:opacity-100">✕</button>
-            </div>
-            <div id="clarifyText" class="mt-2 text-sm font-medium"></div>
-            <div class="mt-2 rounded-lg bg-black/20 p-2 text-sm">
-              <span class="text-[10px] uppercase tracking-wide opacity-70" data-i18n="clarify.corrected">교정 번역</span>
-              <div id="clarifyCorrected" class="mt-0.5"></div>
-            </div>
+        <!-- ============ NOTES LIST ============ -->
+        <section data-view="notes" hidden>
+          <div class="mb-4 flex items-center gap-2">
+            <input id="noteSearch" type="search" data-i18n-ph="notes.search" placeholder="주제·내용·날짜 검색"
+              class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none" />
+          </div>
+          <div id="notesList" class="space-y-2"></div>
+          <p id="notesEmpty" class="mt-10 text-center text-sm text-slate-600" data-i18n="notes.empty">
+            아직 노트가 없습니다. 아래 "새 노트"로 시작하세요.
+          </p>
+        </section>
+
+        <!-- ============ NOTE DETAIL ============ -->
+        <section data-view="note" hidden>
+          <div class="mb-3">
+            <input id="noteTitle" class="w-full bg-transparent text-xl font-bold outline-none" />
+            <div id="noteDate" class="text-xs text-slate-500"></div>
           </div>
 
-          <!-- Live risk alert (latest) -->
-          <div id="riskAlert" class="mb-4 hidden rounded-2xl border p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-center gap-2">
-                <span id="riskIcon">⚠️</span>
-                <span id="riskLevelLabel" class="text-xs font-bold uppercase tracking-wide"></span>
-                <span id="riskTypes" class="text-xs opacity-70"></span>
-              </div>
-              <button id="riskDismiss" class="text-xs opacity-60 hover:opacity-100">✕</button>
-            </div>
-            <div id="riskAlertText" class="mt-2 text-sm font-medium"></div>
-            <div id="riskReason" class="mt-1 text-xs opacity-70"></div>
-            <div id="riskQuestionWrap" class="mt-3 hidden rounded-lg bg-black/20 p-3">
-              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70" data-i18n="risk.suggestedQ">추천 질문</div>
-              <div id="riskQuestion" class="text-sm"></div>
-              <button id="riskCopyBtn" data-i18n="btn.copy" class="mt-2 rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10">복사</button>
-            </div>
+          <!-- tabs -->
+          <div class="mb-3 flex border-b border-slate-800 text-sm">
+            <button data-tab="log" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabLog">기록</button>
+            <button data-tab="summary" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabSummary">요약</button>
           </div>
 
-          <div class="flex h-[28rem] flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
-            <div class="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400" data-i18n="transcript.title">
-                실시간 자막
-              </h2>
-              <button
-                id="clearBtn"
-                data-i18n="btn.clear"
-                class="rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
-              >
-                지우기
-              </button>
-            </div>
-            <div
-              id="transcript"
-              class="transcript-scroll flex-1 space-y-3 overflow-y-auto px-6 py-5"
-            >
-              <p id="placeholder" class="text-sm text-slate-600" data-i18n="transcript.ph">
-                두 언어를 고르고 통역 시작을 누른 뒤, 마이크를 허용하고 말하세요…
+          <!-- view-mode + actions -->
+          <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
+            <select id="viewMode" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-slate-100 focus:outline-none">
+              <option value="both" data-i18n="vm.both">원문+번역</option>
+              <option value="source" data-i18n="vm.source">원문만</option>
+              <option value="trans" data-i18n="vm.trans">번역만</option>
+            </select>
+            <button id="noteSummarizeBtn" class="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-500" data-i18n="note.summarize">요약</button>
+            <button id="noteExportMd" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">MD</button>
+            <button id="noteExportDocx" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">Word</button>
+            <button id="noteExportPdf" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">PDF</button>
+            <button id="noteDelete" class="ml-auto rounded-lg border border-rose-900/50 bg-rose-950/30 px-2.5 py-1.5 text-rose-300 hover:bg-rose-950/60" data-i18n="note.delete">삭제</button>
+          </div>
+
+          <div data-pane="log">
+            <div id="noteClarify" class="mb-3 hidden rounded-xl border border-sky-500/60 bg-sky-950/40 p-3 text-sky-100"></div>
+            <div id="noteRisk" class="mb-3 hidden rounded-xl border p-3"></div>
+            <div id="noteTranscript" class="scroll-thin fs-md min-h-[40vh] space-y-3">
+              <p class="note-ph mt-10 text-center text-sm text-slate-600" data-i18n="note.ph">
+                아래 <b>시작</b>을 누르면 녹음·통역이 시작되고 여기에 기록됩니다.
               </p>
             </div>
           </div>
+
+          <div data-pane="summary" hidden>
+            <div class="mb-3 flex gap-2">
+              <input id="askInput" type="text" data-i18n-ph="qa.ph" placeholder="예: 결제 조건이 어떻게 정해졌지?"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none" />
+              <button id="askBtn" class="shrink-0 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500" data-i18n="qa.ask">질문</button>
+            </div>
+            <div id="askAnswer" class="mb-3 hidden whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-200"></div>
+            <div id="summaryContent" class="whitespace-pre-wrap rounded-lg bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-200"></div>
+          </div>
         </section>
+
+        <!-- ============ SETTINGS ============ -->
+        <section data-view="settings" hidden>
+          <div class="space-y-5 text-sm">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="mb-1 block font-medium text-slate-400" data-i18n="set.uiLang">앱 언어</label>
+                <select id="uiLang" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none">
+                  <option value="ko">한국어</option><option value="en">English</option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block font-medium text-slate-400" data-i18n="set.theme">테마</label>
+                <select id="themeSel" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none">
+                  <option value="dark" data-i18n="set.dark">🌙 밤(어둡게)</option>
+                  <option value="light" data-i18n="set.light">☀️ 낮(밝게)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.fontSize">글자 크기</label>
+              <select id="fontSel" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none">
+                <option value="sm">작게</option><option value="md">보통</option><option value="lg">크게</option><option value="xl">아주 크게</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.output">출력(들리는) 언어</label>
+              <select id="langB" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none"></select>
+              <p class="mt-1 text-xs text-slate-500" data-i18n="set.outputHelp">음성으로 나갈 1개 언어. 입력 언어는 자동 감지됩니다.</p>
+            </div>
+
+            <div>
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.display">표시(자막) 언어 · 최대 3</label>
+              <div class="grid grid-cols-3 gap-2">
+                <select id="displayLang1" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"></select>
+                <select id="displayLang2" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"></select>
+                <select id="displayLang3" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"></select>
+              </div>
+              <p class="mt-1 text-xs text-slate-500" data-i18n="set.displayHelp">각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기).</p>
+            </div>
+
+            <div>
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.voice">음성 (목소리)</label>
+              <select id="voiceSelect" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none">
+                <optgroup label="여성 / Female"><option value="Aoede">Aoede</option><option value="Kore">Kore</option><option value="Leda">Leda</option><option value="Zephyr">Zephyr</option></optgroup>
+                <optgroup label="남성 / Male"><option value="Puck">Puck</option><option value="Charon">Charon</option><option value="Fenrir">Fenrir</option><option value="Orus">Orus</option></optgroup>
+              </select>
+            </div>
+
+            <div>
+              <label class="mb-1 flex items-center justify-between font-medium text-slate-400">
+                <span data-i18n="set.speed">빠르기</span><span id="speedValue" class="font-mono text-slate-300">1.0×</span>
+              </label>
+              <input id="speedRange" type="range" min="0.5" max="1.5" step="0.05" value="1.0" class="w-full accent-indigo-500" />
+            </div>
+
+            <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3">
+              <label class="flex cursor-pointer items-center justify-between"><span class="font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
+              <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+              <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.server">서버 주소</label>
+              <input id="serverUrl" type="url" inputmode="url" placeholder="https://your-app.onrender.com" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+              <label class="mb-1 mt-3 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
+              <input id="accessToken" type="password" autocomplete="off" data-i18n-ph="set.tokenPh" placeholder="서버 접속 토큰" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+              <button id="saveServerBtn" class="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
+              <div class="mt-2 flex justify-between text-xs text-slate-500"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono">—</span></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ============ BOTTOM CONTROL BAR (translate + note) ============ -->
+      <div id="controlBar" hidden class="sticky bottom-0 z-20 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
+        <div class="mb-2 flex items-center justify-center gap-2">
+          <button id="modeAudioBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.audio">🔊 음성+자막</button>
+          <button id="modeTextBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.text">📝 자막만</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="toggleBtn" class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50">
+            <span id="toggleIcon">▶️</span><span id="toggleLabel" data-i18n="ctrl.start">시작</span>
+          </button>
+          <button id="pauseBtn" disabled class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-40">⏸️</button>
+          <button id="replayBtn" disabled class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-40">🔁</button>
+          <button id="pronounceBtn" disabled class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-40">🗣️</button>
+        </div>
+        <div id="pronounceBox" class="mt-2 hidden rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-400" data-i18n="pron.title">발음</span>
+            <select id="scriptSelect" class="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200 focus:outline-none">
+              <option value="roman" data-i18n="pron.roman">로마자</option><option value="hangul" data-i18n="pron.hangul">한글</option>
+            </select>
+          </div>
+          <div id="pronounceContent" class="text-sm text-slate-200"></div>
+        </div>
       </div>
 
-      <!-- Meeting Notes -->
-      <section class="mt-6">
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/60">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-4">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              <span data-i18n="notes.title">회의 노트</span> <span id="noteCount" class="ml-1 text-slate-600">(0)</span>
-            </h2>
-            <div class="flex flex-wrap items-center gap-2">
-              <label class="text-xs text-slate-500" data-i18n="notes.summaryIn">요약 언어</label>
-              <select
-                id="summaryLang"
-                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-              ></select>
-              <button
-                id="summarizeBtn"
-                data-i18n="notes.summarize"
-                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
-              >
-                요약
-              </button>
-              <span class="mx-1 text-xs text-slate-600" data-i18n="notes.saveAs">저장:</span>
-              <button id="exportMdBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">MD</button>
-              <button id="exportDocxBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">Word</button>
-              <button id="exportPdfBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">PDF</button>
-              <button
-                id="newMeetingBtn"
-                data-i18n="notes.new"
-                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-400 transition hover:bg-slate-700"
-              >
-                새 회의
-              </button>
-            </div>
-          </div>
-
-          <!-- Ask about the conversation (Q&A) -->
-          <div class="border-b border-slate-800 px-6 py-4">
-            <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-sky-400" data-i18n="qa.title">
-              💬 대화 내용 질문
-            </div>
-            <div class="flex gap-2">
-              <input
-                id="askInput"
-                type="text"
-                data-i18n-ph="ph.ask"
-                placeholder="예: 결제 조건이 어떻게 정해졌지?"
-                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-              />
-              <button
-                id="askBtn"
-                data-i18n="qa.ask"
-                class="shrink-0 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:opacity-50"
-              >
-                질문
-              </button>
-            </div>
-            <div id="askAnswer" class="mt-2 hidden whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-200"></div>
-          </div>
-
-          <!-- Summary -->
-          <div id="summaryBox" class="hidden border-b border-slate-800 px-6 py-4">
-            <div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-400" data-i18n="summary.title">
-              요약
-            </div>
-            <div id="summaryContent" class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200"></div>
-          </div>
-
-          <!-- Full timestamped log -->
-          <div
-            id="notes"
-            class="transcript-scroll max-h-[24rem] space-y-2 overflow-y-auto px-6 py-4"
-          >
-            <p id="notesPlaceholder" class="text-sm text-slate-600" data-i18n="notes.ph">
-              회의가 시작되면 발화가 시간순으로 기록됩니다. 기록은 이 기기에 저장되어 앱을 닫아도 유지됩니다.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <footer class="mt-6 text-center text-xs text-slate-600" data-i18n="footer">
-        Google Gemini Multimodal Live API 기반 · 제로-추론 오디오 파이프라인
-      </footer>
+      <!-- New-note FAB (notes list) -->
+      <button id="newNoteBtn" hidden class="sticky bottom-4 z-20 mx-4 mb-4 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow-lg hover:bg-indigo-500" data-i18n="notes.new">＋ 새 노트</button>
     </div>
 
     <script src="./config.js"></script>
