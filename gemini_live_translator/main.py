@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import enum
 import json
 import logging
 import os
 import secrets
 from contextlib import suppress
 from pathlib import Path
+from typing import List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -45,6 +47,7 @@ from services.gemini_live import (
     SUPPORTED_LANGUAGES,
     build_config,
     build_pronounce_prompt,
+    build_risk_prompt,
     build_summary_prompt,
     get_client,
     normalize_lang,
@@ -133,6 +136,71 @@ async def summarize(req: SummarizeRequest) -> dict:
         raise HTTPException(status_code=502, detail=f"Summarization failed: {exc}")
 
     return {"summary": response.text or "", "model": SUMMARY_MODEL, "language": language}
+
+
+class RiskLevel(str, enum.Enum):
+    none = "none"
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class RiskAnalysis(BaseModel):
+    """Structured risk-detection result (enforced as the model's JSON schema)."""
+
+    risk_level: RiskLevel
+    risk_types: List[str]
+    subtitle_alert: str
+    reason: str
+    suggested_question: str
+
+
+class AnalyzeRequest(BaseModel):
+    original: str
+    translation: str = ""
+    alert_language: str = DEFAULT_LANG_A
+    context: str = ""
+    token: str | None = None
+
+
+@app.post("/api/analyze")
+async def analyze(req: AnalyzeRequest) -> dict:
+    """Risk-detect one finalized utterance (runs off the real-time path).
+
+    Returns structured guidance: risk level, types, a short subtitle alert, and
+    a suggested follow-up question — written in ``alert_language``.
+    """
+    _check_token(req.token)
+
+    original = (req.original or "").strip()
+    if not original:
+        raise HTTPException(status_code=400, detail="Original text is empty")
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    alert_language = normalize_lang(req.alert_language, DEFAULT_LANG_A)
+    prompt = build_risk_prompt(
+        original[:2000], (req.translation or "")[:2000], alert_language, req.context[:200]
+    )
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=RiskAnalysis,
+        temperature=0.2,
+    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=SUMMARY_MODEL, contents=prompt, config=config
+        )
+        data = json.loads(response.text or "{}")
+    except Exception as exc:  # noqa: BLE001 — never break the UI on analysis failure
+        logger.warning("Risk analysis failed: %s", exc)
+        return {"risk_level": "none", "risk_types": [], "subtitle_alert": "",
+                "reason": "", "suggested_question": ""}
+
+    return data
 
 
 class PronounceRequest(BaseModel):

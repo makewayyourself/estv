@@ -162,6 +162,39 @@ def build_pronounce_prompt(text: str, script: str) -> str:
     )
 
 
+def build_risk_prompt(
+    original: str, translation: str, alert_language: str, context: str = ""
+) -> str:
+    """Build the risk-detection prompt for one finalized utterance.
+
+    The model returns structured JSON (enforced via response_schema). The
+    ``subtitle_alert`` and ``suggested_question`` are written in
+    ``alert_language`` so the user reads guidance in their own language.
+    """
+    lang_name = SUPPORTED_LANGUAGES.get(alert_language, "English")
+    context_line = ""
+    if context.strip():
+        context_line = (
+            f"\nBusiness/industry context: {context.strip()}. Consider domain "
+            "terms (e.g. for oil/commodity trading: LOI, SCO, FCO, POP, SGS/BV, "
+            "Platts, CIF/FOB, upfront fee, allocation, mandate) and flag them.\n"
+        )
+    return (
+        "You are a real-time business-interpreting safety assistant. Analyze the "
+        "utterance below for things the listener should double-check before "
+        "acting, across these areas: money/payment, contracts & liability, "
+        "guarantees/exclusivity/penalties/advance-payment, numbers·dates·"
+        "quantities·currency·units, culturally rude or overly blunt phrasing, "
+        "personal/sensitive data, and low translation confidence.\n"
+        "Be conservative: set risk_level to 'none' for ordinary small talk. Only "
+        "raise medium/high when there is a real business risk to verify. Keep "
+        f"subtitle_alert short and actionable. Write subtitle_alert and "
+        f"suggested_question in {lang_name}.{context_line}\n"
+        f"ORIGINAL (source language): {original}\n"
+        f"TRANSLATION: {translation}\n"
+    )
+
+
 def get_client() -> genai.Client:
     """Return an async-capable Gemini client, or raise if no key is configured.
 

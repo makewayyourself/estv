@@ -98,11 +98,25 @@ class TranslatorClient {
       scriptSelect: document.getElementById("scriptSelect"),
       speedRange: document.getElementById("speedRange"),
       speedValue: document.getElementById("speedValue"),
+      // Risk guard
+      riskToggle: document.getElementById("riskToggle"),
+      riskContext: document.getElementById("riskContext"),
+      riskAlert: document.getElementById("riskAlert"),
+      riskIcon: document.getElementById("riskIcon"),
+      riskLevelLabel: document.getElementById("riskLevelLabel"),
+      riskTypes: document.getElementById("riskTypes"),
+      riskDismiss: document.getElementById("riskDismiss"),
+      riskAlertText: document.getElementById("riskAlertText"),
+      riskReason: document.getElementById("riskReason"),
+      riskQuestionWrap: document.getElementById("riskQuestionWrap"),
+      riskQuestion: document.getElementById("riskQuestion"),
+      riskCopyBtn: document.getElementById("riskCopyBtn"),
     };
 
     this._setupLanguages();
     this._setupMeetingNotes();
     this._setupControls();
+    this._setupRiskGuard();
 
     this.els.toggleBtn.addEventListener("click", () => {
       if (this.running) this.stop();
@@ -249,6 +263,80 @@ class TranslatorClient {
     }
   }
 
+  /** Risk-detection copilot: restore settings, wire toggle/dismiss/copy. */
+  _setupRiskGuard() {
+    this.els.riskToggle.checked = localStorage.getItem("riskGuard") === "1";
+    this.els.riskContext.value = localStorage.getItem("riskContext") || "";
+    this.els.riskToggle.addEventListener("change", () => {
+      localStorage.setItem("riskGuard", this.els.riskToggle.checked ? "1" : "0");
+      if (!this.els.riskToggle.checked) this.els.riskAlert.classList.add("hidden");
+    });
+    this.els.riskContext.addEventListener("change", () =>
+      localStorage.setItem("riskContext", this.els.riskContext.value.trim())
+    );
+    this.els.riskDismiss.addEventListener("click", () =>
+      this.els.riskAlert.classList.add("hidden")
+    );
+    this.els.riskCopyBtn.addEventListener("click", () => {
+      const q = this.els.riskQuestion.textContent || "";
+      if (q && navigator.clipboard) navigator.clipboard.writeText(q).catch(() => {});
+    });
+  }
+
+  /** Analyze one finalized turn for risks (off the real-time path). */
+  async _analyzeTurn(entry) {
+    const base = this._serverBase();
+    if (!base || !entry.source) return;
+    try {
+      const res = await fetch(`${base}/api/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original: entry.source,
+          translation: entry.translation,
+          alert_language: this.els.summaryLang.value,
+          context: this.els.riskContext.value.trim(),
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const risk = await res.json();
+      if (!risk || risk.risk_level === "none") return;
+
+      entry.risk = risk; // attach to the note + persist
+      try {
+        localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
+      } catch {
+        /* ignore */
+      }
+      this._renderRiskAlert(risk);
+    } catch {
+      /* analysis is best-effort; never disturb the conversation */
+    }
+  }
+
+  _renderRiskAlert(risk) {
+    const styles = {
+      low: { box: "border-slate-600 bg-slate-800 text-slate-200", icon: "💡", label: "참고" },
+      medium: { box: "border-amber-500/60 bg-amber-950/40 text-amber-100", icon: "⚠️", label: "확인 필요" },
+      high: { box: "border-rose-500/70 bg-rose-950/40 text-rose-100", icon: "🚨", label: "주의" },
+    };
+    const s = styles[risk.risk_level] || styles.low;
+    this.els.riskAlert.className = `mb-4 rounded-2xl border p-4 ${s.box}`;
+    this.els.riskIcon.textContent = s.icon;
+    this.els.riskLevelLabel.textContent = `${s.label} (${risk.risk_level})`;
+    this.els.riskTypes.textContent = (risk.risk_types || []).join(" · ");
+    this.els.riskAlertText.textContent = risk.subtitle_alert || "";
+    this.els.riskReason.textContent = risk.reason || "";
+    if (risk.suggested_question) {
+      this.els.riskQuestion.textContent = risk.suggested_question;
+      this.els.riskQuestionWrap.classList.remove("hidden");
+    } else {
+      this.els.riskQuestionWrap.classList.add("hidden");
+    }
+    this.els.riskAlert.classList.remove("hidden");
+  }
+
   /** Set up the meeting-notes panel: restore saved log, wire the buttons. */
   _setupMeetingNotes() {
     // Summary language dropdown mirrors the supported languages.
@@ -294,13 +382,17 @@ class TranslatorClient {
 
     if (!source && !translation) return;
 
-    this.meetingLog.push({ t: Date.now(), source, translation });
+    const entry = { t: Date.now(), source, translation };
+    this.meetingLog.push(entry);
     try {
       localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
     } catch {
       /* storage full — keep going in memory */
     }
     this._renderNotes();
+
+    // Fire-and-forget risk analysis (does not block translation).
+    if (this.els.riskToggle.checked) this._analyzeTurn(entry);
   }
 
   _renderNotes() {
@@ -322,10 +414,22 @@ class TranslatorClient {
       const row = document.createElement("div");
       row.dataset.note = "1";
       row.className = "rounded-lg bg-slate-950/50 px-3 py-2 text-sm";
+      let riskHtml = "";
+      if (entry.risk && entry.risk.risk_level && entry.risk.risk_level !== "none") {
+        const color =
+          entry.risk.risk_level === "high"
+            ? "text-rose-300"
+            : entry.risk.risk_level === "medium"
+            ? "text-amber-300"
+            : "text-slate-400";
+        riskHtml = `<div class="mt-1 ${color} text-xs">⚠️ ${this._escape(
+          entry.risk.subtitle_alert || ""
+        )}</div>`;
+      }
       row.innerHTML = `
         <div class="mb-0.5 text-[10px] font-mono text-slate-600">${time}</div>
         <div class="text-slate-400">${this._escape(entry.source)}</div>
-        <div class="text-slate-100">${this._escape(entry.translation)}</div>`;
+        <div class="text-slate-100">${this._escape(entry.translation)}</div>${riskHtml}`;
       this.els.notes.appendChild(row);
     }
     this.els.notes.scrollTop = this.els.notes.scrollHeight;
@@ -409,6 +513,10 @@ class TranslatorClient {
       const time = new Date(e.t).toLocaleTimeString();
       md += `- **[${time}]** ${e.source}`;
       if (e.translation) md += `\n  - → ${e.translation}`;
+      if (e.risk && e.risk.risk_level && e.risk.risk_level !== "none") {
+        md += `\n  - ⚠️ **[${e.risk.risk_level}]** ${e.risk.subtitle_alert || ""}`;
+        if (e.risk.suggested_question) md += `\n    - ❓ ${e.risk.suggested_question}`;
+      }
       md += `\n`;
     }
 

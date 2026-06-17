@@ -16,6 +16,15 @@ Language B (comprehension mode). To add more, extend `SUPPORTED_LANGUAGES` in
 last translated sentence, and **Pronounce** — a phonetic transliteration of the
 last translation in romaji or Hangul (`POST /api/pronounce`).
 
+**🛡️ Risk Guard (negotiation copilot):** an opt-in toggle that, *after* each
+turn finishes, analyzes it on a separate text model (`POST /api/analyze`,
+structured JSON) for business/contract/payment/number/etiquette risks and shows
+an alert card (low/medium/high) with a short warning and a suggested follow-up
+question. Because it runs off the real-time path — fired only on `turn_complete`
+— **it never delays the live translation.** An optional industry-context box
+(e.g. "oil trading") biases detection toward domain terms (LOI, SCO, POP, SGS,
+Platts, CIF/FOB, …). Risks are saved into the meeting notes and the export.
+
 There is no STT → Translate → TTS chain. Microphone audio is streamed directly
 into Gemini's bidirectional live channel, and translated audio streams straight
 back out, which is what keeps latency low.
