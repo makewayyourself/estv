@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - claude/gemini-live-audio-translator-2rt18z
     paths:
       - "gemini_live_translator/**"
