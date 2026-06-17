@@ -44,6 +44,17 @@ the whole thing as Markdown.
 [ Browser ]  ⇄ (PCM16 audio + JSON over WebSocket) ⇄  [ FastAPI ]  ⇄ (Live API) ⇄  [ Gemini ]
 ```
 
+## Model stack
+
+| Job | Model (default) | Why |
+| --- | --- | --- |
+| Speech-to-speech translation | `gemini-3.5-live-translate-preview` | Dedicated low-latency S2S, 70+ langs |
+| Live captions | Live API input/output transcription | Free with the audio session |
+| Risk detection (per turn) | `gemini-3.1-flash-lite` | Cheap/fast; runs often, off the realtime path |
+| Meeting summary | `gemini-3.5-flash` | Stronger reasoning; runs occasionally |
+
+Each is overridable via env (`GEMINI_LIVE_MODEL`, `RISK_MODEL`, `SUMMARY_MODEL`).
+
 ## Project layout
 
 ```
@@ -138,7 +149,8 @@ These are deliberate corrections so the app actually runs against the real API:
 | ------------------- | --------------------- | ------------------------------------ |
 | `GEMINI_API_KEY`    | —                     | **Required.** Your Gemini API key.   |
 | `GEMINI_LIVE_MODEL` | `gemini-3.5-live-translate-preview` | Live model id (translate or persona). |
-| `SUMMARY_MODEL`     | `gemini-2.0-flash`    | Text model for meeting summaries.    |
+| `RISK_MODEL`        | `gemini-3.1-flash-lite` | Per-turn risk analysis (fast/cheap). |
+| `SUMMARY_MODEL`     | `gemini-3.5-flash`    | Meeting summaries (stronger Flash).  |
 | `GEMINI_VOICE`      | `Aoede`               | Prebuilt TTS voice.                  |
 | `ACCESS_TOKEN`      | _(empty)_             | Gate the WebSocket; client must send `?token=`. **Set this for any public deploy.** |
 | `HOST` / `PORT`     | `0.0.0.0` / `8000`    | Server bind address.                 |

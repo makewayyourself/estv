@@ -42,9 +42,12 @@ from google.genai import types
 DEFAULT_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.5-live-translate-preview")
 DEFAULT_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 
-# Text model used to summarize the accumulated meeting transcript. A regular
-# (non-live) fast model is ideal here.
-SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-2.0-flash")
+# Text models for the non-realtime helpers.
+#  * RISK_MODEL runs once per finalized turn → use a fast, cheap "Lite" model.
+#  * SUMMARY_MODEL runs occasionally on the whole transcript → a stronger Flash.
+# (gemini-2.0-flash / 2.0-flash-lite were shut down on 2026-06-01.)
+RISK_MODEL = os.getenv("RISK_MODEL", "gemini-3.1-flash-lite")
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-3.5-flash")
 
 # Audio format constants shared with the client. Input is what we feed Gemini;
 # output is what Gemini hands back to us.

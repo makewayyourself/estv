@@ -43,6 +43,7 @@ from services.gemini_live import (
     INPUT_MIME_TYPE,
     INPUT_SAMPLE_RATE,
     OUTPUT_SAMPLE_RATE,
+    RISK_MODEL,
     SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
     build_config,
@@ -84,6 +85,8 @@ async def health() -> dict:
         "model": DEFAULT_MODEL,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
         "auth_required": bool(os.getenv("ACCESS_TOKEN")),
+        "risk_model": RISK_MODEL,
+        "summary_model": SUMMARY_MODEL,
         "languages": SUPPORTED_LANGUAGES,
         "input_sample_rate": INPUT_SAMPLE_RATE,
         "output_sample_rate": OUTPUT_SAMPLE_RATE,
@@ -192,7 +195,7 @@ async def analyze(req: AnalyzeRequest) -> dict:
     )
     try:
         response = await client.aio.models.generate_content(
-            model=SUMMARY_MODEL, contents=prompt, config=config
+            model=RISK_MODEL, contents=prompt, config=config
         )
         data = json.loads(response.text or "{}")
     except Exception as exc:  # noqa: BLE001 — never break the UI on analysis failure
@@ -228,7 +231,7 @@ async def pronounce(req: PronounceRequest) -> dict:
     prompt = build_pronounce_prompt(text, script)
     try:
         response = await client.aio.models.generate_content(
-            model=SUMMARY_MODEL, contents=prompt
+            model=RISK_MODEL, contents=prompt
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Pronunciation failed")
