@@ -58,6 +58,9 @@ const UI_I18N = {
     "help.accessToken": "서버의 ACCESS_TOKEN과 일치해야 합니다. Save 버튼으로 주소와 함께 저장됩니다.",
     "field.languages": "언어",
     "help.languages": "Language B = 들리는 언어(출력). 기본 통역 모델은 입력 언어를 자동 감지(70+)하므로 A는 자동으로 두어도 됩니다.",
+    "field.displayLangs": "표시 언어 (각자 읽을 자막 · 최대 3)",
+    "help.displayLangs": "설정하면 각 발화를 이 언어들로도 자막에 함께 표시합니다(참가자 각자 읽기). 음성은 위 출력 언어 1개로 나갑니다.",
+    "opt.none": "— 없음 —",
     "field.voice": "목소리",
     "help.voice": "Persona 모델에서만 적용됩니다. 기본 통역 모델은 화자 본인의 목소리를 그대로 살립니다.",
     "field.speed": "빠르기",
@@ -133,6 +136,9 @@ const UI_I18N = {
     "help.accessToken": "Must match ACCESS_TOKEN on the server. Saved with the URL via the Save button.",
     "field.languages": "Languages",
     "help.languages": "Language B = the language you hear (output). The default translate model auto-detects the source (70+), so A can stay on Auto.",
+    "field.displayLangs": "Caption languages (each reads their own · up to 3)",
+    "help.displayLangs": "If set, each utterance is also shown in these languages (everyone reads their own). Audio plays in the single output language above.",
+    "opt.none": "— none —",
     "field.voice": "Voice",
     "help.voice": "Applies to the persona model only. The default translate model preserves the speaker's own voice.",
     "field.speed": "Speed",
@@ -266,6 +272,9 @@ class TranslatorClient {
       saveServerBtn: document.getElementById("saveServerBtn"),
       langA: document.getElementById("langA"),
       langB: document.getElementById("langB"),
+      displayLang1: document.getElementById("displayLang1"),
+      displayLang2: document.getElementById("displayLang2"),
+      displayLang3: document.getElementById("displayLang3"),
       // Meeting notes
       notes: document.getElementById("notes"),
       notesPlaceholder: document.getElementById("notesPlaceholder"),
@@ -422,6 +431,29 @@ class TranslatorClient {
     };
     this.els.langA.addEventListener("change", remember);
     this.els.langB.addEventListener("change", remember);
+
+    // Display (caption) languages — each optional, "none" first.
+    const displaySels = [this.els.displayLang1, this.els.displayLang2, this.els.displayLang3];
+    const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
+    displaySels.forEach((sel, i) => {
+      sel.innerHTML = "";
+      for (const [code, label] of [["", t("opt.none")], ...Object.entries(LANGUAGES)]) {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = label;
+        if (code === (saved[i] || "")) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => {
+        localStorage.setItem("displayLangs", JSON.stringify(displaySels.map((s) => s.value)));
+      });
+    });
+  }
+
+  /** Selected caption languages (deduped, non-empty). */
+  _displayLangs() {
+    const v = [this.els.displayLang1.value, this.els.displayLang2.value, this.els.displayLang3.value];
+    return [...new Set(v.filter(Boolean))];
   }
 
   /** Wire the quick-action controls: speed, pause, replay, pronounce. */
@@ -717,6 +749,60 @@ class TranslatorClient {
     if (this.els.riskToggle.checked || this.els.clarifyToggle.checked) {
       this._analyzeTurn(entry);
     }
+    // Multilingual captions: translate this utterance into the display languages.
+    if (this._displayLangs().length && entry.source) {
+      this._multiTranslate(entry);
+    }
+  }
+
+  /** Translate a finalized turn into the caption languages and show them. */
+  async _multiTranslate(entry) {
+    const base = this._serverBase();
+    const targets = this._displayLangs();
+    if (!base || !targets.length) return;
+    try {
+      const res = await fetch(`${base}/api/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: entry.source,
+          targets,
+          token: this._accessToken() || undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const tr = data.translations || {};
+      if (!Object.keys(tr).length) return;
+      entry.multi = tr;
+      try {
+        localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
+      } catch {
+        /* ignore */
+      }
+      this._appendMultiLines(tr);
+      this._renderNotes();
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /** Append labeled per-language caption lines to the live transcript. */
+  _appendMultiLines(translations) {
+    if (this.els.placeholder) {
+      this.els.placeholder.remove();
+      this.els.placeholder = null;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "rounded-lg bg-slate-800/60 px-3 py-2 text-sm";
+    wrap.innerHTML = Object.entries(translations)
+      .map(
+        ([code, text]) =>
+          `<div class="flex gap-2"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${code}</span><span class="text-slate-200">${this._escape(text)}</span></div>`
+      )
+      .join("");
+    this.els.transcript.appendChild(wrap);
+    this.els.transcript.scrollTop = this.els.transcript.scrollHeight;
   }
 
   _renderNotes() {
@@ -750,10 +836,19 @@ class TranslatorClient {
           entry.risk.subtitle_alert || ""
         )}</div>`;
       }
+      let multiHtml = "";
+      if (entry.multi && Object.keys(entry.multi).length) {
+        multiHtml = Object.entries(entry.multi)
+          .map(
+            ([code, text]) =>
+              `<div class="mt-0.5 flex gap-2 text-xs"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${code}</span><span class="text-slate-300">${this._escape(text)}</span></div>`
+          )
+          .join("");
+      }
       row.innerHTML = `
         <div class="mb-0.5 text-[10px] font-mono text-slate-600">${time}</div>
         <div class="text-slate-400">${this._escape(entry.source)}</div>
-        <div class="text-slate-100">${this._escape(entry.translation)}</div>${riskHtml}`;
+        <div class="text-slate-100">${this._escape(entry.translation)}</div>${multiHtml}${riskHtml}`;
       this.els.notes.appendChild(row);
     }
     this.els.notes.scrollTop = this.els.notes.scrollHeight;
@@ -824,15 +919,24 @@ class TranslatorClient {
 
   /** Build the structured entry list the export endpoint expects. */
   _exportEntries() {
-    return this.meetingLog.map((e) => ({
-      time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      source: e.source || "",
-      translation: e.translation || "",
-      risk:
-        e.risk && e.risk.risk_level && e.risk.risk_level !== "none"
-          ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`
-          : "",
-    }));
+    return this.meetingLog.map((e) => {
+      let translation = e.translation || "";
+      if (e.multi && Object.keys(e.multi).length) {
+        const extra = Object.entries(e.multi)
+          .map(([code, text]) => `[${code}] ${text}`)
+          .join("  ");
+        translation = translation ? `${translation}  ${extra}` : extra;
+      }
+      return {
+        time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        source: e.source || "",
+        translation,
+        risk:
+          e.risk && e.risk.risk_level && e.risk.risk_level !== "none"
+            ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`
+            : "",
+      };
+    });
   }
 
   /** Export the notes as md / docx / pdf via the server, then download. */
