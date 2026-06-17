@@ -58,10 +58,17 @@ extra latency to the live translation.
 | --- | --- | --- |
 | Speech-to-speech translation | `gemini-3.5-live-translate-preview` | Dedicated low-latency S2S, 70+ langs |
 | Live captions | Live API input/output transcription | Free with the audio session |
-| Risk detection (per turn) | `gemini-3.1-flash-lite` | Cheap/fast; runs often, off the realtime path |
-| Meeting summary | `gemini-3.5-flash` | Stronger reasoning; runs occasionally |
+| Risk detection (risk-only turn) | `gemini-3.1-flash-lite` | Cheap/fast; runs often, off the realtime path |
+| Meaning clarification / any turn with Clarify on | `gemini-3.5-flash` + thinking | Needs real reasoning to infer intent from garbled speech |
+| Meeting summary / Q&A | `gemini-3.5-flash` + thinking | Stronger reasoning over the whole transcript |
 
-Each is overridable via env (`GEMINI_LIVE_MODEL`, `RISK_MODEL`, `SUMMARY_MODEL`).
+Each is overridable via env (`GEMINI_LIVE_MODEL`, `RISK_MODEL`, `CLARIFY_MODEL`,
+`SUMMARY_MODEL`). `ANALYSIS_THINKING_BUDGET` (default 4096) controls the extra
+reasoning budget for the clarification and Q&A calls; set 0 to disable. Turning
+on **Clarify** automatically routes that turn to the stronger model, so the
+deeper reasoning lands exactly where it matters without making every turn
+expensive. (`gemini-3.5-pro` was not yet a public API id as of June 2026; raise
+`CLARIFY_MODEL`/`SUMMARY_MODEL` to it once available for even stronger reasoning.)
 
 ## Project layout
 

@@ -43,6 +43,8 @@ from services.gemini_live import (
     DEFAULT_MODEL,
     INPUT_MIME_TYPE,
     INPUT_SAMPLE_RATE,
+    ANALYSIS_THINKING_BUDGET,
+    CLARIFY_MODEL,
     OUTPUT_SAMPLE_RATE,
     RISK_MODEL,
     SUMMARY_MODEL,
@@ -89,6 +91,7 @@ async def health() -> dict:
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
         "auth_required": bool(os.getenv("ACCESS_TOKEN")),
         "risk_model": RISK_MODEL,
+        "clarify_model": CLARIFY_MODEL,
         "summary_model": SUMMARY_MODEL,
         "languages": SUPPORTED_LANGUAGES,
         "input_sample_rate": INPUT_SAMPLE_RATE,
@@ -171,7 +174,46 @@ class AnalyzeRequest(BaseModel):
     alert_language: str = DEFAULT_LANG_A
     context: str = ""
     history: str = ""
+    want_risk: bool = True
+    want_clarify: bool = False
     token: str | None = None
+
+
+_EMPTY_ANALYSIS = {
+    "risk_level": "none", "risk_types": [], "subtitle_alert": "", "reason": "",
+    "suggested_question": "", "clarify_suspected": False,
+    "clarify_did_you_mean": "", "clarify_corrected_translation": "",
+}
+
+
+async def _run_analysis(client, model: str, prompt: str, thinking_budget: int) -> dict:
+    """Call the analysis model with structured output; retry without thinking if
+    the model rejects the thinking_config."""
+    base_kwargs = dict(
+        response_mime_type="application/json",
+        response_schema=RiskAnalysis,
+        temperature=0.2,
+    )
+    attempts = []
+    if thinking_budget > 0:
+        attempts.append(
+            types.GenerateContentConfig(
+                **base_kwargs,
+                thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),
+            )
+        )
+    attempts.append(types.GenerateContentConfig(**base_kwargs))
+
+    last_exc = None
+    for cfg in attempts:
+        try:
+            resp = await client.aio.models.generate_content(
+                model=model, contents=prompt, config=cfg
+            )
+            return json.loads(resp.text or "{}")
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+    raise last_exc if last_exc else RuntimeError("analysis failed")
 
 
 @app.post("/api/analyze")
@@ -200,23 +242,20 @@ async def analyze(req: AnalyzeRequest) -> dict:
         req.context[:200],
         (req.history or "")[:4000],
     )
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema=RiskAnalysis,
-        temperature=0.2,
-    )
+
+    # Clarification needs real reasoning, so when it is requested we use the
+    # stronger model plus a thinking budget; a risk-only turn stays on the
+    # cheap/fast Lite model with no thinking.
+    if req.want_clarify:
+        model, thinking = CLARIFY_MODEL, ANALYSIS_THINKING_BUDGET
+    else:
+        model, thinking = RISK_MODEL, 0
+
     try:
-        response = await client.aio.models.generate_content(
-            model=RISK_MODEL, contents=prompt, config=config
-        )
-        data = json.loads(response.text or "{}")
+        data = await _run_analysis(client, model, prompt, thinking)
     except Exception as exc:  # noqa: BLE001 — never break the UI on analysis failure
         logger.warning("Per-turn analysis failed: %s", exc)
-        return {
-            "risk_level": "none", "risk_types": [], "subtitle_alert": "",
-            "reason": "", "suggested_question": "", "clarify_suspected": False,
-            "clarify_did_you_mean": "", "clarify_corrected_translation": "",
-        }
+        return dict(_EMPTY_ANALYSIS)
 
     return data
 
@@ -249,15 +288,31 @@ async def ask(req: AskRequest) -> dict:
 
     language = normalize_lang(req.language, DEFAULT_LANG_A)
     prompt = build_qa_prompt(transcript, question[:1000], language)
-    try:
-        response = await client.aio.models.generate_content(
-            model=SUMMARY_MODEL, contents=prompt
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Q&A failed")
-        raise HTTPException(status_code=502, detail=f"Q&A failed: {exc}")
 
-    return {"answer": (response.text or "").strip()}
+    # Q&A reasons over the whole conversation, so give it a thinking budget too
+    # (retry without it if the model rejects the config).
+    configs = []
+    if ANALYSIS_THINKING_BUDGET > 0:
+        configs.append(
+            types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=ANALYSIS_THINKING_BUDGET
+                )
+            )
+        )
+    configs.append(None)
+
+    last_exc = None
+    for cfg in configs:
+        try:
+            response = await client.aio.models.generate_content(
+                model=SUMMARY_MODEL, contents=prompt, config=cfg
+            )
+            return {"answer": (response.text or "").strip()}
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+    logger.exception("Q&A failed")
+    raise HTTPException(status_code=502, detail=f"Q&A failed: {last_exc}")
 
 
 class ExportEntry(BaseModel):

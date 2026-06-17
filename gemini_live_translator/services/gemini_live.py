@@ -43,11 +43,22 @@ DEFAULT_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.5-live-translate-previe
 DEFAULT_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 
 # Text models for the non-realtime helpers.
-#  * RISK_MODEL runs once per finalized turn → use a fast, cheap "Lite" model.
-#  * SUMMARY_MODEL runs occasionally on the whole transcript → a stronger Flash.
-# (gemini-2.0-flash / 2.0-flash-lite were shut down on 2026-06-01.)
+#  * RISK_MODEL    : lightweight per-turn risk check → fast/cheap "Lite".
+#  * CLARIFY_MODEL : meaning-clarification reasoning (infer intent from garbled
+#                    speech) → stronger Flash; also used for the per-turn call
+#                    whenever Clarify is on, so reasoning is deeper where it
+#                    matters most.
+#  * SUMMARY_MODEL : whole-transcript summary / Q&A → stronger Flash.
+# (gemini-2.0-flash / 2.0-flash-lite were shut down on 2026-06-01;
+#  gemini-3.5-pro is not yet a public API model id as of June 2026.)
 RISK_MODEL = os.getenv("RISK_MODEL", "gemini-3.1-flash-lite")
+CLARIFY_MODEL = os.getenv("CLARIFY_MODEL", "gemini-3.5-flash")
 SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-3.5-flash")
+
+# Extra "thinking" budget (tokens) for the deeper analysis path. 0 disables it.
+# Boosts reasoning quality for clarification at some extra cost/latency (off the
+# real-time path, so it never slows the live translation).
+ANALYSIS_THINKING_BUDGET = int(os.getenv("ANALYSIS_THINKING_BUDGET", "4096"))
 
 # Audio format constants shared with the client. Input is what we feed Gemini;
 # output is what Gemini hands back to us.

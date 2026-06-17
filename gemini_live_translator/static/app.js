@@ -329,6 +329,8 @@ class TranslatorClient {
           alert_language: this.els.summaryLang.value,
           context: this.els.riskContext.value.trim(),
           history: this._recentHistory(),
+          want_risk: this.els.riskToggle.checked,
+          want_clarify: this.els.clarifyToggle.checked,
           token: this._accessToken() || undefined,
         }),
       });
