@@ -34,6 +34,185 @@ const LANGUAGES = {
 const DEFAULT_LANG_A = "ko";
 const DEFAULT_LANG_B = "en";
 
+// ---- UI internationalization (Korean / English) ----------------------------
+const UI_I18N = {
+  ko: {
+    subtitle: "실시간 음성-대-음성 동시통역 · 다국어",
+    session: "세션 제어",
+    "ctrl.start": "통역 시작",
+    "ctrl.stop": "정지",
+    "ctrl.pause": "⏸️ 일시정지",
+    "ctrl.resume": "▶️ 재개",
+    "ctrl.replay": "🔁 다시 듣기",
+    "ctrl.pronounce": "🗣️ 발음",
+    "pron.title": "발음",
+    "pron.roman": "로마자",
+    "pron.hangul": "한글",
+    "field.serverUrl": "서버 주소",
+    "btn.save": "저장",
+    "help.serverUrl": "클라우드 백엔드 주소. 안드로이드 앱에선 필수, 웹에선 비워두면 현재 서버를 사용합니다.",
+    "field.accessToken": "접속 토큰",
+    "ph.accessToken": "서버 접속 토큰",
+    "help.accessToken": "서버의 ACCESS_TOKEN과 일치해야 합니다. Save 버튼으로 주소와 함께 저장됩니다.",
+    "field.languages": "언어",
+    "help.languages": "Language B = 들리는 언어(출력). 기본 통역 모델은 입력 언어를 자동 감지(70+)하므로 A는 자동으로 두어도 됩니다.",
+    "field.voice": "목소리",
+    "help.voice": "Persona 모델에서만 적용됩니다. 기본 통역 모델은 화자 본인의 목소리를 그대로 살립니다.",
+    "field.speed": "빠르기",
+    "help.speed": "통역 음성의 재생 속도를 조절합니다(실시간).",
+    "risk.title": "🛡️ 리스크 감지",
+    "help.risk": "발화가 끝난 뒤 별도로 분석합니다. 통역 속도에는 영향이 없습니다.",
+    "ph.riskContext": "분야 (예: oil trading, 알루미늄 수출)",
+    "clarify.title": "🔎 의미 확인",
+    "help.clarify": '발음이 어눌해 잘못 통역된 것 같으면 문맥으로 "혹시 이런 뜻?"을 제안합니다.',
+    "info.model": "모델",
+    "info.input": "입력",
+    "info.output": "출력",
+    "info.latency": "지연",
+    "clarify.heading": "🔎 혹시 이런 뜻이었나요?",
+    "clarify.corrected": "교정 번역",
+    "risk.suggestedQ": "추천 질문",
+    "btn.copy": "복사",
+    "transcript.title": "실시간 자막",
+    "btn.clear": "지우기",
+    "transcript.ph": "두 언어를 고르고 통역 시작을 누른 뒤, 마이크를 허용하고 말하세요…",
+    "notes.title": "회의 노트",
+    "notes.summaryIn": "요약 언어",
+    "notes.summarize": "요약",
+    "notes.saveAs": "저장:",
+    "notes.new": "새 회의",
+    "qa.title": "💬 대화 내용 질문",
+    "ph.ask": "예: 결제 조건이 어떻게 정해졌지?",
+    "qa.ask": "질문",
+    "summary.title": "요약",
+    "notes.ph": "회의가 시작되면 발화가 시간순으로 기록됩니다. 기록은 이 기기에 저장되어 앱을 닫아도 유지됩니다.",
+    footer: "Google Gemini Multimodal Live API 기반 · 제로-추론 오디오 파이프라인",
+    // dynamic
+    "status.idle": "대기",
+    "status.connecting": "연결 중…",
+    "status.live": "연결됨 — 말하세요",
+    "status.paused": "일시정지됨",
+    "status.saved": "설정 저장됨",
+    "status.setServer": "서버 주소를 입력하세요",
+    "status.cannotReach": "서버에 연결할 수 없음",
+    "status.keyMissing": "서버에 API 키가 설정되지 않음",
+    "status.tokenMismatch": "Access Token이 서버와 불일치",
+    "status.noServerFirst": "먼저 서버 주소를 설정하세요",
+    "status.failStart": "시작 실패",
+    "msg.nothingExport": "내보낼 내용이 없습니다",
+    "msg.noConv": "질문할 대화가 아직 없습니다",
+    "msg.newMeeting": "새 회의를 시작했습니다",
+    "msg.confirmNew": "현재 회의 노트를 지우고 새로 시작할까요?",
+    "msg.askFail": "질문 실패",
+    "msg.exportFail": "내보내기 실패",
+    "msg.summaryFail": "요약 실패",
+    "msg.summaryUpdated": "요약이 갱신되었습니다",
+    "msg.pronFail": "발음 변환 실패",
+  },
+  en: {
+    subtitle: "Real-time audio-to-audio simultaneous interpreter · multilingual",
+    session: "Session Control",
+    "ctrl.start": "Start Translating",
+    "ctrl.stop": "Stop",
+    "ctrl.pause": "⏸️ Pause",
+    "ctrl.resume": "▶️ Resume",
+    "ctrl.replay": "🔁 Replay",
+    "ctrl.pronounce": "🗣️ Pronounce",
+    "pron.title": "Pronunciation",
+    "pron.roman": "Roman",
+    "pron.hangul": "Hangul",
+    "field.serverUrl": "Server URL",
+    "btn.save": "Save",
+    "help.serverUrl": "Cloud backend address. Required in the Android app; leave blank on the web to use this same server.",
+    "field.accessToken": "Access Token",
+    "ph.accessToken": "server access token",
+    "help.accessToken": "Must match ACCESS_TOKEN on the server. Saved with the URL via the Save button.",
+    "field.languages": "Languages",
+    "help.languages": "Language B = the language you hear (output). The default translate model auto-detects the source (70+), so A can stay on Auto.",
+    "field.voice": "Voice",
+    "help.voice": "Applies to the persona model only. The default translate model preserves the speaker's own voice.",
+    "field.speed": "Speed",
+    "help.speed": "Adjusts playback speed of the translated voice (live).",
+    "risk.title": "🛡️ Risk Guard",
+    "help.risk": "Analyzed after each turn finishes — no effect on translation speed.",
+    "ph.riskContext": "Industry (e.g. oil trading, aluminum export)",
+    "clarify.title": "🔎 Clarify",
+    "help.clarify": 'If unclear pronunciation seems mistranslated, suggests "Did you mean…?" from context.',
+    "info.model": "Model",
+    "info.input": "Input",
+    "info.output": "Output",
+    "info.latency": "Latency",
+    "clarify.heading": "🔎 Did you mean…?",
+    "clarify.corrected": "Corrected translation",
+    "risk.suggestedQ": "Suggested question",
+    "btn.copy": "Copy",
+    "transcript.title": "Live Transcript",
+    "btn.clear": "Clear",
+    "transcript.ph": "Pick your two languages, press Start, allow the mic, and start speaking…",
+    "notes.title": "Meeting Notes",
+    "notes.summaryIn": "Summary in",
+    "notes.summarize": "Summarize",
+    "notes.saveAs": "Save:",
+    "notes.new": "New",
+    "qa.title": "💬 Ask about this conversation",
+    "ph.ask": "e.g. What payment terms were agreed?",
+    "qa.ask": "Ask",
+    "summary.title": "Summary",
+    "notes.ph": "Once a meeting starts, utterances are logged here in order. The log is saved on this device and survives app restarts.",
+    footer: "Powered by the Google Gemini Multimodal Live API · zero-inference audio pipeline",
+    // dynamic
+    "status.idle": "Idle",
+    "status.connecting": "Connecting…",
+    "status.live": "Live — speak now",
+    "status.paused": "Paused",
+    "status.saved": "Settings saved",
+    "status.setServer": "Set the server URL to begin",
+    "status.cannotReach": "Cannot reach server",
+    "status.keyMissing": "API key not configured on server",
+    "status.tokenMismatch": "Access Token does not match the server",
+    "status.noServerFirst": "Set the server URL first",
+    "status.failStart": "Failed to start",
+    "msg.nothingExport": "Nothing to export",
+    "msg.noConv": "No conversation to ask about yet",
+    "msg.newMeeting": "New meeting started",
+    "msg.confirmNew": "Clear the current meeting notes and start over?",
+    "msg.askFail": "Question failed",
+    "msg.exportFail": "Export failed",
+    "msg.summaryFail": "Summary failed",
+    "msg.summaryUpdated": "Summary updated",
+    "msg.pronFail": "Pronunciation failed",
+  },
+};
+
+let UI_LANG = localStorage.getItem("uiLang") || "ko";
+
+function t(key) {
+  const table = UI_I18N[UI_LANG] || UI_I18N.ko;
+  return table[key] != null ? table[key] : UI_I18N.ko[key] || key;
+}
+
+function applyI18n(lang) {
+  UI_LANG = UI_I18N[lang] ? lang : "ko";
+  localStorage.setItem("uiLang", UI_LANG);
+  document.documentElement.lang = UI_LANG;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const v = t(el.getAttribute("data-i18n"));
+    if (v) el.textContent = v;
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+    const v = t(el.getAttribute("data-i18n-ph"));
+    if (v) el.setAttribute("placeholder", v);
+  });
+}
+
+function applyTheme(theme) {
+  const light = theme === "light";
+  document.body.classList.toggle("light", light);
+  localStorage.setItem("theme", light ? "light" : "dark");
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = light ? "☀️" : "🌙";
+}
+
 class TranslatorClient {
   constructor() {
     this.ws = null;
@@ -123,8 +302,11 @@ class TranslatorClient {
       riskQuestionWrap: document.getElementById("riskQuestionWrap"),
       riskQuestion: document.getElementById("riskQuestion"),
       riskCopyBtn: document.getElementById("riskCopyBtn"),
+      uiLang: document.getElementById("uiLang"),
+      themeToggle: document.getElementById("themeToggle"),
     };
 
+    this._setupAppearance();
     this._setupLanguages();
     this._setupMeetingNotes();
     this._setupControls();
@@ -154,11 +336,36 @@ class TranslatorClient {
       if (tok) localStorage.setItem("accessToken", tok);
       else localStorage.removeItem("accessToken");
 
-      this._setStatus("idle", "Settings saved");
+      this._setStatus("idle", t("status.saved"));
       this._refreshHealth();
     });
 
     this._refreshHealth();
+  }
+
+  /** UI language (한/영) + light/dark theme. */
+  _setupAppearance() {
+    this.els.uiLang.value = UI_LANG;
+    applyI18n(UI_LANG);
+    applyTheme(localStorage.getItem("theme") || "dark");
+    this._refreshDynamicLabels();
+    this._setStatus("idle", t("status.idle"));
+
+    this.els.uiLang.addEventListener("change", () => {
+      applyI18n(this.els.uiLang.value);
+      this._refreshDynamicLabels();
+      if (!this.running) this._setStatus("idle", t("status.idle"));
+    });
+    this.els.themeToggle.addEventListener("click", () => {
+      const isLight = document.body.classList.contains("light");
+      applyTheme(isLight ? "dark" : "light");
+    });
+  }
+
+  /** Re-apply labels whose text depends on runtime state, in the current lang. */
+  _refreshDynamicLabels() {
+    this.els.toggleLabel.textContent = this.running ? t("ctrl.stop") : t("ctrl.start");
+    this.els.pauseBtn.textContent = this.paused ? t("ctrl.resume") : t("ctrl.pause");
   }
 
   /** Populate the two language dropdowns and restore the saved pair. */
@@ -210,8 +417,8 @@ class TranslatorClient {
   _togglePause() {
     if (!this.running) return;
     this.paused = !this.paused;
-    this.els.pauseBtn.textContent = this.paused ? "▶️ 재개" : "⏸️ 일시정지";
-    this._setStatus(this.paused ? "connecting" : "live", this.paused ? "Paused" : "Live — speak now");
+    this.els.pauseBtn.textContent = this.paused ? t("ctrl.resume") : t("ctrl.pause");
+    this._setStatus(this.paused ? "connecting" : "live", this.paused ? t("status.paused") : t("status.live"));
     if (this.paused) this._flushPlayback(); // stop any audio currently playing
   }
 
@@ -249,7 +456,7 @@ class TranslatorClient {
     }
     const base = this._serverBase();
     if (!base) {
-      this._setStatus("error", "Set the server URL first");
+      this._setStatus("error", t("status.noServerFirst"));
       return;
     }
     this.els.pronounceBox.classList.remove("hidden");
@@ -271,7 +478,7 @@ class TranslatorClient {
       const data = await res.json();
       this.els.pronounceContent.textContent = data.pronunciation || "(none)";
     } catch (e) {
-      this.els.pronounceContent.textContent = `발음 변환 실패: ${e.message}`;
+      this.els.pronounceContent.textContent = `${t("msg.pronFail")}: ${e.message}`;
     }
   }
 
@@ -383,10 +590,14 @@ class TranslatorClient {
   }
 
   _renderRiskAlert(risk) {
+    const labels =
+      UI_LANG === "ko"
+        ? { low: "참고", medium: "확인 필요", high: "주의" }
+        : { low: "Note", medium: "Check", high: "Caution" };
     const styles = {
-      low: { box: "border-slate-600 bg-slate-800 text-slate-200", icon: "💡", label: "참고" },
-      medium: { box: "border-amber-500/60 bg-amber-950/40 text-amber-100", icon: "⚠️", label: "확인 필요" },
-      high: { box: "border-rose-500/70 bg-rose-950/40 text-rose-100", icon: "🚨", label: "주의" },
+      low: { box: "border-slate-600 bg-slate-800 text-slate-200", icon: "💡", label: labels.low },
+      medium: { box: "border-amber-500/60 bg-amber-950/40 text-amber-100", icon: "⚠️", label: labels.medium },
+      high: { box: "border-rose-500/70 bg-rose-950/40 text-rose-100", icon: "🚨", label: labels.high },
     };
     const s = styles[risk.risk_level] || styles.low;
     this.els.riskAlert.className = `mb-4 rounded-2xl border p-4 ${s.box}`;
@@ -534,18 +745,18 @@ class TranslatorClient {
 
   async _summarize() {
     if (!this.meetingLog.length) {
-      this._setStatus("idle", "No notes to summarize yet");
+      this._setStatus("idle", t("msg.noConv"));
       return;
     }
     const base = this._serverBase();
     if (!base) {
-      this._setStatus("error", "Set the server URL first");
+      this._setStatus("error", t("status.noServerFirst"));
       return;
     }
 
     this.els.summarizeBtn.disabled = true;
     const prevLabel = this.els.summarizeBtn.textContent;
-    this.els.summarizeBtn.textContent = "Summarizing…";
+    this.els.summarizeBtn.textContent = "…";
     try {
       const res = await fetch(`${base}/api/summarize`, {
         method: "POST",
@@ -564,9 +775,9 @@ class TranslatorClient {
       this._lastSummary = data.summary || "";
       this.els.summaryContent.textContent = this._lastSummary;
       this.els.summaryBox.classList.remove("hidden");
-      this._setStatus(this.running ? "live" : "idle", "Summary updated");
+      this._setStatus(this.running ? "live" : "idle", t("msg.summaryUpdated"));
     } catch (e) {
-      this._setStatus("error", `Summary failed: ${e.message}`);
+      this._setStatus("error", `${t("msg.summaryFail")}: ${e.message}`);
     } finally {
       this.els.summarizeBtn.disabled = false;
       this.els.summarizeBtn.textContent = prevLabel;
@@ -589,12 +800,12 @@ class TranslatorClient {
   /** Export the notes as md / docx / pdf via the server, then download. */
   async _export(format) {
     if (!this.meetingLog.length) {
-      this._setStatus("idle", "Nothing to export");
+      this._setStatus("idle", t("msg.nothingExport"));
       return;
     }
     const base = this._serverBase();
     if (!base) {
-      this._setStatus("error", "Set the server URL first");
+      this._setStatus("error", t("status.noServerFirst"));
       return;
     }
     this._setStatus(this.running ? "live" : "idle", `Exporting ${format.toUpperCase()}…`);
@@ -625,7 +836,7 @@ class TranslatorClient {
       URL.revokeObjectURL(url);
       this._setStatus(this.running ? "live" : "idle", `${format.toUpperCase()} saved`);
     } catch (e) {
-      this._setStatus("error", `Export failed: ${e.message}`);
+      this._setStatus("error", `${t("msg.exportFail")}: ${e.message}`);
     }
   }
 
@@ -634,12 +845,12 @@ class TranslatorClient {
     const question = this.els.askInput.value.trim();
     if (!question) return;
     if (!this.meetingLog.length) {
-      this._setStatus("idle", "No conversation to ask about yet");
+      this._setStatus("idle", t("msg.noConv"));
       return;
     }
     const base = this._serverBase();
     if (!base) {
-      this._setStatus("error", "Set the server URL first");
+      this._setStatus("error", t("status.noServerFirst"));
       return;
     }
     this.els.askBtn.disabled = true;
@@ -663,14 +874,14 @@ class TranslatorClient {
       const data = await res.json();
       this.els.askAnswer.textContent = data.answer || "(no answer)";
     } catch (e) {
-      this.els.askAnswer.textContent = `질문 실패: ${e.message}`;
+      this.els.askAnswer.textContent = `${t("msg.askFail")}: ${e.message}`;
     } finally {
       this.els.askBtn.disabled = false;
     }
   }
 
   _newMeeting() {
-    if (this.meetingLog.length && !confirm("현재 회의 노트를 지우고 새로 시작할까요?")) {
+    if (this.meetingLog.length && !confirm(t("msg.confirmNew"))) {
       return;
     }
     this.meetingLog = [];
@@ -684,7 +895,7 @@ class TranslatorClient {
     this.els.riskAlert.classList.add("hidden");
     this.els.askAnswer.classList.add("hidden");
     this._renderNotes();
-    this._setStatus(this.running ? "live" : "idle", "New meeting started");
+    this._setStatus(this.running ? "live" : "idle", t("msg.newMeeting"));
   }
 
   /** Resolve the backend base URL (no trailing slash) for this device. */
@@ -711,7 +922,7 @@ class TranslatorClient {
   _refreshHealth() {
     const base = this._serverBase();
     if (!base) {
-      this._setStatus("idle", "Set the server URL to begin");
+      this._setStatus("idle", t("status.setServer"));
       return;
     }
     fetch(`${base}/api/health`)
@@ -719,10 +930,10 @@ class TranslatorClient {
       .then((d) => {
         this.els.modelInfo.textContent = d.model || "—";
         if (!d.api_key_configured) {
-          this._setStatus("error", "API key not configured on server");
+          this._setStatus("error", t("status.keyMissing"));
         }
       })
-      .catch(() => this._setStatus("error", "Cannot reach server"));
+      .catch(() => this._setStatus("error", t("status.cannotReach")));
   }
 
   // --- Status helpers ------------------------------------------------------
@@ -745,7 +956,7 @@ class TranslatorClient {
   async start() {
     try {
       this._lastError = "";
-      this._setStatus("connecting", "Connecting…");
+      this._setStatus("connecting", t("status.connecting"));
       this.els.toggleBtn.disabled = true;
 
       await this._openSocket();
@@ -754,15 +965,15 @@ class TranslatorClient {
 
       this.running = true;
       this.paused = false;
-      this.els.toggleLabel.textContent = "Stop";
+      this.els.toggleLabel.textContent = t("ctrl.stop");
       this.els.toggleIcon.textContent = "⏹️";
       this.els.toggleBtn.disabled = false;
       this.els.pauseBtn.disabled = false;
-      this.els.pauseBtn.textContent = "⏸️ 일시정지";
-      this._setStatus("live", "Live — speak now");
+      this.els.pauseBtn.textContent = t("ctrl.pause");
+      this._setStatus("live", t("status.live"));
     } catch (err) {
       console.error(err);
-      this._setStatus("error", err.message || "Failed to start");
+      this._setStatus("error", err.message || t("status.failStart"));
       this.els.toggleBtn.disabled = false;
       await this._teardown();
     }
@@ -775,12 +986,12 @@ class TranslatorClient {
     this._sendControl({ action: "end" });
     await this._teardown();
 
-    this.els.toggleLabel.textContent = "Start Translating";
+    this.els.toggleLabel.textContent = t("ctrl.start");
     this.els.toggleIcon.textContent = "🎙️";
     this.els.pauseBtn.disabled = true;
-    this.els.pauseBtn.textContent = "⏸️ 일시정지";
+    this.els.pauseBtn.textContent = t("ctrl.pause");
     // Replay / pronounce remain available for the last sentence.
-    this._setStatus("idle", "Idle");
+    this._setStatus("idle", t("status.idle"));
   }
 
   async _teardown() {
@@ -855,11 +1066,11 @@ class TranslatorClient {
           if (!why) {
             why =
               ev.code === 1008
-                ? "Access Token이 서버와 불일치"
-                : `연결 끊김 (code ${ev.code})`;
+                ? t("status.tokenMismatch")
+                : `${UI_LANG === "ko" ? "연결 끊김" : "Disconnected"} (code ${ev.code})`;
           }
           this._setStatus("error", why);
-          this.els.toggleLabel.textContent = "Start Translating";
+          this.els.toggleLabel.textContent = t("ctrl.start");
           this.els.toggleIcon.textContent = "🎙️";
           this.els.pauseBtn.disabled = true;
           this._teardown();
