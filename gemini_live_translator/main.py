@@ -83,13 +83,29 @@ app.add_middleware(
 
 
 @app.get("/api/health")
-async def health() -> dict:
-    """Lightweight readiness probe; also reports whether a key is configured."""
-    return {
+async def health(token: str | None = None) -> dict:
+    """Lightweight readiness probe; also reports whether a key is configured.
+
+    Diagnostics for the access token (helps debug "invalid token" without
+    revealing the secret):
+      * ``access_token_hint``: masked value + length of the configured token.
+      * ``token_matches``: present only when ``?token=`` is supplied — whether it
+        matches the server's ACCESS_TOKEN.
+    """
+    configured = (os.getenv("ACCESS_TOKEN") or "").strip()
+    if not configured:
+        hint = ""
+    elif len(configured) <= 4:
+        hint = f"len {len(configured)}"
+    else:
+        hint = f"{configured[:2]}…{configured[-2:]} (len {len(configured)})"
+
+    result = {
         "status": "ok",
         "model": DEFAULT_MODEL,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
-        "auth_required": bool(os.getenv("ACCESS_TOKEN")),
+        "auth_required": bool(configured),
+        "access_token_hint": hint,
         "risk_model": RISK_MODEL,
         "clarify_model": CLARIFY_MODEL,
         "summary_model": SUMMARY_MODEL,
@@ -97,6 +113,11 @@ async def health() -> dict:
         "input_sample_rate": INPUT_SAMPLE_RATE,
         "output_sample_rate": OUTPUT_SAMPLE_RATE,
     }
+    if token is not None:
+        result["token_matches"] = bool(configured) and secrets.compare_digest(
+            token.strip(), configured
+        )
+    return result
 
 
 def _check_token(provided: str | None) -> None:
