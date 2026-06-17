@@ -45,6 +45,8 @@ const UI_I18N = {
     "ctrl.resume": "▶️ 재개",
     "ctrl.replay": "🔁 다시 듣기",
     "ctrl.pronounce": "🗣️ 발음",
+    "mode.audio": "🔊 음성+자막",
+    "mode.text": "📝 자막만",
     "pron.title": "발음",
     "pron.roman": "로마자",
     "pron.hangul": "한글",
@@ -118,6 +120,8 @@ const UI_I18N = {
     "ctrl.resume": "▶️ Resume",
     "ctrl.replay": "🔁 Replay",
     "ctrl.pronounce": "🗣️ Pronounce",
+    "mode.audio": "🔊 Audio + captions",
+    "mode.text": "📝 Captions only",
     "pron.title": "Pronunciation",
     "pron.roman": "Roman",
     "pron.hangul": "Hangul",
@@ -238,6 +242,9 @@ class TranslatorClient {
     this._curAudioChunks = []; // Float32 pieces of the current turn's output audio
     this._lastAudio = null; // concatenated Float32Array of the last turn
     this._lastTranslationText = ""; // text of the last finalized translation
+    this._turnTimer = null; // debounce for committing a turn to the notes
+    // Output mode: true = hear translated audio + captions; false = captions only.
+    this.audioOutput = localStorage.getItem("audioOutput") !== "0";
 
     this._bindUI();
   }
@@ -304,9 +311,12 @@ class TranslatorClient {
       riskCopyBtn: document.getElementById("riskCopyBtn"),
       uiLang: document.getElementById("uiLang"),
       themeToggle: document.getElementById("themeToggle"),
+      modeAudioBtn: document.getElementById("modeAudioBtn"),
+      modeTextBtn: document.getElementById("modeTextBtn"),
     };
 
     this._setupAppearance();
+    this._setupOutputMode();
     this._setupLanguages();
     this._setupMeetingNotes();
     this._setupControls();
@@ -341,6 +351,25 @@ class TranslatorClient {
     });
 
     this._refreshHealth();
+  }
+
+  /** Output-mode toggle: hear audio + captions, or captions only. */
+  _setupOutputMode() {
+    const render = () => {
+      const on = "border-indigo-500 bg-indigo-600 text-white";
+      const off = "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
+      this.els.modeAudioBtn.className = `rounded-lg border px-2 py-2 font-medium transition ${this.audioOutput ? on : off}`;
+      this.els.modeTextBtn.className = `rounded-lg border px-2 py-2 font-medium transition ${this.audioOutput ? off : on}`;
+    };
+    const set = (audio) => {
+      this.audioOutput = audio;
+      localStorage.setItem("audioOutput", audio ? "1" : "0");
+      render();
+      if (!audio) this._flushPlayback(); // stop any audio currently playing
+    };
+    this.els.modeAudioBtn.addEventListener("click", () => set(true));
+    this.els.modeTextBtn.addEventListener("click", () => set(false));
+    render();
   }
 
   /** UI language (한/영) + light/dark theme. */
@@ -651,6 +680,15 @@ class TranslatorClient {
   }
 
   /** Append a finalized turn to the meeting log and persist it. */
+  /** Finalize the current turn (commit to notes + reset the live bubbles). */
+  _finalizeTurn() {
+    clearTimeout(this._turnTimer);
+    this._turnTimer = null;
+    this._commitTurn();
+    this._sourceLine = null;
+    this._translationLine = null;
+  }
+
   _commitTurn() {
     const source = this._curSource.trim();
     const translation = this._curTranslation.trim();
@@ -995,6 +1033,8 @@ class TranslatorClient {
   }
 
   async _teardown() {
+    // Commit any in-progress turn before tearing down.
+    if (this._turnTimer) this._finalizeTurn();
     if (this.workletNode) {
       this.workletNode.port.onmessage = null;
       this.workletNode.disconnect();
@@ -1108,9 +1148,7 @@ class TranslatorClient {
         this._appendTranscript(msg.role, msg.text);
         break;
       case "turn_complete":
-        this._commitTurn(); // save this turn into the meeting notes
-        this._sourceLine = null;
-        this._translationLine = null;
+        this._finalizeTurn(); // save this turn into the meeting notes
         break;
       case "interrupted":
         // User barged in — drop any queued audio so we don't talk over them.
@@ -1186,6 +1224,9 @@ class TranslatorClient {
     // Keep a copy so the turn can be replayed ("다시 듣기").
     this._curAudioChunks.push(float32);
 
+    // Text-only mode: capture audio (for replay) but don't play it back.
+    if (!this.audioOutput) return;
+
     const buffer = this.playbackContext.createBuffer(
       1,
       float32.length,
@@ -1246,6 +1287,11 @@ class TranslatorClient {
     // Accumulate the raw text so the turn can be saved to the meeting notes.
     if (isTranslation) this._curTranslation += text;
     else this._curSource += text;
+
+    // Fallback turn boundary: the streaming translate model may not send
+    // turn_complete, so commit the turn after a short pause in transcripts.
+    clearTimeout(this._turnTimer);
+    this._turnTimer = setTimeout(() => this._finalizeTurn(), 1800);
 
     // Stream incremental tokens into the same bubble until the turn completes.
     if (!this[lineKey]) {

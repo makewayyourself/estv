@@ -129,6 +129,16 @@
               세션 제어
             </h2>
 
+            <!-- Output mode: hear audio + captions, or captions only -->
+            <div class="mb-3 grid grid-cols-2 gap-2 text-xs">
+              <button id="modeAudioBtn" data-i18n="mode.audio" class="rounded-lg border px-2 py-2 font-medium transition">
+                🔊 음성+자막
+              </button>
+              <button id="modeTextBtn" data-i18n="mode.text" class="rounded-lg border px-2 py-2 font-medium transition">
+                📝 자막만
+              </button>
+            </div>
+
             <button
               id="toggleBtn"
               class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
