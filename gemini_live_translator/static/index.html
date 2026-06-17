@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini Live Translator — Real-time Interpreter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .pulse-dot {
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.45;
+          transform: scale(0.82);
+        }
+      }
+      .transcript-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f5f transparent;
+      }
+      .transcript-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .transcript-scroll::-webkit-scrollbar-thumb {
+        background: #3f3f5f;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div class="mx-auto max-w-5xl px-5 py-8">
+      <!-- Header -->
+      <header class="mb-8 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">
+            <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+              Gemini Live Translator
+            </span>
+          </h1>
+          <p class="mt-1 text-sm text-slate-400">
+            Real-time audio-to-audio simultaneous interpreter · multilingual
+          </p>
+        </div>
+        <div
+          id="statusBadge"
+          class="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm"
+        >
+          <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>
+          <span id="statusText" class="font-medium text-slate-300">Idle</span>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Controls -->
+        <section class="lg:col-span-1">
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Session Control
+            </h2>
+
+            <button
+              id="toggleBtn"
+              class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span id="toggleIcon">🎙️</span>
+              <span id="toggleLabel">Start Translating</span>
+            </button>
+
+            <!-- Quick actions -->
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <button
+                id="pauseBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                ⏸️ 일시정지
+              </button>
+              <button
+                id="replayBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                🔁 다시 듣기
+              </button>
+              <button
+                id="pronounceBtn"
+                disabled
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+              >
+                🗣️ 발음
+              </button>
+            </div>
+
+            <!-- Pronunciation result -->
+            <div id="pronounceBox" class="mt-3 hidden rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+              <div class="mb-1 flex items-center justify-between">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-400">발음 / Pronunciation</span>
+                <select
+                  id="scriptSelect"
+                  class="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200 focus:outline-none"
+                >
+                  <option value="roman">로마자</option>
+                  <option value="hangul">한글</option>
+                </select>
+              </div>
+              <div id="pronounceContent" class="text-sm text-slate-200"></div>
+            </div>
+
+            <div class="mt-6 space-y-4 text-sm">
+              <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Server URL</label>
+                <div class="flex gap-2">
+                  <input
+                    id="serverUrl"
+                    type="url"
+                    inputmode="url"
+                    placeholder="https://your-app.onrender.com"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                  />
+                  <button
+                    id="saveServerBtn"
+                    class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-300 transition hover:bg-slate-700"
+                  >
+                    Save
+                  </button>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                  Cloud backend address. Required in the Android app; leave blank
+                  on the web to use this same server.
+                </p>
+              </div>
+
+              <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Access Token</label>
+                <input
+                  id="accessToken"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="server access token"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                />
+                <p class="mt-1 text-xs text-slate-500">
+                  Must match <code>ACCESS_TOKEN</code> on the server. Saved with
+                  the URL via the Save button. Leave blank if the server has none.
+                </p>
+              </div>
+
+              <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Languages</label>
+                <div class="flex items-center gap-2">
+                  <select
+                    id="langA"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  ></select>
+                  <span class="shrink-0 text-slate-500">⇄</span>
+                  <select
+                    id="langB"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  ></select>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                  <b>Language B = 들리는 언어</b> (출력). 기본 통역 모델은 입력
+                  언어를 자동 감지(70+)하므로 A는 비워둬도 됩니다. Applied to the
+                  next session.
+                </p>
+              </div>
+
+              <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Voice (목소리)</label>
+                <select
+                  id="voiceSelect"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                >
+                  <optgroup label="여성 / Female">
+                    <option value="Aoede">Aoede (여성·자연스러움)</option>
+                    <option value="Kore">Kore (여성)</option>
+                    <option value="Leda">Leda (여성)</option>
+                    <option value="Zephyr">Zephyr (여성)</option>
+                  </optgroup>
+                  <optgroup label="남성 / Male">
+                    <option value="Puck">Puck (남성)</option>
+                    <option value="Charon">Charon (남성)</option>
+                    <option value="Fenrir">Fenrir (남성)</option>
+                    <option value="Orus">Orus (남성)</option>
+                  </optgroup>
+                </select>
+                <p class="mt-1 text-xs text-slate-500">
+                  Persona 모델에서만 적용됩니다. 기본 통역 모델은 화자 본인의
+                  목소리를 그대로 살립니다.
+                </p>
+              </div>
+
+              <div>
+                <label class="mb-1.5 flex items-center justify-between font-medium text-slate-400">
+                  <span>Speed (빠르기)</span>
+                  <span id="speedValue" class="font-mono text-slate-300">1.0×</span>
+                </label>
+                <input
+                  id="speedRange"
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value="1.0"
+                  class="w-full accent-indigo-500"
+                />
+                <p class="mt-1 text-xs text-slate-500">
+                  Adjusts playback speed of the translated voice (live).
+                </p>
+              </div>
+
+              <!-- Risk-detection copilot -->
+              <div class="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3">
+                <label class="flex cursor-pointer items-center justify-between">
+                  <span class="font-medium text-amber-300">🛡️ 리스크 감지 (Risk Guard)</span>
+                  <input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" />
+                </label>
+                <p class="mt-1 text-xs text-slate-500">
+                  발화가 끝난 뒤 별도로 분석합니다. 통역 속도에는 영향이 없습니다.
+                </p>
+                <input
+                  id="riskContext"
+                  type="text"
+                  placeholder="분야 (예: oil trading, 알루미늄 수출)"
+                  class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2">
+                  <span class="font-medium text-sky-300">🔎 의미 확인 (Clarify)</span>
+                  <input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" />
+                </label>
+                <p class="mt-1 text-xs text-slate-500">
+                  발음이 어눌해 잘못 통역된 것 같으면 문맥으로 "혹시 이런 뜻?"을
+                  제안합니다.
+                </p>
+              </div>
+
+              <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+                <div class="flex justify-between py-0.5">
+                  <span>Model</span><span id="modelInfo" class="font-mono text-slate-300">—</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Input</span><span class="font-mono text-slate-300">PCM16 · 16 kHz</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Output</span><span class="font-mono text-slate-300">PCM16 · 24 kHz</span>
+                </div>
+                <div class="flex justify-between py-0.5">
+                  <span>Latency</span><span id="latencyInfo" class="font-mono text-slate-300">~100 ms chunks</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Transcript -->
+        <section class="lg:col-span-2">
+          <!-- Meaning clarification (latest) -->
+          <div id="clarifyAlert" class="mb-4 hidden rounded-2xl border border-sky-500/60 bg-sky-950/40 p-4 text-sky-100">
+            <div class="flex items-start justify-between gap-3">
+              <span class="text-xs font-bold uppercase tracking-wide">🔎 혹시 이런 뜻이었나요?</span>
+              <button id="clarifyDismiss" class="text-xs opacity-60 hover:opacity-100">✕</button>
+            </div>
+            <div id="clarifyText" class="mt-2 text-sm font-medium"></div>
+            <div class="mt-2 rounded-lg bg-black/20 p-2 text-sm">
+              <span class="text-[10px] uppercase tracking-wide opacity-70">교정 번역 / Corrected</span>
+              <div id="clarifyCorrected" class="mt-0.5"></div>
+            </div>
+          </div>
+
+          <!-- Live risk alert (latest) -->
+          <div id="riskAlert" class="mb-4 hidden rounded-2xl border p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <span id="riskIcon">⚠️</span>
+                <span id="riskLevelLabel" class="text-xs font-bold uppercase tracking-wide"></span>
+                <span id="riskTypes" class="text-xs opacity-70"></span>
+              </div>
+              <button id="riskDismiss" class="text-xs opacity-60 hover:opacity-100">✕</button>
+            </div>
+            <div id="riskAlertText" class="mt-2 text-sm font-medium"></div>
+            <div id="riskReason" class="mt-1 text-xs opacity-70"></div>
+            <div id="riskQuestionWrap" class="mt-3 hidden rounded-lg bg-black/20 p-3">
+              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">추천 질문 / Suggested question</div>
+              <div id="riskQuestion" class="text-sm"></div>
+              <button id="riskCopyBtn" class="mt-2 rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10">복사</button>
+            </div>
+          </div>
+
+          <div class="flex h-[28rem] flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
+            <div class="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Live Transcript
+              </h2>
+              <button
+                id="clearBtn"
+                class="rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+              >
+                Clear
+              </button>
+            </div>
+            <div
+              id="transcript"
+              class="transcript-scroll flex-1 space-y-3 overflow-y-auto px-6 py-5"
+            >
+              <p id="placeholder" class="text-sm text-slate-600">
+                Pick your two languages, press
+                <span class="font-semibold text-slate-400">Start Translating</span>, allow
+                microphone access, and start speaking…
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Meeting Notes -->
+      <section class="mt-6">
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/60">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-4">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Meeting Notes <span id="noteCount" class="ml-1 text-slate-600">(0)</span>
+            </h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-xs text-slate-500">Summary in</label>
+              <select
+                id="summaryLang"
+                class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+              ></select>
+              <button
+                id="summarizeBtn"
+                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              >
+                Summarize
+              </button>
+              <span class="mx-1 text-xs text-slate-600">저장:</span>
+              <button id="exportMdBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">MD</button>
+              <button id="exportDocxBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">Word</button>
+              <button id="exportPdfBtn" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-300 transition hover:bg-slate-700">PDF</button>
+              <button
+                id="newMeetingBtn"
+                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-400 transition hover:bg-slate-700"
+              >
+                New
+              </button>
+            </div>
+          </div>
+
+          <!-- Ask about the conversation (Q&A) -->
+          <div class="border-b border-slate-800 px-6 py-4">
+            <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+              💬 대화 내용 질문 / Ask about this conversation
+            </div>
+            <div class="flex gap-2">
+              <input
+                id="askInput"
+                type="text"
+                placeholder="예: 결제 조건이 어떻게 정해졌지?"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+              />
+              <button
+                id="askBtn"
+                class="shrink-0 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:opacity-50"
+              >
+                질문
+              </button>
+            </div>
+            <div id="askAnswer" class="mt-2 hidden whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-200"></div>
+          </div>
+
+          <!-- Summary -->
+          <div id="summaryBox" class="hidden border-b border-slate-800 px-6 py-4">
+            <div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+              Summary
+            </div>
+            <div id="summaryContent" class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200"></div>
+          </div>
+
+          <!-- Full timestamped log -->
+          <div
+            id="notes"
+            class="transcript-scroll max-h-[24rem] space-y-2 overflow-y-auto px-6 py-4"
+          >
+            <p id="notesPlaceholder" class="text-sm text-slate-600">
+              회의가 시작되면 발화가 시간순으로 여기에 기록됩니다. 기록은 이 기기에
+              저장되어 앱을 닫아도 유지됩니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="mt-6 text-center text-xs text-slate-600">
+        Powered by the Google Gemini Multimodal Live API · zero-inference audio pipeline
+      </footer>
+    </div>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

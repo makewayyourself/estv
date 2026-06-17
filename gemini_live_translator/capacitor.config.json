@@ -1,0 +1,11 @@
+{
+  "appId": "com.estv.geminitranslator",
+  "appName": "Gemini Translator",
+  "webDir": "static",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
