@@ -245,6 +245,18 @@
                 <p class="mt-1 text-xs text-slate-500" data-i18n="help.languages">
                   Language B = 들리는 언어(출력). 기본 통역 모델은 입력 언어를 자동 감지(70+)하므로 A는 자동으로 두어도 됩니다.
                 </p>
+
+                <label class="mb-1 mt-3 block text-xs font-medium text-slate-400" data-i18n="field.displayLangs">
+                  표시 언어 (각자 읽을 자막 · 최대 3)
+                </label>
+                <div class="grid grid-cols-3 gap-2">
+                  <select id="displayLang1" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
+                  <select id="displayLang2" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
+                  <select id="displayLang3" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"></select>
+                </div>
+                <p class="mt-1 text-xs text-slate-500" data-i18n="help.displayLangs">
+                  설정하면 각 발화를 이 언어들로도 자막에 함께 표시합니다(참가자 각자 읽기). 음성은 위 출력 언어 1개로 나갑니다.
+                </p>
               </div>
 
               <div>

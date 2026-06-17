@@ -231,6 +231,24 @@ def build_risk_prompt(
     )
 
 
+def build_multitranslate_prompt(text: str, target_codes: list[str]) -> str:
+    """Translate one utterance into several languages at once (JSON output).
+
+    Returns an object keyed by the language code, e.g. {"ko": "...", "ja": "..."}.
+    """
+    names = {c: SUPPORTED_LANGUAGES.get(c, c) for c in target_codes}
+    listing = ", ".join(f'"{c}" ({n})' for c, n in names.items())
+    return (
+        "You are a translator. Translate the TEXT into each of these languages and "
+        "return ONLY a JSON object keyed by the language code, with the translation "
+        "as the value. Keys to include: "
+        f"{listing}.\n"
+        "If the text is already in one of those languages, still provide that "
+        "language's natural form. No extra commentary.\n\n"
+        f"TEXT:\n{text}"
+    )
+
+
 def build_qa_prompt(transcript: str, question: str, language: str) -> str:
     """Build a grounded Q&A prompt over the saved conversation transcript."""
     lang_name = SUPPORTED_LANGUAGES.get(language, "English")

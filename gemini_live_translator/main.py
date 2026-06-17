@@ -50,6 +50,7 @@ from services.gemini_live import (
     SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
     build_config,
+    build_multitranslate_prompt,
     build_pronounce_prompt,
     build_qa_prompt,
     build_risk_prompt,
@@ -377,6 +378,44 @@ async def export(req: ExportRequest) -> Response:
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    targets: List[str] = []
+    token: str | None = None
+
+
+@app.post("/api/translate")
+async def translate(req: TranslateRequest) -> dict:
+    """Translate one utterance into several languages at once (multilingual
+    captions). Runs off the real-time path on the cheap Lite model."""
+    _check_token(req.token)
+
+    text = (req.text or "").strip()
+    targets = [normalize_lang(t, "") for t in req.targets]
+    targets = [t for t in dict.fromkeys(targets) if t]  # dedupe, drop invalid
+    if not text or not targets:
+        return {"translations": {}}
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    prompt = build_multitranslate_prompt(text[:1500], targets)
+    try:
+        response = await client.aio.models.generate_content(
+            model=RISK_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
+        data = json.loads(response.text or "{}")
+        translations = {t: str(data.get(t, "")) for t in targets}
+    except Exception as exc:  # noqa: BLE001 — best effort, never break the UI
+        logger.warning("Multi-translate failed: %s", exc)
+        translations = {}
+    return {"translations": translations}
 
 
 class PronounceRequest(BaseModel):
