@@ -557,8 +557,12 @@ async def stream(ws: WebSocket) -> None:
                         if server_content.interrupted:
                             await _send_json(ws, {"type": "interrupted"})
 
-                        # 5) A full turn finished — flush UI line buffers.
-                        if server_content.turn_complete:
+                        # 5) A turn/generation finished — flush UI line buffers
+                        # and commit the meeting-notes entry. The dedicated
+                        # translate model streams continuously and tends to emit
+                        # generation_complete rather than turn_complete, so we
+                        # treat either as a turn boundary.
+                        if server_content.turn_complete or server_content.generation_complete:
                             await _send_json(ws, {"type": "turn_complete"})
 
             # Run both directions until either side closes.
