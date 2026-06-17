@@ -34,12 +34,16 @@ from fastapi.staticfiles import StaticFiles
 from google.genai import types
 
 from services.gemini_live import (
+    DEFAULT_LANG_A,
+    DEFAULT_LANG_B,
     DEFAULT_MODEL,
     INPUT_MIME_TYPE,
     INPUT_SAMPLE_RATE,
     OUTPUT_SAMPLE_RATE,
+    SUPPORTED_LANGUAGES,
     build_config,
     get_client,
+    normalize_lang,
 )
 
 load_dotenv()
@@ -70,6 +74,7 @@ async def health() -> dict:
         "model": DEFAULT_MODEL,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
         "auth_required": bool(os.getenv("ACCESS_TOKEN")),
+        "languages": SUPPORTED_LANGUAGES,
         "input_sample_rate": INPUT_SAMPLE_RATE,
         "output_sample_rate": OUTPUT_SAMPLE_RATE,
     }
@@ -102,8 +107,16 @@ async def stream(ws: WebSocket) -> None:
             await ws.close(code=1008)  # policy violation
             return
 
-    # Allow the client to optionally pass a config message first (voice, etc.).
-    voice = os.getenv("GEMINI_VOICE", "Aoede")
+    # Session settings come from the connection query string (the model config
+    # must be fixed before the Gemini session opens, so they can't be sent as a
+    # later message). All fall back to server defaults.
+    voice = ws.query_params.get("voice") or os.getenv("GEMINI_VOICE", "Aoede")
+    lang_a = normalize_lang(
+        ws.query_params.get("a"), os.getenv("LANG_A", DEFAULT_LANG_A)
+    )
+    lang_b = normalize_lang(
+        ws.query_params.get("b"), os.getenv("LANG_B", DEFAULT_LANG_B)
+    )
 
     try:
         client = get_client()
@@ -112,7 +125,7 @@ async def stream(ws: WebSocket) -> None:
         await ws.close()
         return
 
-    config = build_config(voice_name=voice)
+    config = build_config(voice_name=voice, lang_a=lang_a, lang_b=lang_b)
 
     try:
         async with client.aio.live.connect(model=DEFAULT_MODEL, config=config) as session:
@@ -123,6 +136,8 @@ async def stream(ws: WebSocket) -> None:
                     "state": "connected",
                     "model": DEFAULT_MODEL,
                     "voice": voice,
+                    "lang_a": lang_a,
+                    "lang_b": lang_b,
                     "input_sample_rate": INPUT_SAMPLE_RATE,
                     "output_sample_rate": OUTPUT_SAMPLE_RATE,
                 },

@@ -19,6 +19,21 @@
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
 
+// Supported interpreting languages (code -> display label). Keep in sync with
+// SUPPORTED_LANGUAGES in services/gemini_live.py.
+const LANGUAGES = {
+  ko: "한국어 (Korean)",
+  en: "영어 (English)",
+  ja: "일본어 (Japanese)",
+  zh: "중국어 (Chinese)",
+  fr: "프랑스어 (French)",
+  es: "스페인어 (Spanish)",
+  ar: "아랍어 (Arabic)",
+  ru: "러시아어 (Russian)",
+};
+const DEFAULT_LANG_A = "ko";
+const DEFAULT_LANG_B = "en";
+
 class TranslatorClient {
   constructor() {
     this.ws = null;
@@ -50,7 +65,11 @@ class TranslatorClient {
       serverUrl: document.getElementById("serverUrl"),
       accessToken: document.getElementById("accessToken"),
       saveServerBtn: document.getElementById("saveServerBtn"),
+      langA: document.getElementById("langA"),
+      langB: document.getElementById("langB"),
     };
+
+    this._setupLanguages();
 
     this.els.toggleBtn.addEventListener("click", () => {
       if (this.running) this.stop();
@@ -81,6 +100,29 @@ class TranslatorClient {
     });
 
     this._refreshHealth();
+  }
+
+  /** Populate the two language dropdowns and restore the saved pair. */
+  _setupLanguages() {
+    const fill = (sel, selected) => {
+      sel.innerHTML = "";
+      for (const [code, label] of Object.entries(LANGUAGES)) {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = label;
+        if (code === selected) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    };
+    fill(this.els.langA, localStorage.getItem("langA") || DEFAULT_LANG_A);
+    fill(this.els.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
+
+    const remember = () => {
+      localStorage.setItem("langA", this.els.langA.value);
+      localStorage.setItem("langB", this.els.langB.value);
+    };
+    this.els.langA.addEventListener("change", remember);
+    this.els.langB.addEventListener("change", remember);
   }
 
   /** Resolve the backend base URL (no trailing slash) for this device. */
@@ -208,9 +250,14 @@ class TranslatorClient {
     }
     // http(s)://host -> ws(s)://host/api/stream
     const wsBase = base.replace(/^http/i, "ws");
+    const params = new URLSearchParams({
+      a: this.els.langA.value,
+      b: this.els.langB.value,
+      voice: this.els.voiceSelect.value,
+    });
     const token = this._accessToken();
-    const query = token ? `?token=${encodeURIComponent(token)}` : "";
-    return `${wsBase}/api/stream${query}`;
+    if (token) params.set("token", token);
+    return `${wsBase}/api/stream?${params.toString()}`;
   }
 
   _openSocket() {

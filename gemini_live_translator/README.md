@@ -1,8 +1,14 @@
 # Gemini Live Translator
 
 A real-time, low-latency, **audio-to-audio** bidirectional interpreter built on
-the Google Gemini **Multimodal Live API**. Speak Korean → hear natural English;
-speak English → hear polite Korean — with live text transcripts on screen.
+the Google Gemini **Multimodal Live API**. Pick any two languages; speak in
+either one and immediately hear the other — with live text transcripts on screen.
+
+**Supported languages:** Korean, English, Japanese, Mandarin Chinese, French,
+Spanish, Arabic, Russian. You choose a pair (A ⇄ B) in the UI; the model
+auto-detects which of the two is spoken and translates into the other. To add
+more, extend `SUPPORTED_LANGUAGES` in `services/gemini_live.py` (and `LANGUAGES`
+in `static/app.js`).
 
 There is no STT → Translate → TTS chain. Microphone audio is streamed directly
 into Gemini's bidirectional live channel, and translated audio streams straight

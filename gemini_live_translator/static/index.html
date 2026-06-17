@@ -44,7 +44,7 @@
             </span>
           </h1>
           <p class="mt-1 text-sm text-slate-400">
-            Real-time audio-to-audio simultaneous interpreter · Korean ⇄ English
+            Real-time audio-to-audio simultaneous interpreter · multilingual
           </p>
         </div>
         <div
@@ -112,6 +112,25 @@
               </div>
 
               <div>
+                <label class="mb-1.5 block font-medium text-slate-400">Languages</label>
+                <div class="flex items-center gap-2">
+                  <select
+                    id="langA"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  ></select>
+                  <span class="shrink-0 text-slate-500">⇄</span>
+                  <select
+                    id="langB"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  ></select>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                  Speech in either language is auto-detected and translated into
+                  the other. Applied to the next session.
+                </p>
+              </div>
+
+              <div>
                 <label class="mb-1.5 block font-medium text-slate-400">Voice</label>
                 <select
                   id="voiceSelect"
@@ -165,8 +184,9 @@
               class="transcript-scroll flex-1 space-y-3 overflow-y-auto px-6 py-5"
             >
               <p id="placeholder" class="text-sm text-slate-600">
-                Press <span class="font-semibold text-slate-400">Start Translating</span>, allow
-                microphone access, and start speaking in Korean or English…
+                Pick your two languages, press
+                <span class="font-semibold text-slate-400">Start Translating</span>, allow
+                microphone access, and start speaking…
               </p>
             </div>
           </div>

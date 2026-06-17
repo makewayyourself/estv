@@ -42,20 +42,57 @@ INPUT_SAMPLE_RATE = 16_000
 OUTPUT_SAMPLE_RATE = 24_000
 INPUT_MIME_TYPE = f"audio/pcm;rate={INPUT_SAMPLE_RATE}"
 
-# The persona that turns the model into a pure interpreter. Kept terse on
-# purpose: every extra word is an opportunity for the model to editorialize.
-SYSTEM_INSTRUCTION = (
-    "You are a highly professional, real-time simultaneous interpreter. "
-    "Automatically detect the source language of the incoming speech. "
-    "If the speaker is talking in Korean, immediately translate it into "
-    "natural, fluent American English. "
-    "If the speaker is talking in English, immediately translate it into "
-    "polite, natural Korean. "
-    "Preserve tone, idioms and cultural nuance rather than translating word "
-    "for word. Output ONLY the spoken translation itself. Never add "
-    "conversational filler such as 'Sure', 'Okay', or 'Here is the "
-    "translation', and never explain what you are doing."
-)
+# Languages the interpreter can work in. Keys are the codes the client sends;
+# values are the English names used inside the prompt (the model understands
+# these reliably). Add more here to expand coverage.
+SUPPORTED_LANGUAGES: dict[str, str] = {
+    "ko": "Korean",
+    "en": "English",
+    "ja": "Japanese",
+    "zh": "Mandarin Chinese",
+    "fr": "French",
+    "es": "Spanish",
+    "ar": "Arabic",
+    "ru": "Russian",
+}
+
+DEFAULT_LANG_A = "ko"
+DEFAULT_LANG_B = "en"
+
+
+def normalize_lang(code: str | None, fallback: str) -> str:
+    """Return a supported language code, falling back if unknown/empty."""
+    code = (code or "").strip().lower()
+    return code if code in SUPPORTED_LANGUAGES else fallback
+
+
+def build_system_instruction(lang_a: str, lang_b: str) -> str:
+    """Build a two-way interpreter persona between two languages.
+
+    The model auto-detects which of the two languages is being spoken and
+    translates into the other one. ``lang_a``/``lang_b`` are language codes.
+    """
+    a = SUPPORTED_LANGUAGES.get(lang_a, "Korean")
+    b = SUPPORTED_LANGUAGES.get(lang_b, "English")
+
+    if a == b:
+        # Degenerate pair: nothing to translate between. Keep it harmless.
+        return (
+            f"You are a professional interpreter. Repeat back what is said in "
+            f"clear, natural {a}. Output only the speech itself, no filler."
+        )
+
+    return (
+        "You are a highly professional, real-time simultaneous interpreter "
+        f"working between {a} and {b}. "
+        f"Detect whether the speaker is speaking {a} or {b}. "
+        f"If they speak {a}, immediately translate it into natural, fluent {b}. "
+        f"If they speak {b}, immediately translate it into natural, fluent {a}. "
+        "Preserve tone, idioms and cultural nuance rather than translating word "
+        "for word. Output ONLY the spoken translation itself. Never add "
+        "conversational filler such as 'Sure', 'Okay', or 'Here is the "
+        "translation', and never explain what you are doing."
+    )
 
 
 def get_client() -> genai.Client:
@@ -74,16 +111,20 @@ def get_client() -> genai.Client:
 
 def build_config(
     voice_name: str | None = None,
+    lang_a: str = DEFAULT_LANG_A,
+    lang_b: str = DEFAULT_LANG_B,
     system_instruction: str | None = None,
 ) -> types.LiveConnectConfig:
     """Build the Live session configuration.
 
     Args:
         voice_name: Prebuilt voice for the synthesized translation.
-        system_instruction: Override for the interpreter persona.
+        lang_a: First language code of the interpreting pair.
+        lang_b: Second language code of the interpreting pair.
+        system_instruction: Explicit persona override (skips lang_a/lang_b).
     """
     voice = voice_name or DEFAULT_VOICE
-    instruction = system_instruction or SYSTEM_INSTRUCTION
+    instruction = system_instruction or build_system_instruction(lang_a, lang_b)
 
     return types.LiveConnectConfig(
         # Single modality only — see the module docstring.
