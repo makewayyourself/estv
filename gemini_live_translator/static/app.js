@@ -1,1433 +1,625 @@
 /**
- * Gemini Live Translator — browser client.
+ * Gemini 통역기 — menu-driven multi-view client.
  *
- * Pipeline
- * --------
- *   Capture:  getUserMedia -> AudioContext(16 kHz) -> AudioWorklet
- *             -> PCM16 100 ms chunks -> WebSocket (binary, upstream)
- *
- *   Playback: WebSocket (binary, downstream, PCM16 @ 24 kHz)
- *             -> scheduled AudioBufferSourceNodes -> speakers
- *
- *   Text:     WebSocket (JSON) -> live transcript panel
- *
- * The capture and playback graphs use two separate AudioContexts because the
- * input rate (16 kHz, what Gemini expects) differs from the output rate
- * (24 kHz, what Gemini returns).
+ * Views: home · translate (quick, ephemeral) · notes (list+search) ·
+ *        note (record/log/summary) · settings.
+ * Shared translation engine (WebSocket + AudioWorklet capture + 24kHz playback)
+ * writes transcripts into the active view's log; meeting notes are persisted.
  */
 
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
 
-// Supported interpreting languages (code -> display label). Keep in sync with
-// SUPPORTED_LANGUAGES in services/gemini_live.py.
 const LANGUAGES = {
-  ko: "한국어 (Korean)",
-  en: "영어 (English)",
-  ja: "일본어 (Japanese)",
-  zh: "중국어 (Chinese)",
-  fr: "프랑스어 (French)",
-  es: "스페인어 (Spanish)",
-  ar: "아랍어 (Arabic)",
-  ru: "러시아어 (Russian)",
+  ko: "한국어 (Korean)", en: "영어 (English)", ja: "일본어 (Japanese)",
+  zh: "중국어 (Chinese)", fr: "프랑스어 (French)", es: "스페인어 (Spanish)",
+  ar: "아랍어 (Arabic)", ru: "러시아어 (Russian)",
 };
-const DEFAULT_LANG_A = "ko";
-const DEFAULT_LANG_B = "en";
+const DEFAULT_LANG_B = "ko";
 
-// ---- UI internationalization (Korean / English) ----------------------------
-const UI_I18N = {
+// ---- i18n -----------------------------------------------------------------
+const I18N = {
   ko: {
-    subtitle: "실시간 음성-대-음성 동시통역 · 다국어",
-    session: "세션 제어",
-    "ctrl.start": "통역 시작",
-    "ctrl.stop": "정지",
-    "ctrl.pause": "⏸️ 일시정지",
-    "ctrl.resume": "▶️ 재개",
-    "ctrl.replay": "🔁 다시 듣기",
-    "ctrl.pronounce": "🗣️ 발음",
-    "mode.audio": "🔊 음성+자막",
-    "mode.text": "📝 자막만",
-    "pron.title": "발음",
-    "pron.roman": "로마자",
-    "pron.hangul": "한글",
-    "field.serverUrl": "서버 주소",
-    "btn.save": "저장",
-    "help.serverUrl": "클라우드 백엔드 주소. 안드로이드 앱에선 필수, 웹에선 비워두면 현재 서버를 사용합니다.",
-    "field.accessToken": "접속 토큰",
-    "ph.accessToken": "서버 접속 토큰",
-    "help.accessToken": "서버의 ACCESS_TOKEN과 일치해야 합니다. Save 버튼으로 주소와 함께 저장됩니다.",
-    "field.languages": "언어",
-    "help.languages": "Language B = 들리는 언어(출력). 기본 통역 모델은 입력 언어를 자동 감지(70+)하므로 A는 자동으로 두어도 됩니다.",
-    "field.displayLangs": "표시 언어 (각자 읽을 자막 · 최대 3)",
-    "help.displayLangs": "설정하면 각 발화를 이 언어들로도 자막에 함께 표시합니다(참가자 각자 읽기). 음성은 위 출력 언어 1개로 나갑니다.",
-    "opt.none": "— 없음 —",
-    "field.voice": "목소리",
-    "help.voice": "Persona 모델에서만 적용됩니다. 기본 통역 모델은 화자 본인의 목소리를 그대로 살립니다.",
-    "field.speed": "빠르기",
-    "help.speed": "통역 음성의 재생 속도를 조절합니다(실시간).",
-    "risk.title": "🛡️ 리스크 감지",
-    "help.risk": "발화가 끝난 뒤 별도로 분석합니다. 통역 속도에는 영향이 없습니다.",
-    "ph.riskContext": "분야 (예: oil trading, 알루미늄 수출)",
-    "clarify.title": "🔎 의미 확인",
-    "help.clarify": '발음이 어눌해 잘못 통역된 것 같으면 문맥으로 "혹시 이런 뜻?"을 제안합니다.',
-    "info.model": "모델",
-    "info.input": "입력",
-    "info.output": "출력",
-    "info.latency": "지연",
-    "clarify.heading": "🔎 혹시 이런 뜻이었나요?",
-    "clarify.corrected": "교정 번역",
-    "risk.suggestedQ": "추천 질문",
-    "btn.copy": "복사",
-    "transcript.title": "실시간 자막",
-    "btn.clear": "지우기",
-    "transcript.ph": "두 언어를 고르고 통역 시작을 누른 뒤, 마이크를 허용하고 말하세요…",
-    "notes.title": "회의 노트",
-    "notes.summaryIn": "요약 언어",
-    "notes.summarize": "요약",
-    "notes.saveAs": "저장:",
-    "notes.new": "새 회의",
-    "qa.title": "💬 대화 내용 질문",
-    "ph.ask": "예: 결제 조건이 어떻게 정해졌지?",
-    "qa.ask": "질문",
-    "summary.title": "요약",
-    "notes.ph": "회의가 시작되면 발화가 시간순으로 기록됩니다. 기록은 이 기기에 저장되어 앱을 닫아도 유지됩니다.",
-    footer: "Google Gemini Multimodal Live API 기반 · 제로-추론 오디오 파이프라인",
-    // dynamic
-    "status.idle": "대기",
-    "status.connecting": "연결 중…",
-    "status.live": "연결됨 — 말하세요",
-    "status.paused": "일시정지됨",
-    "status.saved": "설정 저장됨",
-    "status.setServer": "서버 주소를 입력하세요",
-    "status.cannotReach": "서버에 연결할 수 없음",
-    "status.keyMissing": "서버에 API 키가 설정되지 않음",
-    "status.tokenMismatch": "Access Token이 서버와 불일치",
-    "status.noServerFirst": "먼저 서버 주소를 설정하세요",
-    "status.failStart": "시작 실패",
-    "msg.nothingExport": "내보낼 내용이 없습니다",
-    "msg.noConv": "질문할 대화가 아직 없습니다",
-    "msg.newMeeting": "새 회의를 시작했습니다",
-    "msg.confirmNew": "현재 회의 노트를 지우고 새로 시작할까요?",
-    "msg.askFail": "질문 실패",
-    "msg.exportFail": "내보내기 실패",
-    "msg.summaryFail": "요약 실패",
-    "msg.summaryUpdated": "요약이 갱신되었습니다",
-    "msg.pronFail": "발음 변환 실패",
+    "home.translate": "빠른 통역", "home.translateDesc": "즉석 실시간 통역·자막 (저장 안 함)",
+    "home.notes": "회의 노트", "home.notesDesc": "녹음·기록·요약 · 주제/날짜로 검색",
+    "home.settings": "설정", "home.settingsDesc": "언어·테마·서버·표시언어·보기모드",
+    "home.tagline": "Gemini Live Translate · 자동 언어 감지 · 다국어 자막",
+    "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
+    "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
+    "note.tabLog": "기록", "note.tabSummary": "요약", "vm.both": "원문+번역", "vm.source": "원문만", "vm.trans": "번역만",
+    "note.summarize": "요약", "note.delete": "삭제", "note.ph": "아래 <b>시작</b>을 누르면 녹음·통역이 시작되고 여기에 기록됩니다.",
+    "qa.ph": "예: 결제 조건이 어떻게 정해졌지?", "qa.ask": "질문",
+    "set.uiLang": "앱 언어", "set.theme": "테마", "set.dark": "🌙 밤(어둡게)", "set.light": "☀️ 낮(밝게)",
+    "set.fontSize": "글자 크기", "set.output": "출력(들리는) 언어", "set.outputHelp": "음성으로 나갈 1개 언어. 입력 언어는 자동 감지됩니다.",
+    "set.display": "표시(자막) 언어 · 최대 3", "set.displayHelp": "각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기).",
+    "set.voice": "음성 (목소리)", "set.speed": "빠르기", "set.risk": "🛡️ 리스크 감지", "set.riskCtx": "분야 (예: oil trading)",
+    "set.clarify": "🔎 의미 확인", "set.server": "서버 주소", "set.token": "접속 토큰", "set.tokenPh": "서버 접속 토큰",
+    "set.save": "저장", "set.model": "모델",
+    "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "ctrl.start": "시작", "ctrl.stop": "정지",
+    "pron.title": "발음", "pron.roman": "로마자", "pron.hangul": "한글",
+    "title.home": "Gemini 통역기", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "설정",
+    "st.idle": "대기", "st.connecting": "연결 중…", "st.live": "통역 중 — 말하세요", "st.paused": "일시정지",
+    "st.saved": "저장됨", "st.tokenBad": "Access Token이 서버와 불일치", "st.cantReach": "서버 연결 불가",
+    "st.noKey": "서버에 API 키 미설정", "st.setServer": "설정에서 서버 주소를 입력하세요",
+    "msg.confirmDelete": "이 노트를 삭제할까요?", "msg.newNote": "새 노트",
   },
   en: {
-    subtitle: "Real-time audio-to-audio simultaneous interpreter · multilingual",
-    session: "Session Control",
-    "ctrl.start": "Start Translating",
-    "ctrl.stop": "Stop",
-    "ctrl.pause": "⏸️ Pause",
-    "ctrl.resume": "▶️ Resume",
-    "ctrl.replay": "🔁 Replay",
-    "ctrl.pronounce": "🗣️ Pronounce",
-    "mode.audio": "🔊 Audio + captions",
-    "mode.text": "📝 Captions only",
-    "pron.title": "Pronunciation",
-    "pron.roman": "Roman",
-    "pron.hangul": "Hangul",
-    "field.serverUrl": "Server URL",
-    "btn.save": "Save",
-    "help.serverUrl": "Cloud backend address. Required in the Android app; leave blank on the web to use this same server.",
-    "field.accessToken": "Access Token",
-    "ph.accessToken": "server access token",
-    "help.accessToken": "Must match ACCESS_TOKEN on the server. Saved with the URL via the Save button.",
-    "field.languages": "Languages",
-    "help.languages": "Language B = the language you hear (output). The default translate model auto-detects the source (70+), so A can stay on Auto.",
-    "field.displayLangs": "Caption languages (each reads their own · up to 3)",
-    "help.displayLangs": "If set, each utterance is also shown in these languages (everyone reads their own). Audio plays in the single output language above.",
-    "opt.none": "— none —",
-    "field.voice": "Voice",
-    "help.voice": "Applies to the persona model only. The default translate model preserves the speaker's own voice.",
-    "field.speed": "Speed",
-    "help.speed": "Adjusts playback speed of the translated voice (live).",
-    "risk.title": "🛡️ Risk Guard",
-    "help.risk": "Analyzed after each turn finishes — no effect on translation speed.",
-    "ph.riskContext": "Industry (e.g. oil trading, aluminum export)",
-    "clarify.title": "🔎 Clarify",
-    "help.clarify": 'If unclear pronunciation seems mistranslated, suggests "Did you mean…?" from context.',
-    "info.model": "Model",
-    "info.input": "Input",
-    "info.output": "Output",
-    "info.latency": "Latency",
-    "clarify.heading": "🔎 Did you mean…?",
-    "clarify.corrected": "Corrected translation",
-    "risk.suggestedQ": "Suggested question",
-    "btn.copy": "Copy",
-    "transcript.title": "Live Transcript",
-    "btn.clear": "Clear",
-    "transcript.ph": "Pick your two languages, press Start, allow the mic, and start speaking…",
-    "notes.title": "Meeting Notes",
-    "notes.summaryIn": "Summary in",
-    "notes.summarize": "Summarize",
-    "notes.saveAs": "Save:",
-    "notes.new": "New",
-    "qa.title": "💬 Ask about this conversation",
-    "ph.ask": "e.g. What payment terms were agreed?",
-    "qa.ask": "Ask",
-    "summary.title": "Summary",
-    "notes.ph": "Once a meeting starts, utterances are logged here in order. The log is saved on this device and survives app restarts.",
-    footer: "Powered by the Google Gemini Multimodal Live API · zero-inference audio pipeline",
-    // dynamic
-    "status.idle": "Idle",
-    "status.connecting": "Connecting…",
-    "status.live": "Live — speak now",
-    "status.paused": "Paused",
-    "status.saved": "Settings saved",
-    "status.setServer": "Set the server URL to begin",
-    "status.cannotReach": "Cannot reach server",
-    "status.keyMissing": "API key not configured on server",
-    "status.tokenMismatch": "Access Token does not match the server",
-    "status.noServerFirst": "Set the server URL first",
-    "status.failStart": "Failed to start",
-    "msg.nothingExport": "Nothing to export",
-    "msg.noConv": "No conversation to ask about yet",
-    "msg.newMeeting": "New meeting started",
-    "msg.confirmNew": "Clear the current meeting notes and start over?",
-    "msg.askFail": "Question failed",
-    "msg.exportFail": "Export failed",
-    "msg.summaryFail": "Summary failed",
-    "msg.summaryUpdated": "Summary updated",
-    "msg.pronFail": "Pronunciation failed",
+    "home.translate": "Quick Translate", "home.translateDesc": "Instant live interpreting · captions (not saved)",
+    "home.notes": "Meeting Notes", "home.notesDesc": "Record · log · summary · search by topic/date",
+    "home.settings": "Settings", "home.settingsDesc": "Language · theme · server · caption langs",
+    "home.tagline": "Gemini Live Translate · auto language detection · multilingual captions",
+    "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
+    "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
+    "note.tabLog": "Log", "note.tabSummary": "Summary", "vm.both": "Source+Translation", "vm.source": "Source only", "vm.trans": "Translation only",
+    "note.summarize": "Summarize", "note.delete": "Delete", "note.ph": "Tap <b>Start</b> below to begin recording — it appears here.",
+    "qa.ph": "e.g. What payment terms were agreed?", "qa.ask": "Ask",
+    "set.uiLang": "App language", "set.theme": "Theme", "set.dark": "🌙 Dark", "set.light": "☀️ Light",
+    "set.fontSize": "Font size", "set.output": "Output (spoken) language", "set.outputHelp": "One spoken language. Source is auto-detected.",
+    "set.display": "Caption languages · up to 3", "set.displayHelp": "Show each utterance in these languages (everyone reads their own).",
+    "set.voice": "Voice", "set.speed": "Speed", "set.risk": "🛡️ Risk Guard", "set.riskCtx": "Industry (e.g. oil trading)",
+    "set.clarify": "🔎 Clarify", "set.server": "Server URL", "set.token": "Access token", "set.tokenPh": "server access token",
+    "set.save": "Save", "set.model": "Model",
+    "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "ctrl.start": "Start", "ctrl.stop": "Stop",
+    "pron.title": "Pronunciation", "pron.roman": "Roman", "pron.hangul": "Hangul",
+    "title.home": "Gemini Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Settings",
+    "st.idle": "Idle", "st.connecting": "Connecting…", "st.live": "Live — speak now", "st.paused": "Paused",
+    "st.saved": "Saved", "st.tokenBad": "Access token does not match the server", "st.cantReach": "Cannot reach server",
+    "st.noKey": "API key not configured on server", "st.setServer": "Set the server URL in Settings",
+    "msg.confirmDelete": "Delete this note?", "msg.newNote": "New note",
   },
 };
-
 let UI_LANG = localStorage.getItem("uiLang") || "ko";
+const t = (k) => (I18N[UI_LANG] && I18N[UI_LANG][k] != null ? I18N[UI_LANG][k] : (I18N.ko[k] || k));
 
-function t(key) {
-  const table = UI_I18N[UI_LANG] || UI_I18N.ko;
-  return table[key] != null ? table[key] : UI_I18N.ko[key] || key;
-}
-
-function applyI18n(lang) {
-  UI_LANG = UI_I18N[lang] ? lang : "ko";
-  localStorage.setItem("uiLang", UI_LANG);
+function applyI18n() {
   document.documentElement.lang = UI_LANG;
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
-    const v = t(el.getAttribute("data-i18n"));
-    if (v) el.textContent = v;
-  });
-  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
-    const v = t(el.getAttribute("data-i18n-ph"));
-    if (v) el.setAttribute("placeholder", v);
-  });
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.innerHTML = t(el.getAttribute("data-i18n")); });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph"))); });
 }
 
-function applyTheme(theme) {
-  const light = theme === "light";
-  document.body.classList.toggle("light", light);
-  localStorage.setItem("theme", light ? "light" : "dark");
-  const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = light ? "☀️" : "🌙";
-}
+function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+const $ = (id) => document.getElementById(id);
 
-class TranslatorClient {
+// ---------------------------------------------------------------------------
+class App {
   constructor() {
-    this.ws = null;
-    this.captureContext = null;
-    this.playbackContext = null;
-    this.workletNode = null;
-    this.micSource = null;
-    this.mediaStream = null;
-    this.running = false;
-    this._lastError = "";
-
-    // Playback scheduling cursor (in playbackContext time).
-    this.nextPlayTime = 0;
-
-    // Meeting notes: persisted log of finalized turns + in-progress accumulators.
-    this.meetingLog = [];
-    this._curSource = "";
-    this._curTranslation = "";
-
-    // Quick-action state.
-    this.paused = false; // when true, mic audio is not sent upstream
-    this.playbackRate = parseFloat(localStorage.getItem("playbackRate") || "1.0");
-    this._curAudioChunks = []; // Float32 pieces of the current turn's output audio
-    this._lastAudio = null; // concatenated Float32Array of the last turn
-    this._lastTranslationText = ""; // text of the last finalized translation
-    this._turnTimer = null; // debounce for committing a turn to the notes
-    // Output mode: true = hear translated audio + captions; false = captions only.
+    // engine state
+    this.ws = null; this.captureContext = null; this.playbackContext = null;
+    this.workletNode = null; this.micSource = null; this.mediaStream = null;
+    this.running = false; this.paused = false; this._lastError = "";
+    this.nextPlayTime = 0; this.playbackRate = parseFloat(localStorage.getItem("playbackRate") || "1.0");
     this.audioOutput = localStorage.getItem("audioOutput") !== "0";
+    this._curAudioChunks = []; this._lastAudio = null; this._lastTranslationText = "";
+    this._turnTimer = null; this._curSource = ""; this._curTranslation = "";
+    this._srcLine = null; this._trLine = null;
 
-    this._bindUI();
-  }
+    // data
+    this.notes = this._loadNotes();
+    this.quickLog = [];
+    this.context = "quick";       // "quick" | "note"
+    this.activeNoteId = null;
+    this.viewMode = localStorage.getItem("viewMode") || "both";
 
-  _bindUI() {
-    this.els = {
-      toggleBtn: document.getElementById("toggleBtn"),
-      toggleLabel: document.getElementById("toggleLabel"),
-      toggleIcon: document.getElementById("toggleIcon"),
-      statusDot: document.getElementById("statusDot"),
-      statusText: document.getElementById("statusText"),
-      transcript: document.getElementById("transcript"),
-      placeholder: document.getElementById("placeholder"),
-      clearBtn: document.getElementById("clearBtn"),
-      voiceSelect: document.getElementById("voiceSelect"),
-      modelInfo: document.getElementById("modelInfo"),
-      serverUrl: document.getElementById("serverUrl"),
-      accessToken: document.getElementById("accessToken"),
-      saveServerBtn: document.getElementById("saveServerBtn"),
-      langA: document.getElementById("langA"),
-      langB: document.getElementById("langB"),
-      displayLang1: document.getElementById("displayLang1"),
-      displayLang2: document.getElementById("displayLang2"),
-      displayLang3: document.getElementById("displayLang3"),
-      // Meeting notes
-      notes: document.getElementById("notes"),
-      notesPlaceholder: document.getElementById("notesPlaceholder"),
-      noteCount: document.getElementById("noteCount"),
-      summaryLang: document.getElementById("summaryLang"),
-      summarizeBtn: document.getElementById("summarizeBtn"),
-      exportMdBtn: document.getElementById("exportMdBtn"),
-      exportDocxBtn: document.getElementById("exportDocxBtn"),
-      exportPdfBtn: document.getElementById("exportPdfBtn"),
-      newMeetingBtn: document.getElementById("newMeetingBtn"),
-      summaryBox: document.getElementById("summaryBox"),
-      summaryContent: document.getElementById("summaryContent"),
-      askInput: document.getElementById("askInput"),
-      askBtn: document.getElementById("askBtn"),
-      askAnswer: document.getElementById("askAnswer"),
-      // Clarify
-      clarifyToggle: document.getElementById("clarifyToggle"),
-      clarifyAlert: document.getElementById("clarifyAlert"),
-      clarifyText: document.getElementById("clarifyText"),
-      clarifyCorrected: document.getElementById("clarifyCorrected"),
-      clarifyDismiss: document.getElementById("clarifyDismiss"),
-      // Quick actions
-      pauseBtn: document.getElementById("pauseBtn"),
-      replayBtn: document.getElementById("replayBtn"),
-      pronounceBtn: document.getElementById("pronounceBtn"),
-      pronounceBox: document.getElementById("pronounceBox"),
-      pronounceContent: document.getElementById("pronounceContent"),
-      scriptSelect: document.getElementById("scriptSelect"),
-      speedRange: document.getElementById("speedRange"),
-      speedValue: document.getElementById("speedValue"),
-      // Risk guard
-      riskToggle: document.getElementById("riskToggle"),
-      riskContext: document.getElementById("riskContext"),
-      riskAlert: document.getElementById("riskAlert"),
-      riskIcon: document.getElementById("riskIcon"),
-      riskLevelLabel: document.getElementById("riskLevelLabel"),
-      riskTypes: document.getElementById("riskTypes"),
-      riskDismiss: document.getElementById("riskDismiss"),
-      riskAlertText: document.getElementById("riskAlertText"),
-      riskReason: document.getElementById("riskReason"),
-      riskQuestionWrap: document.getElementById("riskQuestionWrap"),
-      riskQuestion: document.getElementById("riskQuestion"),
-      riskCopyBtn: document.getElementById("riskCopyBtn"),
-      uiLang: document.getElementById("uiLang"),
-      themeToggle: document.getElementById("themeToggle"),
-      modeAudioBtn: document.getElementById("modeAudioBtn"),
-      modeTextBtn: document.getElementById("modeTextBtn"),
-    };
+    // active view targets (set on navigation)
+    this.view = "home";
+    this.transcriptEl = null; this.riskEl = null; this.clarifyEl = null;
 
-    this._setupAppearance();
-    this._setupOutputMode();
-    this._setupLanguages();
-    this._setupMeetingNotes();
-    this._setupControls();
-    this._setupRiskGuard();
-
-    this.els.toggleBtn.addEventListener("click", () => {
-      if (this.running) this.stop();
-      else this.start();
-    });
-
-    this.els.clearBtn.addEventListener("click", () => {
-      this.els.transcript.innerHTML = "";
-      this._sourceLine = null;
-      this._translationLine = null;
-    });
-
-    // Server URL + access token: remembered on the device, pre-filled from the
-    // saved value or the build-time defaults in config.js.
-    this.els.serverUrl.value = this._serverBase();
-    this.els.accessToken.value = this._accessToken();
-    this.els.saveServerBtn.addEventListener("click", () => {
-      const v = this.els.serverUrl.value.trim().replace(/\/+$/, "");
-      if (v) localStorage.setItem("serverUrl", v);
-      else localStorage.removeItem("serverUrl");
-
-      const tok = this.els.accessToken.value.trim();
-      if (tok) localStorage.setItem("accessToken", tok);
-      else localStorage.removeItem("accessToken");
-
-      this._setStatus("idle", t("status.saved"));
-      this._refreshHealth();
-    });
-
+    this._cache();
+    this._bind();
+    this._applyAppearance();
+    this._populateLangs();
     this._refreshHealth();
+    this.show("home");
   }
 
-  /** Output-mode toggle: hear audio + captions, or captions only. */
-  _setupOutputMode() {
-    const render = () => {
-      const on = "border-indigo-500 bg-indigo-600 text-white";
-      const off = "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
-      this.els.modeAudioBtn.className = `rounded-lg border px-2 py-2 font-medium transition ${this.audioOutput ? on : off}`;
-      this.els.modeTextBtn.className = `rounded-lg border px-2 py-2 font-medium transition ${this.audioOutput ? off : on}`;
-    };
-    const set = (audio) => {
-      this.audioOutput = audio;
-      localStorage.setItem("audioOutput", audio ? "1" : "0");
-      render();
-      if (!audio) this._flushPlayback(); // stop any audio currently playing
-    };
-    this.els.modeAudioBtn.addEventListener("click", () => set(true));
-    this.els.modeTextBtn.addEventListener("click", () => set(false));
-    render();
+  _cache() {
+    this.el = {};
+    ["backBtn","viewTitle","statusDot","statusText","controlBar","newNoteBtn",
+     "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
+     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn",
+     "qkTranscript","qkRisk","qkClarify","noteTranscript","noteRisk","noteClarify",
+     "noteTitle","noteDate","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
+     "askInput","askBtn","askAnswer","summaryContent","viewMode",
+     "notesList","notesEmpty","noteSearch",
+     "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
+     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle",
+     "serverUrl","accessToken","saveServerBtn","modelInfo"].forEach((id) => (this.el[id] = $(id)));
   }
 
-  /** UI language (한/영) + light/dark theme. */
-  _setupAppearance() {
-    this.els.uiLang.value = UI_LANG;
-    applyI18n(UI_LANG);
-    applyTheme(localStorage.getItem("theme") || "dark");
-    this._refreshDynamicLabels();
-    this._setStatus("idle", t("status.idle"));
+  // ---- navigation ---------------------------------------------------------
+  show(view, opts = {}) {
+    // leaving a recording-capable view while live → stop
+    if (this.running && view !== this.view) this.stop();
 
-    this.els.uiLang.addEventListener("change", () => {
-      applyI18n(this.els.uiLang.value);
-      this._refreshDynamicLabels();
-      if (!this.running) this._setStatus("idle", t("status.idle"));
-    });
-    this.els.themeToggle.addEventListener("click", () => {
-      const isLight = document.body.classList.contains("light");
-      applyTheme(isLight ? "dark" : "light");
-    });
-  }
+    this.view = view;
+    document.querySelectorAll("[data-view]").forEach((s) => (s.hidden = s.getAttribute("data-view") !== view));
+    this.el.backBtn.classList.toggle("hidden", view === "home");
+    this.el.controlBar.hidden = !(view === "translate" || view === "note");
+    this.el.newNoteBtn.hidden = view !== "notes";
 
-  /** Re-apply labels whose text depends on runtime state, in the current lang. */
-  _refreshDynamicLabels() {
-    this.els.toggleLabel.textContent = this.running ? t("ctrl.stop") : t("ctrl.start");
-    this.els.pauseBtn.textContent = this.paused ? t("ctrl.resume") : t("ctrl.pause");
-  }
-
-  /** Populate the two language dropdowns and restore the saved pair. */
-  _setupLanguages() {
-    const fill = (sel, selected, withAuto) => {
-      sel.innerHTML = "";
-      const entries = withAuto
-        ? [["auto", "🌐 자동 감지 (Auto-detect)"], ...Object.entries(LANGUAGES)]
-        : Object.entries(LANGUAGES);
-      for (const [code, label] of entries) {
-        const opt = document.createElement("option");
-        opt.value = code;
-        opt.textContent = label;
-        if (code === selected) opt.selected = true;
-        sel.appendChild(opt);
-      }
-    };
-    // Language A may be "auto" (detect any language -> Language B).
-    fill(this.els.langA, localStorage.getItem("langA") || DEFAULT_LANG_A, true);
-    fill(this.els.langB, localStorage.getItem("langB") || DEFAULT_LANG_B, false);
-
-    const remember = () => {
-      localStorage.setItem("langA", this.els.langA.value);
-      localStorage.setItem("langB", this.els.langB.value);
-    };
-    this.els.langA.addEventListener("change", remember);
-    this.els.langB.addEventListener("change", remember);
-
-    // Display (caption) languages — each optional, "none" first.
-    const displaySels = [this.els.displayLang1, this.els.displayLang2, this.els.displayLang3];
-    const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
-    displaySels.forEach((sel, i) => {
-      sel.innerHTML = "";
-      for (const [code, label] of [["", t("opt.none")], ...Object.entries(LANGUAGES)]) {
-        const opt = document.createElement("option");
-        opt.value = code;
-        opt.textContent = label;
-        if (code === (saved[i] || "")) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => {
-        localStorage.setItem("displayLangs", JSON.stringify(displaySels.map((s) => s.value)));
-      });
-    });
-  }
-
-  /** Selected caption languages (deduped, non-empty). */
-  _displayLangs() {
-    const v = [this.els.displayLang1.value, this.els.displayLang2.value, this.els.displayLang3.value];
-    return [...new Set(v.filter(Boolean))];
-  }
-
-  /** Wire the quick-action controls: speed, pause, replay, pronounce. */
-  _setupControls() {
-    // Playback speed.
-    this.els.speedRange.value = String(this.playbackRate);
-    this.els.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
-    this.els.speedRange.addEventListener("input", () => {
-      this.playbackRate = parseFloat(this.els.speedRange.value);
-      this.els.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
-      localStorage.setItem("playbackRate", String(this.playbackRate));
-    });
-
-    this.els.pauseBtn.addEventListener("click", () => this._togglePause());
-    this.els.replayBtn.addEventListener("click", () => this._replayLast());
-    this.els.pronounceBtn.addEventListener("click", () => this._pronounce());
-    this.els.scriptSelect.addEventListener("change", () => {
-      if (this._lastTranslationText) this._pronounce();
-    });
-  }
-
-  _togglePause() {
-    if (!this.running) return;
-    this.paused = !this.paused;
-    this.els.pauseBtn.textContent = this.paused ? t("ctrl.resume") : t("ctrl.pause");
-    this._setStatus(this.paused ? "connecting" : "live", this.paused ? t("status.paused") : t("status.live"));
-    if (this.paused) this._flushPlayback(); // stop any audio currently playing
-  }
-
-  /** Play a Float32 PCM buffer (24 kHz) honoring the current speed. */
-  _playBuffer(float32) {
-    if (!float32 || !float32.length) return;
-    let ctx = this.playbackContext;
-    if (!ctx || ctx.state === "closed") {
-      ctx = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: OUTPUT_SAMPLE_RATE,
-      });
-    }
-    const buffer = ctx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
-    buffer.copyToChannel(float32, 0);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.playbackRate.value = this.playbackRate;
-    source.connect(ctx.destination);
-    source.start();
-  }
-
-  _replayLast() {
-    if (!this._lastAudio) {
-      this._setStatus(this.running ? "live" : "idle", "Nothing to replay yet");
-      return;
-    }
-    this._playBuffer(this._lastAudio);
-  }
-
-  async _pronounce() {
-    const text = this._lastTranslationText.trim();
-    if (!text) {
-      this._setStatus(this.running ? "live" : "idle", "No sentence to pronounce yet");
-      return;
-    }
-    const base = this._serverBase();
-    if (!base) {
-      this._setStatus("error", t("status.noServerFirst"));
-      return;
-    }
-    this.els.pronounceBox.classList.remove("hidden");
-    this.els.pronounceContent.textContent = "…";
-    try {
-      const res = await fetch(`${base}/api/pronounce`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          script: this.els.scriptSelect.value,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      this.els.pronounceContent.textContent = data.pronunciation || "(none)";
-    } catch (e) {
-      this.els.pronounceContent.textContent = `${t("msg.pronFail")}: ${e.message}`;
-    }
-  }
-
-  /** Risk-detection copilot: restore settings, wire toggle/dismiss/copy. */
-  _setupRiskGuard() {
-    this.els.riskToggle.checked = localStorage.getItem("riskGuard") === "1";
-    this.els.riskContext.value = localStorage.getItem("riskContext") || "";
-    this.els.riskToggle.addEventListener("change", () => {
-      localStorage.setItem("riskGuard", this.els.riskToggle.checked ? "1" : "0");
-      if (!this.els.riskToggle.checked) this.els.riskAlert.classList.add("hidden");
-    });
-    this.els.riskContext.addEventListener("change", () =>
-      localStorage.setItem("riskContext", this.els.riskContext.value.trim())
-    );
-    this.els.riskDismiss.addEventListener("click", () =>
-      this.els.riskAlert.classList.add("hidden")
-    );
-    this.els.riskCopyBtn.addEventListener("click", () => {
-      const q = this.els.riskQuestion.textContent || "";
-      if (q && navigator.clipboard) navigator.clipboard.writeText(q).catch(() => {});
-    });
-
-    // Meaning-clarification toggle (shares the per-turn analysis call).
-    this.els.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
-    this.els.clarifyToggle.addEventListener("change", () => {
-      localStorage.setItem("clarify", this.els.clarifyToggle.checked ? "1" : "0");
-      if (!this.els.clarifyToggle.checked) this.els.clarifyAlert.classList.add("hidden");
-    });
-    this.els.clarifyDismiss.addEventListener("click", () =>
-      this.els.clarifyAlert.classList.add("hidden")
-    );
-  }
-
-  /** Recent transcript text (last few turns) for context-aware analysis. */
-  _recentHistory(n = 6) {
-    return this.meetingLog
-      .slice(-n)
-      .map((e) => `${e.source}${e.translation ? "  → " + e.translation : ""}`)
-      .join("\n");
-  }
-
-  /**
-   * Per-turn analysis (risk + meaning clarification), off the real-time path.
-   * One model call returns both; we render only what the user enabled.
-   */
-  async _analyzeTurn(entry) {
-    const base = this._serverBase();
-    if (!base || !entry.source) return;
-    try {
-      const res = await fetch(`${base}/api/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          original: entry.source,
-          translation: entry.translation,
-          alert_language: this.els.summaryLang.value,
-          context: this.els.riskContext.value.trim(),
-          history: this._recentHistory(),
-          want_risk: this.els.riskToggle.checked,
-          want_clarify: this.els.clarifyToggle.checked,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data) return;
-
-      let changed = false;
-
-      // Risk (only if Risk Guard is on).
-      if (this.els.riskToggle.checked && data.risk_level && data.risk_level !== "none") {
-        entry.risk = {
-          risk_level: data.risk_level,
-          risk_types: data.risk_types,
-          subtitle_alert: data.subtitle_alert,
-          reason: data.reason,
-          suggested_question: data.suggested_question,
-        };
-        this._renderRiskAlert(entry.risk);
-        changed = true;
-      }
-
-      // Meaning clarification (only if Clarify is on).
-      if (this.els.clarifyToggle.checked && data.clarify_suspected) {
-        entry.clarify = {
-          did_you_mean: data.clarify_did_you_mean,
-          corrected: data.clarify_corrected_translation,
-        };
-        this._renderClarify(entry.clarify);
-        changed = true;
-      }
-
-      if (changed) {
-        try {
-          localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
-        } catch {
-          /* ignore */
-        }
-      }
-    } catch {
-      /* analysis is best-effort; never disturb the conversation */
-    }
-  }
-
-  _renderClarify(c) {
-    this.els.clarifyText.textContent = c.did_you_mean || "";
-    this.els.clarifyCorrected.textContent = c.corrected || "";
-    this.els.clarifyAlert.classList.remove("hidden");
-  }
-
-  _renderRiskAlert(risk) {
-    const labels =
-      UI_LANG === "ko"
-        ? { low: "참고", medium: "확인 필요", high: "주의" }
-        : { low: "Note", medium: "Check", high: "Caution" };
-    const styles = {
-      low: { box: "border-slate-600 bg-slate-800 text-slate-200", icon: "💡", label: labels.low },
-      medium: { box: "border-amber-500/60 bg-amber-950/40 text-amber-100", icon: "⚠️", label: labels.medium },
-      high: { box: "border-rose-500/70 bg-rose-950/40 text-rose-100", icon: "🚨", label: labels.high },
-    };
-    const s = styles[risk.risk_level] || styles.low;
-    this.els.riskAlert.className = `mb-4 rounded-2xl border p-4 ${s.box}`;
-    this.els.riskIcon.textContent = s.icon;
-    this.els.riskLevelLabel.textContent = `${s.label} (${risk.risk_level})`;
-    this.els.riskTypes.textContent = (risk.risk_types || []).join(" · ");
-    this.els.riskAlertText.textContent = risk.subtitle_alert || "";
-    this.els.riskReason.textContent = risk.reason || "";
-    if (risk.suggested_question) {
-      this.els.riskQuestion.textContent = risk.suggested_question;
-      this.els.riskQuestionWrap.classList.remove("hidden");
+    if (view === "translate") {
+      this.context = "quick"; this.quickLog = []; this._clearTranscript(this.el.qkTranscript, "qk-ph");
+      this.transcriptEl = this.el.qkTranscript; this.riskEl = this.el.qkRisk; this.clarifyEl = this.el.qkClarify;
+      this.el.viewTitle.innerHTML = t("title.translate");
+    } else if (view === "note") {
+      this.context = "note"; this.activeNoteId = opts.id;
+      this.transcriptEl = this.el.noteTranscript; this.riskEl = this.el.noteRisk; this.clarifyEl = this.el.noteClarify;
+      this._openNote(opts.id);
     } else {
-      this.els.riskQuestionWrap.classList.add("hidden");
+      this.el.viewTitle.innerHTML = t("title." + (view === "settings" ? "settings" : view === "notes" ? "notes" : "home"));
+      if (view === "notes") this._renderNotesList();
     }
-    this.els.riskAlert.classList.remove("hidden");
+    if (view === "home") this.el.viewTitle.innerHTML = `<span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">${t("title.home")}</span>`;
+    this._refreshToggle();
   }
 
-  /** Set up the meeting-notes panel: restore saved log, wire the buttons. */
-  _setupMeetingNotes() {
-    // Summary language dropdown mirrors the supported languages.
-    const sel = this.els.summaryLang;
-    sel.innerHTML = "";
-    for (const [code, label] of Object.entries(LANGUAGES)) {
-      const opt = document.createElement("option");
-      opt.value = code;
-      opt.textContent = label;
-      sel.appendChild(opt);
-    }
-    sel.value = localStorage.getItem("summaryLang") || localStorage.getItem("langA") || DEFAULT_LANG_A;
-    sel.addEventListener("change", () =>
-      localStorage.setItem("summaryLang", sel.value)
-    );
+  // ---- binding ------------------------------------------------------------
+  _bind() {
+    document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => this.show(b.getAttribute("data-go"))));
+    this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : "home"));
 
-    // Restore persisted meeting log.
-    try {
-      this.meetingLog = JSON.parse(localStorage.getItem("meetingLog") || "[]");
-    } catch {
-      this.meetingLog = [];
-    }
-    this._renderNotes();
+    this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
+    this.el.pauseBtn.addEventListener("click", () => this._togglePause());
+    this.el.replayBtn.addEventListener("click", () => this._replayLast());
+    this.el.pronounceBtn.addEventListener("click", () => this._pronounce());
+    this.el.scriptSelect.addEventListener("change", () => this._lastTranslationText && this._pronounce());
+    this.el.modeAudioBtn.addEventListener("click", () => this._setMode(true));
+    this.el.modeTextBtn.addEventListener("click", () => this._setMode(false));
 
-    this.els.summarizeBtn.addEventListener("click", () => this._summarize());
-    this.els.exportMdBtn.addEventListener("click", () => this._export("md"));
-    this.els.exportDocxBtn.addEventListener("click", () => this._export("docx"));
-    this.els.exportPdfBtn.addEventListener("click", () => this._export("pdf"));
-    this.els.newMeetingBtn.addEventListener("click", () => this._newMeeting());
-    this.els.askBtn.addEventListener("click", () => this._ask());
-    this.els.askInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") this._ask();
+    // notes
+    this.el.newNoteBtn.addEventListener("click", () => this._newNote());
+    this.el.noteSearch.addEventListener("input", () => this._renderNotesList());
+    this.el.noteTitle.addEventListener("change", () => this._renameActive());
+    this.el.noteDelete.addEventListener("click", () => this._deleteActive());
+    this.el.noteSummarizeBtn.addEventListener("click", () => this._summarize());
+    this.el.askBtn.addEventListener("click", () => this._ask());
+    this.el.askInput.addEventListener("keydown", (e) => e.key === "Enter" && this._ask());
+    this.el.noteExportMd.addEventListener("click", () => this._export("md"));
+    this.el.noteExportDocx.addEventListener("click", () => this._export("docx"));
+    this.el.noteExportPdf.addEventListener("click", () => this._export("pdf"));
+    document.querySelectorAll(".note-tab").forEach((b) => b.addEventListener("click", () => this._tab(b.getAttribute("data-tab"))));
+    this.el.viewMode.addEventListener("change", () => {
+      this.viewMode = this.el.viewMode.value; localStorage.setItem("viewMode", this.viewMode);
+      if (this.context === "note") this._renderLog(this.el.noteTranscript, this._note(this.activeNoteId).log, "note-ph");
+    });
+
+    // settings
+    this.el.uiLang.value = UI_LANG;
+    this.el.uiLang.addEventListener("change", () => { UI_LANG = this.el.uiLang.value; localStorage.setItem("uiLang", UI_LANG); applyI18n(); this._refreshToggle(); });
+    this.el.themeSel.addEventListener("change", () => this._applyTheme(this.el.themeSel.value));
+    this.el.fontSel.addEventListener("change", () => this._applyFont(this.el.fontSel.value));
+    this.el.speedRange.addEventListener("input", () => { this.playbackRate = parseFloat(this.el.speedRange.value); this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`; localStorage.setItem("playbackRate", String(this.playbackRate)); });
+    this.el.riskToggle.checked = localStorage.getItem("riskGuard") === "1";
+    this.el.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
+    this.el.riskContext.value = localStorage.getItem("riskContext") || "";
+    this.el.riskToggle.addEventListener("change", () => localStorage.setItem("riskGuard", this.el.riskToggle.checked ? "1" : "0"));
+    this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
+    this.el.riskContext.addEventListener("change", () => localStorage.setItem("riskContext", this.el.riskContext.value.trim()));
+    this.el.serverUrl.value = this._serverBase();
+    this.el.accessToken.value = this._token();
+    this.el.saveServerBtn.addEventListener("click", () => {
+      const v = this.el.serverUrl.value.trim().replace(/\/+$/, "");
+      v ? localStorage.setItem("serverUrl", v) : localStorage.removeItem("serverUrl");
+      const tok = this.el.accessToken.value.trim();
+      tok ? localStorage.setItem("accessToken", tok) : localStorage.removeItem("accessToken");
+      this._setStatus("idle", t("st.saved")); this._refreshHealth();
     });
   }
 
-  /** Append a finalized turn to the meeting log and persist it. */
-  /** Finalize the current turn (commit to notes + reset the live bubbles). */
-  _finalizeTurn() {
-    clearTimeout(this._turnTimer);
-    this._turnTimer = null;
-    this._commitTurn();
-    this._sourceLine = null;
-    this._translationLine = null;
+  _applyAppearance() {
+    applyI18n();
+    this._applyTheme(localStorage.getItem("theme") || "dark");
+    this._applyFont(localStorage.getItem("fontSize") || "md");
+    this.el.speedRange.value = String(this.playbackRate);
+    this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
+    this.el.viewMode.value = this.viewMode;
+    this._setMode(this.audioOutput, true);
+  }
+  _applyTheme(theme) { document.body.classList.toggle("light", theme === "light"); localStorage.setItem("theme", theme); this.el.themeSel.value = theme; }
+  _applyFont(size) { ["sm","md","lg","xl"].forEach((s) => { this.el.qkTranscript.classList.toggle("fs-" + s, s === size); this.el.noteTranscript.classList.toggle("fs-" + s, s === size); }); localStorage.setItem("fontSize", size); this.el.fontSel.value = size; }
+  _setMode(audio, silent) {
+    this.audioOutput = audio; if (!silent) localStorage.setItem("audioOutput", audio ? "1" : "0");
+    const on = "border-indigo-500 bg-indigo-600 text-white", off = "border-slate-700 bg-slate-800 text-slate-300";
+    this.el.modeAudioBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${audio ? on : off}`;
+    this.el.modeTextBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${audio ? off : on}`;
+    if (!audio) this._flushPlayback();
   }
 
-  _commitTurn() {
-    const source = this._curSource.trim();
-    const translation = this._curTranslation.trim();
-    this._curSource = "";
-    this._curTranslation = "";
-
-    // Finalize the turn's audio for "다시 듣기".
-    this._finalizeTurnAudio();
-    if (translation) {
-      this._lastTranslationText = translation;
-      this.els.pronounceBtn.disabled = false;
-    }
-
-    if (!source && !translation) return;
-
-    const entry = { t: Date.now(), source, translation };
-    this.meetingLog.push(entry);
-    try {
-      localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
-    } catch {
-      /* storage full — keep going in memory */
-    }
-    this._renderNotes();
-
-    // Fire-and-forget per-turn analysis (does not block translation).
-    if (this.els.riskToggle.checked || this.els.clarifyToggle.checked) {
-      this._analyzeTurn(entry);
-    }
-    // Multilingual captions: translate this utterance into the display languages.
-    if (this._displayLangs().length && entry.source) {
-      this._multiTranslate(entry);
-    }
-  }
-
-  /** Translate a finalized turn into the caption languages and show them. */
-  async _multiTranslate(entry) {
-    const base = this._serverBase();
-    const targets = this._displayLangs();
-    if (!base || !targets.length) return;
-    try {
-      const res = await fetch(`${base}/api/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: entry.source,
-          targets,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const tr = data.translations || {};
-      if (!Object.keys(tr).length) return;
-      entry.multi = tr;
-      try {
-        localStorage.setItem("meetingLog", JSON.stringify(this.meetingLog));
-      } catch {
-        /* ignore */
-      }
-      this._appendMultiLines(tr);
-      this._renderNotes();
-    } catch {
-      /* best effort */
-    }
-  }
-
-  /** Append labeled per-language caption lines to the live transcript. */
-  _appendMultiLines(translations) {
-    if (this.els.placeholder) {
-      this.els.placeholder.remove();
-      this.els.placeholder = null;
-    }
-    const wrap = document.createElement("div");
-    wrap.className = "rounded-lg bg-slate-800/60 px-3 py-2 text-sm";
-    wrap.innerHTML = Object.entries(translations)
-      .map(
-        ([code, text]) =>
-          `<div class="flex gap-2"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${code}</span><span class="text-slate-200">${this._escape(text)}</span></div>`
-      )
-      .join("");
-    this.els.transcript.appendChild(wrap);
-    this.els.transcript.scrollTop = this.els.transcript.scrollHeight;
-  }
-
-  _renderNotes() {
-    const n = this.meetingLog.length;
-    this.els.noteCount.textContent = `(${n})`;
-    if (this.els.notesPlaceholder) {
-      this.els.notesPlaceholder.style.display = n ? "none" : "";
-    }
-    // Re-render the log list (skip the placeholder node).
-    this.els.notes
-      .querySelectorAll("[data-note]")
-      .forEach((el) => el.remove());
-
-    for (const entry of this.meetingLog) {
-      const time = new Date(entry.t).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const row = document.createElement("div");
-      row.dataset.note = "1";
-      row.className = "rounded-lg bg-slate-950/50 px-3 py-2 text-sm";
-      let riskHtml = "";
-      if (entry.risk && entry.risk.risk_level && entry.risk.risk_level !== "none") {
-        const color =
-          entry.risk.risk_level === "high"
-            ? "text-rose-300"
-            : entry.risk.risk_level === "medium"
-            ? "text-amber-300"
-            : "text-slate-400";
-        riskHtml = `<div class="mt-1 ${color} text-xs">⚠️ ${this._escape(
-          entry.risk.subtitle_alert || ""
-        )}</div>`;
-      }
-      let multiHtml = "";
-      if (entry.multi && Object.keys(entry.multi).length) {
-        multiHtml = Object.entries(entry.multi)
-          .map(
-            ([code, text]) =>
-              `<div class="mt-0.5 flex gap-2 text-xs"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${code}</span><span class="text-slate-300">${this._escape(text)}</span></div>`
-          )
-          .join("");
-      }
-      row.innerHTML = `
-        <div class="mb-0.5 text-[10px] font-mono text-slate-600">${time}</div>
-        <div class="text-slate-400">${this._escape(entry.source)}</div>
-        <div class="text-slate-100">${this._escape(entry.translation)}</div>${multiHtml}${riskHtml}`;
-      this.els.notes.appendChild(row);
-    }
-    this.els.notes.scrollTop = this.els.notes.scrollHeight;
-  }
-
-  _escape(s) {
-    const d = document.createElement("div");
-    d.textContent = s || "";
-    return d.innerHTML;
-  }
-
-  /** Build a plain-text transcript for the summarizer / export. */
-  _transcriptText() {
-    return this.meetingLog
-      .map((e) => {
-        const time = new Date(e.t).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        const parts = [];
-        if (e.source) parts.push(e.source);
-        if (e.translation) parts.push(`→ ${e.translation}`);
-        return `[${time}] ${parts.join("  ")}`;
-      })
-      .join("\n");
-  }
-
-  async _summarize() {
-    if (!this.meetingLog.length) {
-      this._setStatus("idle", t("msg.noConv"));
-      return;
-    }
-    const base = this._serverBase();
-    if (!base) {
-      this._setStatus("error", t("status.noServerFirst"));
-      return;
-    }
-
-    this.els.summarizeBtn.disabled = true;
-    const prevLabel = this.els.summarizeBtn.textContent;
-    this.els.summarizeBtn.textContent = "…";
-    try {
-      const res = await fetch(`${base}/api/summarize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: this._transcriptText(),
-          language: this.els.summaryLang.value,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      this._lastSummary = data.summary || "";
-      this.els.summaryContent.textContent = this._lastSummary;
-      this.els.summaryBox.classList.remove("hidden");
-      this._setStatus(this.running ? "live" : "idle", t("msg.summaryUpdated"));
-    } catch (e) {
-      this._setStatus("error", `${t("msg.summaryFail")}: ${e.message}`);
-    } finally {
-      this.els.summarizeBtn.disabled = false;
-      this.els.summarizeBtn.textContent = prevLabel;
-    }
-  }
-
-  /** Build the structured entry list the export endpoint expects. */
-  _exportEntries() {
-    return this.meetingLog.map((e) => {
-      let translation = e.translation || "";
-      if (e.multi && Object.keys(e.multi).length) {
-        const extra = Object.entries(e.multi)
-          .map(([code, text]) => `[${code}] ${text}`)
-          .join("  ");
-        translation = translation ? `${translation}  ${extra}` : extra;
-      }
-      return {
-        time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        source: e.source || "",
-        translation,
-        risk:
-          e.risk && e.risk.risk_level && e.risk.risk_level !== "none"
-            ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`
-            : "",
-      };
+  // ---- languages ----------------------------------------------------------
+  _populateLangs() {
+    const fillB = (sel, sv) => { sel.innerHTML = ""; for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === sv) o.selected = true; sel.appendChild(o); } };
+    fillB(this.el.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
+    this.el.langB.addEventListener("change", () => localStorage.setItem("langB", this.el.langB.value));
+    const ds = [this.el.displayLang1, this.el.displayLang2, this.el.displayLang3];
+    const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
+    ds.forEach((sel, i) => {
+      sel.innerHTML = "";
+      for (const [c, l] of [["", "—"], ...Object.entries(LANGUAGES)]) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === (saved[i] || "")) o.selected = true; sel.appendChild(o); }
+      sel.addEventListener("change", () => localStorage.setItem("displayLangs", JSON.stringify(ds.map((s) => s.value))));
     });
   }
+  _displayLangs() { return [...new Set([this.el.displayLang1.value, this.el.displayLang2.value, this.el.displayLang3.value].filter(Boolean))]; }
 
-  /** Export the notes as md / docx / pdf via the server, then download. */
-  async _export(format) {
-    if (!this.meetingLog.length) {
-      this._setStatus("idle", t("msg.nothingExport"));
-      return;
-    }
-    const base = this._serverBase();
-    if (!base) {
-      this._setStatus("error", t("status.noServerFirst"));
-      return;
-    }
-    this._setStatus(this.running ? "live" : "idle", `Exporting ${format.toUpperCase()}…`);
-    try {
-      const res = await fetch(`${base}/api/export`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "회의 노트 / Meeting Notes",
-          entries: this._exportEntries(),
-          summary: this._lastSummary || "",
-          format,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `meeting-notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      this._setStatus(this.running ? "live" : "idle", `${format.toUpperCase()} saved`);
-    } catch (e) {
-      this._setStatus("error", `${t("msg.exportFail")}: ${e.message}`);
-    }
+  // ---- status / toggle ----------------------------------------------------
+  _setStatus(state, text) {
+    const c = { idle: "bg-slate-500", connecting: "bg-amber-400 pulse-dot", live: "bg-emerald-400 pulse-dot", error: "bg-rose-500" };
+    this.el.statusDot.className = `h-2 w-2 rounded-full ${c[state] || c.idle}`;
+    this.el.statusText.textContent = text;
   }
-
-  /** Ask a question grounded in the saved conversation. */
-  async _ask() {
-    const question = this.els.askInput.value.trim();
-    if (!question) return;
-    if (!this.meetingLog.length) {
-      this._setStatus("idle", t("msg.noConv"));
-      return;
-    }
-    const base = this._serverBase();
-    if (!base) {
-      this._setStatus("error", t("status.noServerFirst"));
-      return;
-    }
-    this.els.askBtn.disabled = true;
-    this.els.askAnswer.classList.remove("hidden");
-    this.els.askAnswer.textContent = "…";
-    try {
-      const res = await fetch(`${base}/api/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: this._transcriptText(),
-          question,
-          language: this.els.summaryLang.value,
-          token: this._accessToken() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      this.els.askAnswer.textContent = data.answer || "(no answer)";
-    } catch (e) {
-      this.els.askAnswer.textContent = `${t("msg.askFail")}: ${e.message}`;
-    } finally {
-      this.els.askBtn.disabled = false;
-    }
+  _refreshToggle() {
+    this.el.toggleLabel.textContent = this.running ? t("ctrl.stop") : t("ctrl.start");
+    this.el.toggleIcon.textContent = this.running ? "⏹️" : "▶️";
+    this.el.pauseBtn.textContent = this.paused ? "▶️" : "⏸️";
+    if (!this.running) this._setStatus("idle", t("st.idle"));
   }
-
-  _newMeeting() {
-    if (this.meetingLog.length && !confirm(t("msg.confirmNew"))) {
-      return;
-    }
-    this.meetingLog = [];
-    this._curSource = "";
-    this._curTranslation = "";
-    this._lastSummary = "";
-    localStorage.removeItem("meetingLog");
-    this.els.summaryContent.textContent = "";
-    this.els.summaryBox.classList.add("hidden");
-    this.els.clarifyAlert.classList.add("hidden");
-    this.els.riskAlert.classList.add("hidden");
-    this.els.askAnswer.classList.add("hidden");
-    this._renderNotes();
-    this._setStatus(this.running ? "live" : "idle", t("msg.newMeeting"));
-  }
-
-  /** Resolve the backend base URL (no trailing slash) for this device. */
-  _serverBase() {
-    const saved = (localStorage.getItem("serverUrl") || "").trim();
-    if (saved) return saved.replace(/\/+$/, "");
-    const fromConfig = (window.DEFAULT_SERVER_URL || "").trim();
-    if (fromConfig) return fromConfig.replace(/\/+$/, "");
-    // On the web (served over http/https) default to the current origin.
-    if (location.protocol === "http:" || location.protocol === "https:") {
-      return location.origin;
-    }
-    return "";
-  }
-
-  /** Resolve the server access token for this device (may be empty). */
-  _accessToken() {
-    const saved = (localStorage.getItem("accessToken") || "").trim();
-    if (saved) return saved;
-    return (window.DEFAULT_ACCESS_TOKEN || "").trim();
-  }
-
-  /** Pull model / key status from the backend's health endpoint. */
   _refreshHealth() {
     const base = this._serverBase();
-    if (!base) {
-      this._setStatus("idle", t("status.setServer"));
-      return;
-    }
-    fetch(`${base}/api/health`)
-      .then((r) => r.json())
-      .then((d) => {
-        this.els.modelInfo.textContent = d.model || "—";
-        if (!d.api_key_configured) {
-          this._setStatus("error", t("status.keyMissing"));
-        }
-      })
-      .catch(() => this._setStatus("error", t("status.cannotReach")));
+    if (!base) { this._setStatus("idle", t("st.setServer")); return; }
+    fetch(`${base}/api/health`).then((r) => r.json()).then((d) => {
+      this.el.modelInfo.textContent = d.model || "—";
+      if (!d.api_key_configured) this._setStatus("error", t("st.noKey"));
+    }).catch(() => this._setStatus("error", t("st.cantReach")));
   }
 
-  // --- Status helpers ------------------------------------------------------
+  // ---- notes data ---------------------------------------------------------
+  _loadNotes() { try { return JSON.parse(localStorage.getItem("notesV2") || "[]"); } catch { return []; } }
+  _saveNotes() { try { localStorage.setItem("notesV2", JSON.stringify(this.notes)); } catch {} }
+  _note(id) { return this.notes.find((n) => n.id === id); }
+  _currentLog() { return this.context === "note" ? (this._note(this.activeNoteId)?.log || []) : this.quickLog; }
+  _persist() { if (this.context === "note") { const n = this._note(this.activeNoteId); if (n) n.updatedAt = Date.now(); this._saveNotes(); } }
 
-  _setStatus(state, text) {
-    const colors = {
-      idle: "bg-slate-500",
-      connecting: "bg-amber-400 pulse-dot",
-      live: "bg-emerald-400 pulse-dot",
-      error: "bg-rose-500",
-    };
-    this.els.statusDot.className = `h-2.5 w-2.5 rounded-full ${
-      colors[state] || colors.idle
-    }`;
-    this.els.statusText.textContent = text;
+  _newNote() {
+    const id = "n" + Date.now();
+    this.notes.unshift({ id, title: t("msg.newNote"), createdAt: Date.now(), updatedAt: Date.now(), log: [], summary: "", topic: "" });
+    this._saveNotes();
+    this.show("note", { id });
   }
+  _deleteActive() {
+    if (!confirm(t("msg.confirmDelete"))) return;
+    this.notes = this.notes.filter((n) => n.id !== this.activeNoteId);
+    this._saveNotes(); this.show("notes");
+  }
+  _renameActive() { const n = this._note(this.activeNoteId); if (n) { n.title = this.el.noteTitle.value.trim() || t("msg.newNote"); this._saveNotes(); } }
 
-  // --- Session lifecycle ---------------------------------------------------
-
-  async start() {
-    try {
-      this._lastError = "";
-      this._setStatus("connecting", t("status.connecting"));
-      this.els.toggleBtn.disabled = true;
-
-      await this._openSocket();
-      await this._startCapture();
-      this._initPlayback();
-
-      this.running = true;
-      this.paused = false;
-      this.els.toggleLabel.textContent = t("ctrl.stop");
-      this.els.toggleIcon.textContent = "⏹️";
-      this.els.toggleBtn.disabled = false;
-      this.els.pauseBtn.disabled = false;
-      this.els.pauseBtn.textContent = t("ctrl.pause");
-      this._setStatus("live", t("status.live"));
-    } catch (err) {
-      console.error(err);
-      this._setStatus("error", err.message || t("status.failStart"));
-      this.els.toggleBtn.disabled = false;
-      await this._teardown();
+  _renderNotesList() {
+    const q = this.el.noteSearch.value.trim().toLowerCase();
+    const list = this.notes
+      .slice()
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .filter((n) => {
+        if (!q) return true;
+        const hay = [n.title, n.topic, n.summary, ...n.log.map((e) => `${e.source} ${e.translation}`),
+          new Date(n.createdAt).toLocaleString()].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    this.el.notesEmpty.style.display = list.length ? "none" : "";
+    this.el.notesList.innerHTML = "";
+    for (const n of list) {
+      const date = new Date(n.createdAt).toLocaleString();
+      const preview = n.topic || (n.log[0] ? n.log[0].source : "");
+      const div = document.createElement("button");
+      div.className = "block w-full rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-left transition hover:border-indigo-500/60";
+      div.innerHTML = `<div class="flex items-center justify-between gap-2"><span class="font-semibold">${esc(n.title)}</span><span class="text-xs text-slate-500">${n.log.length}</span></div>
+        <div class="mt-0.5 text-xs text-slate-500">${esc(date)}</div>
+        ${preview ? `<div class="mt-1 line-clamp-1 text-sm text-slate-400">${esc(preview)}</div>` : ""}`;
+      div.addEventListener("click", () => this.show("note", { id: n.id }));
+      this.el.notesList.appendChild(div);
     }
   }
 
-  async stop() {
-    this.running = false;
-    this.paused = false;
-    // Tell the server this turn is finished, then close down audio.
-    this._sendControl({ action: "end" });
-    await this._teardown();
-
-    this.els.toggleLabel.textContent = t("ctrl.start");
-    this.els.toggleIcon.textContent = "🎙️";
-    this.els.pauseBtn.disabled = true;
-    this.els.pauseBtn.textContent = t("ctrl.pause");
-    // Replay / pronounce remain available for the last sentence.
-    this._setStatus("idle", t("status.idle"));
+  _openNote(id) {
+    const n = this._note(id);
+    if (!n) return this.show("notes");
+    this.el.noteTitle.value = n.title;
+    this.el.noteDate.textContent = new Date(n.createdAt).toLocaleString();
+    this.el.viewTitle.textContent = n.title;
+    this.el.summaryContent.textContent = n.summary || "";
+    this.el.askAnswer.classList.add("hidden");
+    this._tab("log");
+    this._renderLog(this.el.noteTranscript, n.log, "note-ph");
   }
-
-  async _teardown() {
-    // Commit any in-progress turn before tearing down.
-    if (this._turnTimer) this._finalizeTurn();
-    if (this.workletNode) {
-      this.workletNode.port.onmessage = null;
-      this.workletNode.disconnect();
-      this.workletNode = null;
-    }
-    if (this.micSource) {
-      this.micSource.disconnect();
-      this.micSource = null;
-    }
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((t) => t.stop());
-      this.mediaStream = null;
-    }
-    if (this.captureContext) {
-      await this.captureContext.close().catch(() => {});
-      this.captureContext = null;
-    }
-    if (this.playbackContext) {
-      await this.playbackContext.close().catch(() => {});
-      this.playbackContext = null;
-    }
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.close();
-    }
-    this.ws = null;
-  }
-
-  // --- WebSocket -----------------------------------------------------------
-
-  _wsUrl() {
-    const base = this._serverBase();
-    if (!base) {
-      throw new Error("No server URL set — enter your cloud backend address");
-    }
-    // http(s)://host -> ws(s)://host/api/stream
-    const wsBase = base.replace(/^http/i, "ws");
-    const params = new URLSearchParams({
-      a: this.els.langA.value,
-      b: this.els.langB.value,
-      voice: this.els.voiceSelect.value,
+  _tab(which) {
+    document.querySelectorAll(".note-tab").forEach((b) => {
+      const on = b.getAttribute("data-tab") === which;
+      b.classList.toggle("border-indigo-500", on); b.classList.toggle("text-slate-100", on);
+      b.classList.toggle("border-transparent", !on); b.classList.toggle("text-slate-500", !on);
     });
-    const token = this._accessToken();
-    if (token) params.set("token", token);
-    return `${wsBase}/api/stream?${params.toString()}`;
+    document.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.getAttribute("data-pane") !== which));
   }
 
-  _openSocket() {
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this._wsUrl());
-      ws.binaryType = "arraybuffer";
+  // ---- transcript rendering ----------------------------------------------
+  _clearTranscript(el, phClass) { el.querySelectorAll("[data-row]").forEach((n) => n.remove()); const ph = el.querySelector("." + phClass); if (ph) ph.style.display = ""; }
+  _hidePh(el) { const ph = el.querySelector(".qk-ph,.note-ph"); if (ph) ph.style.display = "none"; }
 
-      ws.onopen = () => {
-        // Send chosen voice as an optional config message.
-        ws.send(
-          JSON.stringify({
-            action: "config",
-            voice: this.els.voiceSelect.value,
-          })
-        );
-        resolve();
-      };
-      ws.onerror = () => reject(new Error("WebSocket connection failed (서버 주소/네트워크 확인)"));
-      ws.onclose = (ev) => {
-        if (this.running) {
-          this.running = false;
-          // Surface the real reason: a server error message if we got one,
-          // otherwise the close code (1008 = wrong access token).
-          let why = this._lastError;
-          if (!why) {
-            why =
-              ev.code === 1008
-                ? t("status.tokenMismatch")
-                : `${UI_LANG === "ko" ? "연결 끊김" : "Disconnected"} (code ${ev.code})`;
-          }
-          this._setStatus("error", why);
-          this.els.toggleLabel.textContent = t("ctrl.start");
-          this.els.toggleIcon.textContent = "🎙️";
-          this.els.pauseBtn.disabled = true;
-          this._teardown();
-        }
-      };
-      ws.onmessage = (ev) => this._onMessage(ev);
-
-      this.ws = ws;
-    });
+  _bubble(role, text) {
+    const isTr = role === "translation";
+    const wrap = document.createElement("div"); wrap.dataset.row = "1";
+    wrap.className = isTr ? "flex justify-end" : "flex justify-start";
+    const b = document.createElement("div");
+    b.className = isTr ? "max-w-[85%] rounded-2xl rounded-tr-sm bg-indigo-600/90 px-4 py-2.5 text-white"
+                       : "max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800 px-4 py-2.5 text-slate-200";
+    b.textContent = text; wrap.appendChild(b); return wrap;
+  }
+  _showRole(role) {
+    if (this.viewMode === "source") return role === "source";
+    if (this.viewMode === "trans") return role === "translation";
+    return true;
   }
 
-  _sendControl(obj) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(obj));
+  /** Render a full saved log into a container (note open / view-mode change). */
+  _renderLog(el, log, phClass) {
+    el.querySelectorAll("[data-row]").forEach((n) => n.remove());
+    const ph = el.querySelector("." + phClass); if (ph) ph.style.display = log.length ? "none" : "";
+    for (const e of log) {
+      if (e.source && this._showRole("source")) el.appendChild(this._bubble("source", e.source));
+      if (e.translation && this._showRole("translation")) el.appendChild(this._bubble("translation", e.translation));
+      if (e.multi) el.appendChild(this._multiBlock(e.multi));
     }
+    el.scrollTop = el.scrollHeight;
   }
-
-  _onMessage(ev) {
-    if (ev.data instanceof ArrayBuffer) {
-      this._enqueueAudio(ev.data);
-      return;
-    }
-    let msg;
-    try {
-      msg = JSON.parse(ev.data);
-    } catch {
-      return;
-    }
-
-    switch (msg.type) {
-      case "status":
-        if (msg.model) this.els.modelInfo.textContent = msg.model;
-        break;
-      case "transcript":
-        this._appendTranscript(msg.role, msg.text);
-        break;
-      case "turn_complete":
-        this._finalizeTurn(); // save this turn into the meeting notes
-        break;
-      case "interrupted":
-        // User barged in — drop any queued audio so we don't talk over them.
-        this._flushPlayback();
-        break;
-      case "error":
-        this._lastError = msg.message || "Server error";
-        this._setStatus("error", this._lastError);
-        break;
-    }
+  _multiBlock(tr) {
+    const w = document.createElement("div"); w.dataset.row = "1";
+    w.className = "rounded-lg bg-slate-800/60 px-3 py-2";
+    w.innerHTML = Object.entries(tr).map(([c, x]) => `<div class="flex gap-2"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${c}</span><span class="text-slate-300">${esc(x)}</span></div>`).join("");
+    return w;
   }
-
-  // --- Capture (mic -> server) ---------------------------------------------
-
-  async _startCapture() {
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
-
-    this.captureContext = new (window.AudioContext || window.webkitAudioContext)(
-      { sampleRate: INPUT_SAMPLE_RATE }
-    );
-    await this.captureContext.audioWorklet.addModule("./audio-processor.js");
-
-    this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
-    this.workletNode = new AudioWorkletNode(
-      this.captureContext,
-      "pcm-capture-processor"
-    );
-
-    // Each message is a transferable ArrayBuffer of PCM16 samples.
-    // While paused we simply drop the audio (the session stays open).
-    this.workletNode.port.onmessage = (e) => {
-      if (this.paused) return;
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(e.data);
-      }
-    };
-
-    this.micSource.connect(this.workletNode);
-    // Worklet doesn't need to reach the speakers; connecting to a muted gain
-    // keeps the graph "pulled" across browsers without echoing the mic.
-    const sink = this.captureContext.createGain();
-    sink.gain.value = 0;
-    this.workletNode.connect(sink);
-    sink.connect(this.captureContext.destination);
-  }
-
-  // --- Playback (server -> speaker) ----------------------------------------
-
-  _initPlayback() {
-    this.playbackContext = new (window.AudioContext || window.webkitAudioContext)(
-      { sampleRate: OUTPUT_SAMPLE_RATE }
-    );
-    this.nextPlayTime = 0;
-  }
-
-  _enqueueAudio(arrayBuffer) {
-    if (!this.playbackContext) return;
-
-    // Incoming bytes are little-endian PCM16; convert to Float32 [-1, 1].
-    const pcm16 = new Int16Array(arrayBuffer);
-    const float32 = new Float32Array(pcm16.length);
-    for (let i = 0; i < pcm16.length; i++) {
-      float32[i] = pcm16[i] / 0x8000;
-    }
-
-    // Keep a copy so the turn can be replayed ("다시 듣기").
-    this._curAudioChunks.push(float32);
-
-    // Text-only mode: capture audio (for replay) but don't play it back.
-    if (!this.audioOutput) return;
-
-    const buffer = this.playbackContext.createBuffer(
-      1,
-      float32.length,
-      OUTPUT_SAMPLE_RATE
-    );
-    buffer.copyToChannel(float32, 0);
-
-    const source = this.playbackContext.createBufferSource();
-    source.buffer = buffer;
-    source.playbackRate.value = this.playbackRate;
-    source.connect(this.playbackContext.destination);
-
-    // Schedule sequentially so chunks play gaplessly. If we've fallen behind,
-    // resync to "now" plus a small safety margin. Duration scales with speed.
-    const now = this.playbackContext.currentTime;
-    if (this.nextPlayTime < now) {
-      this.nextPlayTime = now + 0.05;
-    }
-    source.start(this.nextPlayTime);
-    this.nextPlayTime += buffer.duration / this.playbackRate;
-  }
-
-  /** Merge the current turn's audio chunks into one replayable buffer. */
-  _finalizeTurnAudio() {
-    if (!this._curAudioChunks.length) return;
-    const total = this._curAudioChunks.reduce((n, c) => n + c.length, 0);
-    const merged = new Float32Array(total);
-    let off = 0;
-    for (const c of this._curAudioChunks) {
-      merged.set(c, off);
-      off += c.length;
-    }
-    this._lastAudio = merged;
-    this._curAudioChunks = [];
-    this.els.replayBtn.disabled = false;
-  }
-
-  _flushPlayback() {
-    // Rebuild the playback context to instantly cut queued audio.
-    if (this.playbackContext) {
-      this.playbackContext.close().catch(() => {});
-    }
-    this._initPlayback();
-  }
-
-  // --- Transcript UI -------------------------------------------------------
 
   _appendTranscript(role, text) {
     if (!text) return;
-    if (this.els.placeholder) {
-      this.els.placeholder.remove();
-      this.els.placeholder = null;
-    }
-
-    const isTranslation = role === "translation";
-    const lineKey = isTranslation ? "_translationLine" : "_sourceLine";
-
-    // Accumulate the raw text so the turn can be saved to the meeting notes.
-    if (isTranslation) this._curTranslation += text;
-    else this._curSource += text;
-
-    // Fallback turn boundary: the streaming translate model may not send
-    // turn_complete, so commit the turn after a short pause in transcripts.
+    this._hidePh(this.transcriptEl);
+    if (role === "translation") this._curTranslation += text; else this._curSource += text;
     clearTimeout(this._turnTimer);
     this._turnTimer = setTimeout(() => this._finalizeTurn(), 1800);
+    if (!this._showRole(role)) return;
+    const key = role === "translation" ? "_trLine" : "_srcLine";
+    if (!this[key]) { const w = this._bubble(role, ""); this.transcriptEl.appendChild(w); this[key] = w.firstChild; }
+    this[key].textContent += text;
+    this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+  }
 
-    // Stream incremental tokens into the same bubble until the turn completes.
-    if (!this[lineKey]) {
-      const wrap = document.createElement("div");
-      wrap.className = isTranslation ? "flex justify-end" : "flex justify-start";
+  _finalizeTurn() { clearTimeout(this._turnTimer); this._turnTimer = null; this._commitTurn(); this._srcLine = null; this._trLine = null; }
 
-      const bubble = document.createElement("div");
-      bubble.className = isTranslation
-        ? "max-w-[80%] rounded-2xl rounded-tr-sm bg-indigo-600/90 px-4 py-2.5 text-sm text-white"
-        : "max-w-[80%] rounded-2xl rounded-tl-sm bg-slate-800 px-4 py-2.5 text-sm text-slate-200";
-
-      const label = document.createElement("div");
-      label.className = "mb-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-60";
-      label.textContent = isTranslation ? "Translation" : "Source";
-
-      const body = document.createElement("span");
-      bubble.appendChild(label);
-      bubble.appendChild(body);
-      wrap.appendChild(bubble);
-      this.els.transcript.appendChild(wrap);
-      this[lineKey] = body;
+  _commitTurn() {
+    const source = this._curSource.trim(), translation = this._curTranslation.trim();
+    this._curSource = ""; this._curTranslation = "";
+    this._finalizeAudio();
+    if (translation) { this._lastTranslationText = translation; this.el.pronounceBtn.disabled = false; }
+    if (!source && !translation) return;
+    const entry = { t: Date.now(), source, translation };
+    this._currentLog().push(entry);
+    if (this.context === "note") {
+      const n = this._note(this.activeNoteId);
+      if (n && (n.title === t("msg.newNote") || !n.title) && source) n.title = source.slice(0, 24);
+      this.el.noteTitle.value = n ? n.title : this.el.noteTitle.value;
+      this.el.viewTitle.textContent = n ? n.title : this.el.viewTitle.textContent;
     }
+    this._persist();
+    if (this.el.riskToggle.checked || this.el.clarifyToggle.checked) this._analyzeTurn(entry);
+    if (this._displayLangs().length && source) this._multiTranslate(entry);
+  }
 
-    this[lineKey].textContent += text;
-    this.els.transcript.scrollTop = this.els.transcript.scrollHeight;
+  async _multiTranslate(entry) {
+    const base = this._serverBase(), targets = this._displayLangs();
+    if (!base || !targets.length) return;
+    try {
+      const r = await fetch(`${base}/api/translate`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: entry.source, targets, token: this._token() || undefined }) });
+      if (!r.ok) return;
+      const tr = (await r.json()).translations || {};
+      if (!Object.keys(tr).length) return;
+      entry.multi = tr; this._persist();
+      this.transcriptEl.appendChild(this._multiBlock(tr));
+      this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+    } catch {}
+  }
+
+  async _analyzeTurn(entry) {
+    const base = this._serverBase(); if (!base || !entry.source) return;
+    try {
+      const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: this.el.langB.value,
+          context: this.el.riskContext.value.trim(), history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
+          want_risk: this.el.riskToggle.checked, want_clarify: this.el.clarifyToggle.checked, token: this._token() || undefined }) });
+      if (!r.ok) return;
+      const d = await r.json(); if (!d) return;
+      if (this.el.riskToggle.checked && d.risk_level && d.risk_level !== "none") { entry.risk = d; this._persist(); this._renderRisk(d); }
+      if (this.el.clarifyToggle.checked && d.clarify_suspected) { entry.clarify = d; this._persist(); this._renderClarify(d); }
+    } catch {}
+  }
+  _renderClarify(d) {
+    this.clarifyEl.innerHTML = `<div class="text-xs font-bold uppercase">🔎 ${UI_LANG === "ko" ? "혹시 이런 뜻?" : "Did you mean…?"}</div>
+      <div class="mt-1 text-sm font-medium">${esc(d.clarify_did_you_mean)}</div>
+      <div class="mt-1 rounded bg-black/20 p-2 text-sm">${esc(d.clarify_corrected_translation)}</div>`;
+    this.clarifyEl.classList.remove("hidden");
+  }
+  _renderRisk(d) {
+    const lv = { low: ["border-slate-600 bg-slate-800 text-slate-200","💡"], medium: ["border-amber-500/60 bg-amber-950/40 text-amber-100","⚠️"], high: ["border-rose-500/70 bg-rose-950/40 text-rose-100","🚨"] }[d.risk_level] || ["",""];
+    this.riskEl.className = `mb-3 rounded-xl border p-3 ${lv[0]}`;
+    this.riskEl.innerHTML = `<div class="text-sm font-medium">${lv[1]} ${esc(d.subtitle_alert)}</div>
+      ${d.suggested_question ? `<div class="mt-2 rounded bg-black/20 p-2 text-sm">❓ ${esc(d.suggested_question)}</div>` : ""}`;
+    this.riskEl.classList.remove("hidden");
+  }
+
+  // ---- session lifecycle --------------------------------------------------
+  async start() {
+    try {
+      this._lastError = ""; this._setStatus("connecting", t("st.connecting")); this.el.toggleBtn.disabled = true;
+      await this._openSocket(); await this._startCapture(); this._initPlayback();
+      this.running = true; this.paused = false;
+      this.el.toggleBtn.disabled = false; this.el.pauseBtn.disabled = false;
+      this._refreshToggle(); this._setStatus("live", t("st.live"));
+    } catch (e) { console.error(e); this._setStatus("error", e.message || "start failed"); this.el.toggleBtn.disabled = false; await this._teardown(); }
+  }
+  async stop() {
+    this.running = false; this.paused = false; this._sendCtrl({ action: "end" }); await this._teardown();
+    this.el.pauseBtn.disabled = true; this._refreshToggle();
+  }
+  async _teardown() {
+    if (this._turnTimer) this._finalizeTurn();
+    if (this.workletNode) { this.workletNode.port.onmessage = null; this.workletNode.disconnect(); this.workletNode = null; }
+    if (this.micSource) { this.micSource.disconnect(); this.micSource = null; }
+    if (this.mediaStream) { this.mediaStream.getTracks().forEach((x) => x.stop()); this.mediaStream = null; }
+    if (this.captureContext) { await this.captureContext.close().catch(() => {}); this.captureContext = null; }
+    if (this.playbackContext) { await this.playbackContext.close().catch(() => {}); this.playbackContext = null; }
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.close(); this.ws = null;
+  }
+  _togglePause() {
+    if (!this.running) return;
+    this.paused = !this.paused; this.el.pauseBtn.textContent = this.paused ? "▶️" : "⏸️";
+    this._setStatus(this.paused ? "connecting" : "live", this.paused ? t("st.paused") : t("st.live"));
+    if (this.paused) this._flushPlayback();
+  }
+
+  // ---- WebSocket ----------------------------------------------------------
+  _serverBase() {
+    const s = (localStorage.getItem("serverUrl") || "").trim(); if (s) return s.replace(/\/+$/, "");
+    const c = (window.DEFAULT_SERVER_URL || "").trim(); if (c) return c.replace(/\/+$/, "");
+    return (location.protocol === "http:" || location.protocol === "https:") ? location.origin : "";
+  }
+  _token() { const s = (localStorage.getItem("accessToken") || "").trim(); return s || (window.DEFAULT_ACCESS_TOKEN || "").trim(); }
+  _wsUrl() {
+    const base = this._serverBase(); if (!base) throw new Error(t("st.setServer"));
+    const p = new URLSearchParams({ a: "auto", b: this.el.langB.value, voice: this.el.voiceSelect.value });
+    const tok = this._token(); if (tok) p.set("token", tok);
+    return `${base.replace(/^http/i, "ws")}/api/stream?${p.toString()}`;
+  }
+  _openSocket() {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(this._wsUrl()); ws.binaryType = "arraybuffer";
+      ws.onopen = () => resolve();
+      ws.onerror = () => reject(new Error(t("st.cantReach")));
+      ws.onclose = (ev) => {
+        if (this.running) {
+          this.running = false;
+          const why = this._lastError || (ev.code === 1008 ? t("st.tokenBad") : `${UI_LANG === "ko" ? "연결 끊김" : "Disconnected"} (${ev.code})`);
+          this._setStatus("error", why); this.el.pauseBtn.disabled = true; this._refreshToggle(); this._teardown();
+        }
+      };
+      ws.onmessage = (e) => this._onMessage(e);
+      this.ws = ws;
+    });
+  }
+  _sendCtrl(o) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(o)); }
+  _onMessage(e) {
+    if (e.data instanceof ArrayBuffer) return this._enqueueAudio(e.data);
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "status") { if (m.model) this.el.modelInfo.textContent = m.model; }
+    else if (m.type === "transcript") this._appendTranscript(m.role, m.text);
+    else if (m.type === "turn_complete") this._finalizeTurn();
+    else if (m.type === "interrupted") this._flushPlayback();
+    else if (m.type === "error") { this._lastError = m.message || "error"; this._setStatus("error", this._lastError); }
+  }
+
+  // ---- capture ------------------------------------------------------------
+  async _startCapture() {
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    this.captureContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: INPUT_SAMPLE_RATE });
+    await this.captureContext.audioWorklet.addModule("./audio-processor.js");
+    this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
+    this.workletNode = new AudioWorkletNode(this.captureContext, "pcm-capture-processor");
+    this.workletNode.port.onmessage = (e) => { if (!this.paused && this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(e.data); };
+    this.micSource.connect(this.workletNode);
+    const sink = this.captureContext.createGain(); sink.gain.value = 0;
+    this.workletNode.connect(sink); sink.connect(this.captureContext.destination);
+  }
+
+  // ---- playback -----------------------------------------------------------
+  _initPlayback() { this.playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE }); this.nextPlayTime = 0; }
+  _enqueueAudio(buf) {
+    if (!this.playbackContext) return;
+    const pcm = new Int16Array(buf), f32 = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 0x8000;
+    this._curAudioChunks.push(f32);
+    if (!this.audioOutput) return;
+    const b = this.playbackContext.createBuffer(1, f32.length, OUTPUT_SAMPLE_RATE); b.copyToChannel(f32, 0);
+    const s = this.playbackContext.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(this.playbackContext.destination);
+    const now = this.playbackContext.currentTime; if (this.nextPlayTime < now) this.nextPlayTime = now + 0.05;
+    s.start(this.nextPlayTime); this.nextPlayTime += b.duration / this.playbackRate;
+  }
+  _finalizeAudio() {
+    if (!this._curAudioChunks.length) return;
+    const total = this._curAudioChunks.reduce((a, c) => a + c.length, 0), m = new Float32Array(total);
+    let o = 0; for (const c of this._curAudioChunks) { m.set(c, o); o += c.length; }
+    this._lastAudio = m; this._curAudioChunks = []; this.el.replayBtn.disabled = false;
+  }
+  _playBuffer(f32) {
+    if (!f32 || !f32.length) return;
+    let ctx = this.playbackContext; if (!ctx || ctx.state === "closed") ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE });
+    const b = ctx.createBuffer(1, f32.length, OUTPUT_SAMPLE_RATE); b.copyToChannel(f32, 0);
+    const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(ctx.destination); s.start();
+  }
+  _flushPlayback() { if (this.playbackContext) this.playbackContext.close().catch(() => {}); this._initPlayback(); }
+  _replayLast() { if (this._lastAudio) this._playBuffer(this._lastAudio); }
+
+  // ---- pronounce / summarize / ask / export -------------------------------
+  async _pronounce() {
+    const text = this._lastTranslationText.trim(); if (!text) return;
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    this.el.pronounceBox.classList.remove("hidden"); this.el.pronounceContent.textContent = "…";
+    try {
+      const r = await fetch(`${base}/api/pronounce`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, script: this.el.scriptSelect.value, token: this._token() || undefined }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+      this.el.pronounceContent.textContent = (await r.json()).pronunciation || "—";
+    } catch (e) { this.el.pronounceContent.textContent = "발음 변환 실패: " + e.message; }
+  }
+  async _summarize() {
+    const log = this._currentLog(); if (!log.length) return;
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const prev = this.el.noteSummarizeBtn.textContent; this.el.noteSummarizeBtn.disabled = true; this.el.noteSummarizeBtn.textContent = "…";
+    try {
+      const r = await fetch(`${base}/api/summarize`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: this._transcriptText(), language: this.el.langB.value, token: this._token() || undefined }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+      const summary = (await r.json()).summary || "";
+      this.el.summaryContent.textContent = summary;
+      if (this.context === "note") { const n = this._note(this.activeNoteId); if (n) { n.summary = summary; n.topic = summary.split("\n").map((l) => l.replace(/[#*\-•]/g, "").trim()).filter(Boolean)[0] || n.topic; this._saveNotes(); } }
+      this._tab("summary");
+    } catch (e) { this._setStatus("error", "요약 실패: " + e.message); }
+    finally { this.el.noteSummarizeBtn.disabled = false; this.el.noteSummarizeBtn.textContent = prev; }
+  }
+  async _ask() {
+    const q = this.el.askInput.value.trim(); if (!q) return;
+    const log = this._currentLog(); if (!log.length) return;
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    this.el.askBtn.disabled = true; this.el.askAnswer.classList.remove("hidden"); this.el.askAnswer.textContent = "…";
+    try {
+      const r = await fetch(`${base}/api/ask`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: this._transcriptText(), question: q, language: this.el.langB.value, token: this._token() || undefined }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+      this.el.askAnswer.textContent = (await r.json()).answer || "—";
+    } catch (e) { this.el.askAnswer.textContent = "질문 실패: " + e.message; }
+    finally { this.el.askBtn.disabled = false; }
+  }
+  _transcriptText() {
+    return this._currentLog().map((e) => {
+      const tm = new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const parts = []; if (e.source) parts.push(e.source); if (e.translation) parts.push("→ " + e.translation);
+      return `[${tm}] ${parts.join("  ")}`;
+    }).join("\n");
+  }
+  async _export(format) {
+    const log = this._currentLog(); if (!log.length) return;
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const entries = log.map((e) => {
+      let tr = e.translation || "";
+      if (e.multi) tr += "  " + Object.entries(e.multi).map(([c, x]) => `[${c}] ${x}`).join("  ");
+      return { time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), source: e.source || "", translation: tr.trim(),
+        risk: e.risk && e.risk.risk_level && e.risk.risk_level !== "none" ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}` : "" };
+    });
+    const title = this.context === "note" ? (this._note(this.activeNoteId)?.title || "회의 노트") : "빠른 통역";
+    try {
+      const r = await fetch(`${base}/api/export`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, entries, summary: this.el.summaryContent.textContent || "", format, token: this._token() || undefined }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+      const blob = await r.blob(), url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = `notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.${format}`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch (e) { this._setStatus("error", "내보내기 실패: " + e.message); }
   }
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  if (!navigator.mediaDevices || !window.AudioContext) {
-    alert("This browser does not support the Web Audio API required for the translator.");
-    return;
-  }
-  window.translator = new TranslatorClient();
+  if (!navigator.mediaDevices || !window.AudioContext) { alert("This browser does not support the Web Audio API."); return; }
+  window.app = new App();
 });
