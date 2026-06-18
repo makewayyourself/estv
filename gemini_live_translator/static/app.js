@@ -34,7 +34,9 @@ const I18N = {
     "set.display": "표시(자막) 언어 · 최대 3", "set.displayHelp": "각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기).",
     "set.voice": "음성 (목소리)", "set.speed": "빠르기", "set.risk": "🛡️ 리스크 감지", "set.riskCtx": "분야 (예: oil trading)",
     "set.clarify": "🔎 의미 확인", "set.server": "서버 주소", "set.token": "접속 토큰", "set.tokenPh": "서버 접속 토큰",
-    "set.save": "저장", "set.model": "모델",
+    "set.save": "저장", "set.model": "모델", "set.admin": "🔒 관리자 · 서버 설정",
+    "admin.note": "서버 운영자용 설정입니다. 일반 사용자는 건드릴 필요가 없습니다.", "title.admin": "관리자 설정",
+    "vm.label": "보기 모드", "note.save": "저장(내보내기)", "note.summarizeBtn": "요약 생성 / 갱신",
     "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "ctrl.start": "시작", "ctrl.stop": "정지",
     "pron.title": "발음", "pron.roman": "로마자", "pron.hangul": "한글",
     "title.home": "Hyun Live Translator", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "설정",
@@ -58,7 +60,9 @@ const I18N = {
     "set.display": "Caption languages · up to 3", "set.displayHelp": "Show each utterance in these languages (everyone reads their own).",
     "set.voice": "Voice", "set.speed": "Speed", "set.risk": "🛡️ Risk Guard", "set.riskCtx": "Industry (e.g. oil trading)",
     "set.clarify": "🔎 Clarify", "set.server": "Server URL", "set.token": "Access token", "set.tokenPh": "server access token",
-    "set.save": "Save", "set.model": "Model",
+    "set.save": "Save", "set.model": "Model", "set.admin": "🔒 Admin · server settings",
+    "admin.note": "Operator settings. Regular users don't need these.", "title.admin": "Admin",
+    "vm.label": "View mode", "note.save": "Export", "note.summarizeBtn": "Generate / refresh summary",
     "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "ctrl.start": "Start", "ctrl.stop": "Stop",
     "pron.title": "Pronunciation", "pron.roman": "Roman", "pron.hangul": "Hangul",
     "title.home": "Hyun Live Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Settings",
@@ -118,7 +122,8 @@ class App {
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
      "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn",
      "qkTranscript","qkRisk","qkClarify","noteTranscript","noteRisk","noteClarify",
-     "noteTitle","noteDate","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
+     "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
+     "homeVer","verInfo",
      "askInput","askBtn","askAnswer","summaryContent","viewMode",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
@@ -146,7 +151,7 @@ class App {
       this.transcriptEl = this.el.noteTranscript; this.riskEl = this.el.noteRisk; this.clarifyEl = this.el.noteClarify;
       this._openNote(opts.id);
     } else {
-      this.el.viewTitle.innerHTML = t("title." + (view === "settings" ? "settings" : view === "notes" ? "notes" : "home"));
+      this.el.viewTitle.textContent = t("title." + view);
       if (view === "notes") this._renderNotesList();
     }
     if (view === "home") this.el.viewTitle.innerHTML = `<span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">${t("title.home")}</span>`;
@@ -156,7 +161,8 @@ class App {
   // ---- binding ------------------------------------------------------------
   _bind() {
     document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => this.show(b.getAttribute("data-go"))));
-    this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : "home"));
+    this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : this.view === "admin" ? "settings" : "home"));
+    this.el.noteMenuBtn.addEventListener("click", () => (this.el.noteMenu.hidden = !this.el.noteMenu.hidden));
 
     this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
     this.el.pauseBtn.addEventListener("click", () => this._togglePause());
@@ -257,6 +263,8 @@ class App {
     if (!base) { this._setStatus("idle", t("st.setServer")); return; }
     fetch(`${base}/api/health`).then((r) => r.json()).then((d) => {
       this.el.modelInfo.textContent = d.model || "—";
+      if (this.el.homeVer) this.el.homeVer.textContent = d.version || "?";
+      if (this.el.verInfo) this.el.verInfo.textContent = d.version || "?";
       if (!d.api_key_configured) this._setStatus("error", t("st.noKey"));
     }).catch(() => this._setStatus("error", t("st.cantReach")));
   }
@@ -310,6 +318,7 @@ class App {
   _openNote(id) {
     const n = this._note(id);
     if (!n) return this.show("notes");
+    this.el.noteMenu.hidden = true;
     this.el.noteTitle.value = n.title;
     this.el.noteDate.textContent = new Date(n.createdAt).toLocaleString();
     this.el.viewTitle.textContent = n.title;
@@ -599,6 +608,7 @@ class App {
     }).join("\n");
   }
   async _export(format) {
+    if (this.el.noteMenu) this.el.noteMenu.hidden = true;
     const log = this._currentLog(); if (!log.length) return;
     const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
     const entries = log.map((e) => {

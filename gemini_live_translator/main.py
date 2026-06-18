@@ -63,6 +63,9 @@ from services.exporters import EXPORTERS
 # Cap how much transcript we send to the summarizer (keep the most recent part).
 MAX_SUMMARY_CHARS = 40_000
 
+# Bump this whenever the frontend changes so you can confirm a fresh deploy.
+APP_VERSION = "2026.06.18-b"
+
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -70,7 +73,7 @@ logger = logging.getLogger("gemini_live_translator")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="Gemini Live Translator")
+app = FastAPI(title="Hyun Live Translator")
 
 # Allow the packaged Android app (capacitor://localhost / https://localhost) to
 # call the HTTP API. WebSocket handshakes are not subject to CORS, but the
@@ -81,6 +84,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    """Stop the browser from serving a stale index.html / app.js after a deploy.
+
+    Static assets get no-cache headers so the latest is always fetched; /api
+    responses are left untouched.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/api/health")
@@ -103,6 +121,7 @@ async def health(token: str | None = None) -> dict:
 
     result = {
         "status": "ok",
+        "version": APP_VERSION,
         "model": DEFAULT_MODEL,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
         "auth_required": bool(configured),
