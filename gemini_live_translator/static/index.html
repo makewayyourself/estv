@@ -75,6 +75,7 @@
           <p class="mt-6 text-center text-xs text-slate-600" data-i18n="home.tagline">
             Hyun Live Translator · 자동 언어 감지 · 다국어 자막
           </p>
+          <p class="mt-1 text-center text-[10px] text-slate-700">build <span id="homeVer">—</span></p>
         </section>
 
         <!-- ============ TRANSLATE (quick) ============ -->
@@ -102,29 +103,39 @@
 
         <!-- ============ NOTE DETAIL ============ -->
         <section data-view="note" hidden>
-          <div class="mb-3">
-            <input id="noteTitle" class="w-full bg-transparent text-xl font-bold outline-none" />
-            <div id="noteDate" class="text-xs text-slate-500"></div>
+          <div class="mb-3 flex items-start gap-2">
+            <div class="min-w-0 flex-1">
+              <input id="noteTitle" class="w-full bg-transparent text-xl font-bold outline-none" />
+              <div id="noteDate" class="text-xs text-slate-500"></div>
+            </div>
+            <button id="noteMenuBtn" class="shrink-0 rounded-full px-2 py-1 text-xl text-slate-300 hover:bg-slate-800">⋯</button>
+          </div>
+
+          <!-- "⋯" menu: view settings + save + delete -->
+          <div id="noteMenu" hidden class="mb-3 space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400" data-i18n="vm.label">보기 모드</span>
+              <select id="viewMode" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-slate-100 focus:outline-none">
+                <option value="both" data-i18n="vm.both">원문+번역</option>
+                <option value="source" data-i18n="vm.source">원문만</option>
+                <option value="trans" data-i18n="vm.trans">번역만</option>
+              </select>
+            </div>
+            <div class="flex items-center justify-between border-t border-slate-800 pt-3">
+              <span class="text-slate-400" data-i18n="note.save">저장(내보내기)</span>
+              <span class="flex gap-2">
+                <button id="noteExportMd" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">MD</button>
+                <button id="noteExportDocx" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">Word</button>
+                <button id="noteExportPdf" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">PDF</button>
+              </span>
+            </div>
+            <button id="noteDelete" class="w-full rounded-lg border border-rose-900/50 bg-rose-950/30 px-2.5 py-2 text-rose-300 hover:bg-rose-950/60" data-i18n="note.delete">노트 삭제</button>
           </div>
 
           <!-- tabs -->
           <div class="mb-3 flex border-b border-slate-800 text-sm">
             <button data-tab="log" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabLog">기록</button>
             <button data-tab="summary" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabSummary">요약</button>
-          </div>
-
-          <!-- view-mode + actions -->
-          <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
-            <select id="viewMode" class="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-slate-100 focus:outline-none">
-              <option value="both" data-i18n="vm.both">원문+번역</option>
-              <option value="source" data-i18n="vm.source">원문만</option>
-              <option value="trans" data-i18n="vm.trans">번역만</option>
-            </select>
-            <button id="noteSummarizeBtn" class="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-500" data-i18n="note.summarize">요약</button>
-            <button id="noteExportMd" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">MD</button>
-            <button id="noteExportDocx" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">Word</button>
-            <button id="noteExportPdf" class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700">PDF</button>
-            <button id="noteDelete" class="ml-auto rounded-lg border border-rose-900/50 bg-rose-950/30 px-2.5 py-1.5 text-rose-300 hover:bg-rose-950/60" data-i18n="note.delete">삭제</button>
           </div>
 
           <div data-pane="log">
@@ -144,6 +155,7 @@
               <button id="askBtn" class="shrink-0 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500" data-i18n="qa.ask">질문</button>
             </div>
             <div id="askAnswer" class="mb-3 hidden whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-200"></div>
+            <button id="noteSummarizeBtn" class="mb-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500" data-i18n="note.summarizeBtn">요약 생성 / 갱신</button>
             <div id="summaryContent" class="whitespace-pre-wrap rounded-lg bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-200"></div>
           </div>
         </section>
@@ -211,13 +223,30 @@
               <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
             </div>
 
-            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <button data-go="admin" class="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3 text-slate-400 hover:border-indigo-500/60">
+              <span data-i18n="set.admin">🔒 관리자 · 서버 설정</span><span>›</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- ============ ADMIN (server / token) ============ -->
+        <section data-view="admin" hidden>
+          <div class="space-y-4 text-sm">
+            <p class="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3 text-xs text-amber-200/80" data-i18n="admin.note">
+              서버 운영자용 설정입니다. 일반 사용자는 건드릴 필요가 없습니다.
+            </p>
+            <div>
               <label class="mb-1 block font-medium text-slate-400" data-i18n="set.server">서버 주소</label>
               <input id="serverUrl" type="url" inputmode="url" placeholder="https://your-app.onrender.com" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-              <label class="mb-1 mt-3 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
+            </div>
+            <div>
+              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
               <input id="accessToken" type="password" autocomplete="off" data-i18n-ph="set.tokenPh" placeholder="서버 접속 토큰" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-              <button id="saveServerBtn" class="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
-              <div class="mt-2 flex justify-between text-xs text-slate-500"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono">—</span></div>
+            </div>
+            <button id="saveServerBtn" class="w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
+            <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-500">
+              <div class="flex justify-between py-0.5"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono text-slate-400">—</span></div>
+              <div class="flex justify-between py-0.5"><span>버전</span><span id="verInfo" class="font-mono text-slate-400">—</span></div>
             </div>
           </div>
         </section>
