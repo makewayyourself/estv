@@ -1,5 +1,5 @@
 /**
- * Gemini 통역기 — menu-driven multi-view client.
+ * Hyun Live Translator — menu-driven multi-view client.
  *
  * Views: home · translate (quick, ephemeral) · notes (list+search) ·
  *        note (record/log/summary) · settings.
@@ -23,7 +23,7 @@ const I18N = {
     "home.translate": "빠른 통역", "home.translateDesc": "즉석 실시간 통역·자막 (저장 안 함)",
     "home.notes": "회의 노트", "home.notesDesc": "녹음·기록·요약 · 주제/날짜로 검색",
     "home.settings": "설정", "home.settingsDesc": "언어·테마·서버·표시언어·보기모드",
-    "home.tagline": "Gemini Live Translate · 자동 언어 감지 · 다국어 자막",
+    "home.tagline": "Hyun Live Translator · 자동 언어 감지 · 다국어 자막",
     "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
     "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
     "note.tabLog": "기록", "note.tabSummary": "요약", "vm.both": "원문+번역", "vm.source": "원문만", "vm.trans": "번역만",
@@ -37,7 +37,7 @@ const I18N = {
     "set.save": "저장", "set.model": "모델",
     "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "ctrl.start": "시작", "ctrl.stop": "정지",
     "pron.title": "발음", "pron.roman": "로마자", "pron.hangul": "한글",
-    "title.home": "Gemini 통역기", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "설정",
+    "title.home": "Hyun Live Translator", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "설정",
     "st.idle": "대기", "st.connecting": "연결 중…", "st.live": "통역 중 — 말하세요", "st.paused": "일시정지",
     "st.saved": "저장됨", "st.tokenBad": "Access Token이 서버와 불일치", "st.cantReach": "서버 연결 불가",
     "st.noKey": "서버에 API 키 미설정", "st.setServer": "설정에서 서버 주소를 입력하세요",
@@ -47,7 +47,7 @@ const I18N = {
     "home.translate": "Quick Translate", "home.translateDesc": "Instant live interpreting · captions (not saved)",
     "home.notes": "Meeting Notes", "home.notesDesc": "Record · log · summary · search by topic/date",
     "home.settings": "Settings", "home.settingsDesc": "Language · theme · server · caption langs",
-    "home.tagline": "Gemini Live Translate · auto language detection · multilingual captions",
+    "home.tagline": "Hyun Live Translator · auto language detection · multilingual captions",
     "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
     "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
     "note.tabLog": "Log", "note.tabSummary": "Summary", "vm.both": "Source+Translation", "vm.source": "Source only", "vm.trans": "Translation only",
@@ -61,7 +61,7 @@ const I18N = {
     "set.save": "Save", "set.model": "Model",
     "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "ctrl.start": "Start", "ctrl.stop": "Stop",
     "pron.title": "Pronunciation", "pron.roman": "Roman", "pron.hangul": "Hangul",
-    "title.home": "Gemini Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Settings",
+    "title.home": "Hyun Live Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Settings",
     "st.idle": "Idle", "st.connecting": "Connecting…", "st.live": "Live — speak now", "st.paused": "Paused",
     "st.saved": "Saved", "st.tokenBad": "Access token does not match the server", "st.cantReach": "Cannot reach server",
     "st.noKey": "API key not configured on server", "st.setServer": "Set the server URL in Settings",
