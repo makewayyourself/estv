@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <title>Hyun Live Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <style>
       .pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
       @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(.82)} }
@@ -60,6 +61,14 @@
               <span class="flex-1">
                 <span class="block font-semibold" data-i18n="home.notes">회의 노트</span>
                 <span class="block text-sm text-slate-400" data-i18n="home.notesDesc">녹음·기록·요약 · 주제/날짜로 검색</span>
+              </span>
+              <span class="text-slate-600">›</span>
+            </button>
+            <button data-go="room" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
+              <span class="text-3xl">🔗</span>
+              <span class="flex-1">
+                <span class="block font-semibold" data-i18n="home.room">여러 기기 통역 (QR)</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.roomDesc">QR로 참가자 초대 · 각자 자기 언어로 듣기</span>
               </span>
               <span class="text-slate-600">›</span>
             </button>
@@ -248,6 +257,44 @@
               <div class="flex justify-between py-0.5"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono text-slate-400">—</span></div>
               <div class="flex justify-between py-0.5"><span>버전</span><span id="verInfo" class="font-mono text-slate-400">—</span></div>
             </div>
+          </div>
+        </section>
+
+        <!-- ============ ROOM (host) ============ -->
+        <section data-view="room" hidden>
+          <div id="roomIdle">
+            <p class="mb-4 text-sm text-slate-400" data-i18n="room.intro">
+              이 기기가 마이크로 말하는 내용을 송출합니다. 참가자는 QR/링크로 들어와
+              각자 원하는 언어로 통역 음성을 듣습니다.
+            </p>
+            <button id="roomStartBtn" class="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500" data-i18n="room.start">📡 방 시작 (마이크 송출)</button>
+          </div>
+          <div id="roomLive" hidden class="text-center">
+            <canvas id="roomQr" class="mx-auto rounded-lg bg-white p-2"></canvas>
+            <p class="mt-3 text-sm text-slate-400" data-i18n="room.scan">참가자가 이 QR을 스캔하거나 아래 링크로 접속하면 됩니다.</p>
+            <div class="mt-2 flex gap-2">
+              <input id="roomLink" readonly class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200" />
+              <button id="roomCopyBtn" class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700" data-i18n="room.copy">복사</button>
+            </div>
+            <div class="mt-4 text-sm text-slate-300"><span data-i18n="room.participants">참여자</span> <span id="roomCount" class="font-bold text-emerald-400">0</span></div>
+            <button id="roomStopBtn" class="mt-4 w-full rounded-xl border border-rose-900/50 bg-rose-950/30 px-4 py-3 font-semibold text-rose-300 hover:bg-rose-950/60" data-i18n="room.stop">방 종료</button>
+          </div>
+        </section>
+
+        <!-- ============ JOIN (participant) ============ -->
+        <section data-view="join" hidden>
+          <div id="joinForm">
+            <p class="mb-3 text-sm text-slate-400" data-i18n="join.intro">통역 방에 참여합니다. 들을 언어를 선택하세요.</p>
+            <label class="mb-1 block text-sm font-medium text-slate-400" data-i18n="join.lang">듣기 언어</label>
+            <select id="joinLang" class="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none"></select>
+            <button id="joinBtn" class="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-500" data-i18n="join.go">🎧 참여하고 듣기</button>
+          </div>
+          <div id="joinLive" hidden>
+            <div class="mb-2 flex items-center justify-between text-xs text-slate-400">
+              <span><span data-i18n="join.listening">듣는 중</span> · <span id="joinLangLabel"></span></span>
+              <button id="joinLeaveBtn" class="rounded border border-slate-700 bg-slate-800 px-2 py-1 hover:bg-slate-700" data-i18n="join.leave">나가기</button>
+            </div>
+            <div id="joinTranscript" class="scroll-thin fs-md min-h-[60vh] space-y-3"></div>
           </div>
         </section>
       </main>

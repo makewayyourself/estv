@@ -23,6 +23,14 @@ const I18N = {
     "home.translate": "빠른 통역", "home.translateDesc": "즉석 실시간 통역·자막 (저장 안 함)",
     "home.notes": "회의 노트", "home.notesDesc": "녹음·기록·요약 · 주제/날짜로 검색",
     "home.settings": "설정", "home.settingsDesc": "언어·테마·서버·표시언어·보기모드",
+    "home.room": "여러 기기 통역 (QR)", "home.roomDesc": "QR로 참가자 초대 · 각자 자기 언어로 듣기",
+    "title.room": "여러 기기 통역", "title.join": "통역 방 참여",
+    "room.intro": "이 기기가 말하는 내용을 송출합니다. 참가자는 QR/링크로 들어와 각자 원하는 언어로 통역 음성을 듣습니다.",
+    "room.start": "📡 방 시작 (마이크 송출)", "room.scan": "참가자가 이 QR을 스캔하거나 아래 링크로 접속하면 됩니다.",
+    "room.copy": "복사", "room.participants": "참여자", "room.stop": "방 종료",
+    "join.intro": "통역 방에 참여합니다. 들을 언어를 선택하세요.", "join.lang": "듣기 언어", "join.go": "🎧 참여하고 듣기",
+    "join.listening": "듣는 중", "join.leave": "나가기",
+    "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "home.tagline": "Hyun Live Translator · 자동 언어 감지 · 다국어 자막",
     "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
     "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
@@ -49,6 +57,14 @@ const I18N = {
     "home.translate": "Quick Translate", "home.translateDesc": "Instant live interpreting · captions (not saved)",
     "home.notes": "Meeting Notes", "home.notesDesc": "Record · log · summary · search by topic/date",
     "home.settings": "Settings", "home.settingsDesc": "Language · theme · server · caption langs",
+    "home.room": "Multi-device (QR)", "home.roomDesc": "Invite via QR · everyone hears their own language",
+    "title.room": "Multi-device", "title.join": "Join a room",
+    "room.intro": "This device broadcasts what you speak. Participants join via QR/link and hear it in their own language.",
+    "room.start": "📡 Start room (broadcast mic)", "room.scan": "Participants scan this QR or open the link below.",
+    "room.copy": "Copy", "room.participants": "Participants", "room.stop": "End room",
+    "join.intro": "Join an interpreting room. Choose the language to hear.", "join.lang": "Listen in", "join.go": "🎧 Join & listen",
+    "join.listening": "Listening", "join.leave": "Leave",
+    "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "home.tagline": "Hyun Live Translator · auto language detection · multilingual captions",
     "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
     "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
@@ -113,7 +129,9 @@ class App {
     this._applyAppearance();
     this._populateLangs();
     this._refreshHealth();
-    this.show("home");
+    const room = new URLSearchParams(location.search).get("room");
+    if (room) this.show("join", { room });
+    else this.show("home");
   }
 
   _cache() {
@@ -124,6 +142,8 @@ class App {
      "qkTranscript","qkRisk","qkClarify","noteTranscript","noteRisk","noteClarify",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
      "homeVer","verInfo",
+     "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
+     "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
      "askInput","askBtn","askAnswer","summaryContent","viewMode",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
@@ -133,8 +153,10 @@ class App {
 
   // ---- navigation ---------------------------------------------------------
   show(view, opts = {}) {
-    // leaving a recording-capable view while live → stop
-    if (this.running && view !== this.view) this.stop();
+    // leaving a recording-capable view while live → stop / close connections
+    if (this.view === "room" && view !== "room") this._roomStop(true);
+    if (this.view === "join" && view !== "join") this._joinLeave(true);
+    if (this.running && view !== this.view && view !== "room") this.stop();
 
     this.view = view;
     document.querySelectorAll("[data-view]").forEach((s) => (s.hidden = s.getAttribute("data-view") !== view));
@@ -162,6 +184,8 @@ class App {
     } else {
       this.el.viewTitle.textContent = t("title." + view);
       if (view === "notes") this._renderNotesList();
+      if (view === "room") { this.el.roomIdle.hidden = false; this.el.roomLive.hidden = true; }
+      if (view === "join") this._joinSetup(opts.room || this.joinRoom);
     }
     if (view === "home") this.el.viewTitle.innerHTML = `<span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">${t("title.home")}</span>`;
     this._refreshToggle();
@@ -172,6 +196,12 @@ class App {
     document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => this.show(b.getAttribute("data-go"))));
     this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : this.view === "admin" ? "settings" : "home"));
     this.el.noteMenuBtn.addEventListener("click", () => (this.el.noteMenu.hidden = !this.el.noteMenu.hidden));
+    // rooms
+    this.el.roomStartBtn.addEventListener("click", () => this._roomStart());
+    this.el.roomStopBtn.addEventListener("click", () => this._roomStop(false));
+    this.el.roomCopyBtn.addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(this.el.roomLink.value).catch(() => {}); });
+    this.el.joinBtn.addEventListener("click", () => this._joinStart());
+    this.el.joinLeaveBtn.addEventListener("click", () => this._joinLeave(false));
 
     this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
     this.el.pauseBtn.addEventListener("click", () => this._togglePause());
@@ -666,6 +696,97 @@ class App {
       a.href = url; a.download = `notes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.${format}`;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     } catch (e) { this._setStatus("error", "내보내기 실패: " + e.message); }
+  }
+
+  // ---- multi-device rooms -------------------------------------------------
+  _wsBase() { return this._serverBase().replace(/^http/i, "ws"); }
+
+  async _roomStart() {
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const id = Math.random().toString(36).slice(2, 8);
+    this.roomId = id;
+    const tok = this._token();
+    const url = `${this._wsBase()}/api/room/host?room=${id}${tok ? `&token=${encodeURIComponent(tok)}` : ""}`;
+    this.el.roomStartBtn.disabled = true;
+    try {
+      await new Promise((res, rej) => {
+        const ws = new WebSocket(url); ws.binaryType = "arraybuffer";
+        ws.onopen = () => res();
+        ws.onerror = () => rej(new Error(t("st.cantReach")));
+        ws.onmessage = (e) => { try { const m = JSON.parse(e.data); if (m.type === "participants") this.el.roomCount.textContent = m.count; else if (m.type === "error") this._setStatus("error", m.message); } catch {} };
+        ws.onclose = () => { if (this.hostWs) this._roomStop(true); };
+        this.hostWs = ws;
+      });
+      this.ws = this.hostWs; this.running = true; this.paused = false;
+      await this._startCapture();
+      const link = `${base}/?room=${id}`;
+      this.el.roomLink.value = link;
+      if (window.QRCode) window.QRCode.toCanvas(this.el.roomQr, link, { width: 200, margin: 1 }, () => {});
+      this.el.roomCount.textContent = "0";
+      this.el.roomIdle.hidden = true; this.el.roomLive.hidden = false;
+      this._setStatus("live", t("st.hosting"));
+    } catch (e) { this._setStatus("error", e.message); this._roomStop(true); }
+    finally { this.el.roomStartBtn.disabled = false; }
+  }
+  async _roomStop(silent) {
+    this.running = false;
+    const ws = this.hostWs; this.hostWs = null;
+    await this._teardown();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    this.el.roomLive.hidden = true; this.el.roomIdle.hidden = false;
+    if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+
+  _joinSetup(roomId) {
+    this.joinRoom = roomId;
+    if (!this.el.joinLang.options.length) {
+      for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; this.el.joinLang.appendChild(o); }
+      this.el.joinLang.value = localStorage.getItem("langB") || DEFAULT_LANG_B;
+    }
+    this.el.joinForm.hidden = false; this.el.joinLive.hidden = true;
+  }
+  async _joinStart() {
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const lang = this.el.joinLang.value;
+    const url = `${this._wsBase()}/api/room/join?room=${this.joinRoom}&lang=${lang}`;
+    this.el.joinBtn.disabled = true;
+    try {
+      this._initPlayback(); this.audioOutput = true;
+      await new Promise((res, rej) => {
+        const ws = new WebSocket(url); ws.binaryType = "arraybuffer";
+        ws.onopen = () => res();
+        ws.onerror = () => rej(new Error(t("st.roomEnded")));
+        ws.onmessage = (e) => {
+          if (e.data instanceof ArrayBuffer) return this._enqueueAudio(e.data);
+          try { const m = JSON.parse(e.data);
+            if (m.type === "transcript") this._joinAppend(m.role, m.text);
+            else if (m.type === "turn_complete") { this._joinSrc = null; this._joinTr = null; }
+            else if (m.type === "error") this._setStatus("error", m.message);
+          } catch {}
+        };
+        ws.onclose = () => { if (this.joinWs) { this.joinWs = null; this._setStatus("error", t("st.roomEnded")); this.el.joinLive.hidden = true; this.el.joinForm.hidden = false; } };
+        this.joinWs = ws;
+      });
+      this.el.joinLangLabel.textContent = LANGUAGES[lang] || lang;
+      this.el.joinTranscript.innerHTML = ""; this._joinSrc = null; this._joinTr = null;
+      this.el.joinForm.hidden = true; this.el.joinLive.hidden = false;
+      this._setStatus("live", t("st.joined"));
+    } catch (e) { this._setStatus("error", e.message); }
+    finally { this.el.joinBtn.disabled = false; }
+  }
+  _joinLeave(silent) {
+    const ws = this.joinWs; this.joinWs = null;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    if (this.playbackContext) { this.playbackContext.close().catch(() => {}); this.playbackContext = null; }
+    this.el.joinLive.hidden = true; this.el.joinForm.hidden = false;
+    if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+  _joinAppend(role, text) {
+    if (!text) return;
+    const key = role === "translation" ? "_joinTr" : "_joinSrc";
+    if (!this[key]) { const w = this._bubble(role, ""); this.el.joinTranscript.appendChild(w); this[key] = w.firstChild; }
+    this[key].textContent += text;
+    this.el.joinTranscript.scrollTop = this.el.joinTranscript.scrollHeight;
   }
 }
 
