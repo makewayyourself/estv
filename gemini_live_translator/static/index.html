@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <title>Hyun Live Translator</title>
+    <title>Gemini Live Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <style>
@@ -36,7 +36,7 @@
       <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur">
         <button id="backBtn" class="hidden rounded-full px-2 py-1 text-xl text-slate-300 hover:bg-slate-800">‹</button>
         <h1 id="viewTitle" class="flex-1 text-lg font-bold">
-          <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">Hyun Live Translator</span>
+          <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">Gemini Live Translator</span>
         </h1>
         <div id="statusBadge" class="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs">
           <span id="statusDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
@@ -82,7 +82,7 @@
             </button>
           </div>
           <p class="mt-6 text-center text-xs text-slate-600" data-i18n="home.tagline">
-            Hyun Live Translator · 자동 언어 감지 · 다국어 자막
+            Gemini Live Translator · 자동 언어 감지 · 다국어 자막
           </p>
           <p class="mt-1 text-center text-[10px] text-slate-700">build <span id="homeVer">—</span></p>
         </section>
@@ -232,30 +232,15 @@
               <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
             </div>
 
-            <button data-go="admin" class="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3 text-slate-400 hover:border-indigo-500/60">
-              <span data-i18n="set.admin">🔒 관리자 · 서버 설정</span><span>›</span>
-            </button>
-          </div>
-        </section>
-
-        <!-- ============ ADMIN (server / token) ============ -->
-        <section data-view="admin" hidden>
-          <div class="space-y-4 text-sm">
-            <p class="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3 text-xs text-amber-200/80" data-i18n="admin.note">
-              서버 운영자용 설정입니다. 일반 사용자는 건드릴 필요가 없습니다.
-            </p>
-            <div>
+            <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
+              <p class="mb-2 text-xs text-amber-200/80" data-i18n="admin.note">서버 운영자용 설정입니다.</p>
               <label class="mb-1 block font-medium text-slate-400" data-i18n="set.server">서버 주소</label>
               <input id="serverUrl" type="url" inputmode="url" placeholder="https://your-app.onrender.com" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-            </div>
-            <div>
-              <label class="mb-1 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
+              <label class="mb-1 mt-3 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
               <input id="accessToken" type="password" autocomplete="off" data-i18n-ph="set.tokenPh" placeholder="서버 접속 토큰" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-            </div>
-            <button id="saveServerBtn" class="w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
-            <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-500">
-              <div class="flex justify-between py-0.5"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono text-slate-400">—</span></div>
-              <div class="flex justify-between py-0.5"><span>버전</span><span id="verInfo" class="font-mono text-slate-400">—</span></div>
+              <button id="saveServerBtn" class="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
+              <div class="mt-2 flex justify-between text-xs text-slate-500"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono text-slate-400">—</span></div>
+              <div class="flex justify-between text-xs text-slate-500"><span>버전</span><span id="verInfo" class="font-mono text-slate-400">—</span></div>
             </div>
           </div>
         </section>

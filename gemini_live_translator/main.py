@@ -65,7 +65,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.18-e"
+APP_VERSION = "2026.06.18-f"
 
 load_dotenv()
 
@@ -74,7 +74,7 @@ logger = logging.getLogger("gemini_live_translator")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="Hyun Live Translator")
+app = FastAPI(title="Gemini Live Translator")
 
 # Allow the packaged Android app (capacitor://localhost / https://localhost) to
 # call the HTTP API. WebSocket handshakes are not subject to CORS, but the

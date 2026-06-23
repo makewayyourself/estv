@@ -1,5 +1,5 @@
 /**
- * Hyun Live Translator — menu-driven multi-view client.
+ * Gemini Live Translator — menu-driven multi-view client.
  *
  * Views: home · translate (quick, ephemeral) · notes (list+search) ·
  *        note (record/log/summary) · settings.
@@ -20,10 +20,10 @@ const DEFAULT_LANG_B = "ko";
 // ---- i18n -----------------------------------------------------------------
 const I18N = {
   ko: {
-    "home.translate": "빠른 통역", "home.translateDesc": "즉석 실시간 통역·자막 (저장 안 함)",
+    "home.translate": "실시간 통역", "home.translateDesc": "즉석 실시간 통역·자막 (저장 안 함)",
     "home.notes": "회의 노트", "home.notesDesc": "녹음·기록·요약 · 주제/날짜로 검색",
-    "home.settings": "설정", "home.settingsDesc": "언어·테마·서버·표시언어·보기모드",
-    "home.room": "여러 기기 통역 (QR)", "home.roomDesc": "QR로 참가자 초대 · 각자 자기 언어로 듣기",
+    "home.settings": "관리자 설정", "home.settingsDesc": "모든 기능 설정 · 서버·토큰 (운영자)",
+    "home.room": "방 만들기 (QR)", "home.roomDesc": "QR로 참가자 초대 · 각자 자기 언어로 듣기",
     "title.room": "여러 기기 통역", "title.join": "통역 방 참여",
     "room.intro": "이 기기가 말하는 내용을 송출합니다. 참가자는 QR/링크로 들어와 각자 원하는 언어로 통역 음성을 듣습니다.",
     "room.start": "📡 방 시작 (마이크 송출)", "room.scan": "참가자가 이 QR을 스캔하거나 아래 링크로 접속하면 됩니다.",
@@ -31,7 +31,7 @@ const I18N = {
     "join.intro": "통역 방에 참여합니다. 들을 언어를 선택하세요.", "join.lang": "듣기 언어", "join.go": "🎧 참여하고 듣기",
     "join.listening": "듣는 중", "join.leave": "나가기",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
-    "home.tagline": "Hyun Live Translator · 자동 언어 감지 · 다국어 자막",
+    "home.tagline": "Gemini Live Translator · 자동 언어 감지 · 다국어 자막",
     "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
     "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
     "note.tabLog": "기록", "note.tabSummary": "요약", "vm.both": "원문+번역", "vm.source": "원문만", "vm.trans": "번역만",
@@ -47,17 +47,17 @@ const I18N = {
     "vm.label": "보기 모드", "note.save": "저장(내보내기)", "note.summarizeBtn": "요약 생성 / 갱신",
     "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "ctrl.start": "시작", "ctrl.stop": "정지",
     "pron.title": "발음", "pron.roman": "로마자", "pron.hangul": "한글",
-    "title.home": "Hyun Live Translator", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "설정",
+    "title.home": "Gemini Live Translator", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "관리자 설정",
     "st.idle": "대기", "st.connecting": "연결 중…", "st.live": "통역 중 — 말하세요", "st.paused": "일시정지",
     "st.saved": "저장됨", "st.tokenBad": "Access Token이 서버와 불일치", "st.cantReach": "서버 연결 불가",
     "st.noKey": "서버에 API 키 미설정", "st.setServer": "설정에서 서버 주소를 입력하세요",
     "msg.confirmDelete": "이 노트를 삭제할까요?", "msg.newNote": "새 노트",
   },
   en: {
-    "home.translate": "Quick Translate", "home.translateDesc": "Instant live interpreting · captions (not saved)",
+    "home.translate": "Live Translate", "home.translateDesc": "Instant live interpreting · captions (not saved)",
     "home.notes": "Meeting Notes", "home.notesDesc": "Record · log · summary · search by topic/date",
-    "home.settings": "Settings", "home.settingsDesc": "Language · theme · server · caption langs",
-    "home.room": "Multi-device (QR)", "home.roomDesc": "Invite via QR · everyone hears their own language",
+    "home.settings": "Admin · Settings", "home.settingsDesc": "Language · theme · server · caption langs",
+    "home.room": "Create room (QR)", "home.roomDesc": "Invite via QR · everyone hears their own language",
     "title.room": "Multi-device", "title.join": "Join a room",
     "room.intro": "This device broadcasts what you speak. Participants join via QR/link and hear it in their own language.",
     "room.start": "📡 Start room (broadcast mic)", "room.scan": "Participants scan this QR or open the link below.",
@@ -65,7 +65,7 @@ const I18N = {
     "join.intro": "Join an interpreting room. Choose the language to hear.", "join.lang": "Listen in", "join.go": "🎧 Join & listen",
     "join.listening": "Listening", "join.leave": "Leave",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
-    "home.tagline": "Hyun Live Translator · auto language detection · multilingual captions",
+    "home.tagline": "Gemini Live Translator · auto language detection · multilingual captions",
     "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
     "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
     "note.tabLog": "Log", "note.tabSummary": "Summary", "vm.both": "Source+Translation", "vm.source": "Source only", "vm.trans": "Translation only",
@@ -81,7 +81,7 @@ const I18N = {
     "vm.label": "View mode", "note.save": "Export", "note.summarizeBtn": "Generate / refresh summary",
     "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "ctrl.start": "Start", "ctrl.stop": "Stop",
     "pron.title": "Pronunciation", "pron.roman": "Roman", "pron.hangul": "Hangul",
-    "title.home": "Hyun Live Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Settings",
+    "title.home": "Gemini Live Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Admin · Settings",
     "st.idle": "Idle", "st.connecting": "Connecting…", "st.live": "Live — speak now", "st.paused": "Paused",
     "st.saved": "Saved", "st.tokenBad": "Access token does not match the server", "st.cantReach": "Cannot reach server",
     "st.noKey": "API key not configured on server", "st.setServer": "Set the server URL in Settings",
