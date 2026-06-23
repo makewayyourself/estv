@@ -59,12 +59,13 @@ from services.gemini_live import (
     normalize_lang,
 )
 from services.exporters import EXPORTERS
+from services.rooms import manager as room_manager
 
 # Cap how much transcript we send to the summarizer (keep the most recent part).
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.18-c"
+APP_VERSION = "2026.06.18-d"
 
 load_dotenv()
 
@@ -648,6 +649,79 @@ async def stream(ws: WebSocket) -> None:
         with suppress(Exception):
             await ws.close()
         logger.info("Connection closed")
+
+
+# --- Multi-device rooms (QR group interpreting) ---------------------------
+
+
+@app.websocket("/api/room/host")
+async def room_host(ws: WebSocket) -> None:
+    """Host publishes mic audio into a room. Requires the access token (the host
+    spends the Gemini quota); participants join via the room id (a capability)."""
+    await ws.accept()
+    room_id = (ws.query_params.get("room") or "").strip()
+    expected = (os.getenv("ACCESS_TOKEN") or "").strip()
+    if expected and not secrets.compare_digest(
+        (ws.query_params.get("token") or "").strip(), expected
+    ):
+        await _send_json(ws, {"type": "error", "message": "Unauthorized"})
+        await ws.close(code=1008)
+        return
+    if not room_id:
+        await ws.close(code=1008)
+        return
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        await _send_json(ws, {"type": "error", "message": str(exc)})
+        await ws.close()
+        return
+
+    room = room_manager.create(room_id, client)
+    room.host_ws = ws
+    logger.info("Room %s opened", room_id)
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            data = msg.get("bytes")
+            if data:
+                await room.feed_audio(data)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await room_manager.close(room_id)
+        logger.info("Room %s closed", room_id)
+
+
+@app.websocket("/api/room/join")
+async def room_join(ws: WebSocket) -> None:
+    """A participant joins a room and listens in their chosen language."""
+    await ws.accept()
+    room_id = (ws.query_params.get("room") or "").strip()
+    lang = normalize_lang(ws.query_params.get("lang"), DEFAULT_LANG_B)
+    room = room_manager.get(room_id)
+    if not room:
+        await _send_json(ws, {"type": "error", "message": "Room not found or ended"})
+        await ws.close(code=1008)
+        return
+
+    channel = await room.ensure_channel(lang)
+    channel.subscribers.add(ws)
+    await room.notify_host()
+    await _send_json(ws, {"type": "joined", "lang": lang})
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        channel.subscribers.discard(ws)
+        with suppress(Exception):
+            await room.notify_host()
 
 
 # Mounted last (at the web root) so the explicit /api routes above take
