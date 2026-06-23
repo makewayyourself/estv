@@ -389,6 +389,8 @@ class App {
     b.textContent = text; wrap.appendChild(b); return wrap;
   }
   _showRole(role) {
+    // View-mode only filters meeting notes; Quick Translate always shows all.
+    if (this.context !== "note") return true;
     if (this.viewMode === "source") return role === "source";
     if (this.viewMode === "trans") return role === "translation";
     return true;
@@ -472,7 +474,7 @@ class App {
     const wantClarify = isNote || this.el.clarifyToggle.checked;
     try {
       const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: this.el.langB.value,
+        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: UI_LANG,
           context: this.el.riskContext.value.trim(), history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
           want_risk: wantRisk, want_clarify: wantClarify, token: this._token() || undefined }) });
       if (!r.ok) return;
@@ -582,7 +584,7 @@ class App {
     if (m.type === "status") { if (m.model) this.el.modelInfo.textContent = m.model; }
     else if (m.type === "transcript") this._appendTranscript(m.role, m.text);
     else if (m.type === "turn_complete") this._finalizeTurn();
-    else if (m.type === "interrupted") this._flushPlayback();
+    else if (m.type === "interrupted") { /* streaming model: keep playing (no flush) */ }
     else if (m.type === "error") { this._lastError = m.message || "error"; this._setStatus("error", this._lastError); }
   }
 
