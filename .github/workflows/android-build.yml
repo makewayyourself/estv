@@ -15,6 +15,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to publish the APK as a Release asset
     defaults:
       run:
         working-directory: gemini_live_translator
@@ -60,3 +62,16 @@ jobs:
           name: gemini-translator-debug-apk
           path: gemini_live_translator/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Publish a public, login-free direct download at /releases/latest
+      - name: Publish APK to Releases (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: Hyun Live Translator — latest APK
+          body: |
+            최신 안드로이드 APK입니다. 아래 **Assets**의 `app-debug.apk` 를 눌러 받으세요.
+            (로그인·압축 불필요 · 폰에서 바로 설치)
+          files: gemini_live_translator/android/app/build/outputs/apk/debug/app-debug.apk
+          make_latest: true
