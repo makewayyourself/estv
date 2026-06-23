@@ -142,12 +142,21 @@ class App {
     this.el.controlBar.hidden = !(view === "translate" || view === "note");
     this.el.newNoteBtn.hidden = view !== "notes";
 
+    // Meeting notes are silent (listen + transcribe quietly): hide audio
+    // controls and force captions-only. Quick Translate keeps audio.
+    const audioUI = view === "translate";
+    this.el.modeAudioBtn.parentElement.style.display = audioUI ? "" : "none";
+    this.el.replayBtn.style.display = audioUI ? "" : "none";
+    this.el.pronounceBtn.style.display = audioUI ? "" : "none";
+
     if (view === "translate") {
       this.context = "quick"; this.quickLog = []; this._clearTranscript(this.el.qkTranscript, "qk-ph");
       this.transcriptEl = this.el.qkTranscript; this.riskEl = this.el.qkRisk; this.clarifyEl = this.el.qkClarify;
+      this._setMode(localStorage.getItem("audioOutput") !== "0", true);
       this.el.viewTitle.innerHTML = t("title.translate");
     } else if (view === "note") {
       this.context = "note"; this.activeNoteId = opts.id;
+      this.audioOutput = false; // notes never play audio
       this.transcriptEl = this.el.noteTranscript; this.riskEl = this.el.noteRisk; this.clarifyEl = this.el.noteClarify;
       this._openNote(opts.id);
     } else {
@@ -363,6 +372,8 @@ class App {
       if (e.source && this._showRole("source")) el.appendChild(this._bubble("source", e.source));
       if (e.translation && this._showRole("translation")) el.appendChild(this._bubble("translation", e.translation));
       if (e.multi) el.appendChild(this._multiBlock(e.multi));
+      const wh = this._warnHtml(e);
+      if (wh) { const w = document.createElement("div"); w.dataset.row = "1"; w.className = "rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs"; w.innerHTML = wh; el.appendChild(w); }
     }
     el.scrollTop = el.scrollHeight;
   }
@@ -403,7 +414,9 @@ class App {
       this.el.viewTitle.textContent = n ? n.title : this.el.viewTitle.textContent;
     }
     this._persist();
-    if (this.el.riskToggle.checked || this.el.clarifyToggle.checked) this._analyzeTurn(entry);
+    // Notes always get the context/meaning analysis (warnings in 참고);
+    // Quick Translate only when the toggles are on.
+    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked) this._analyzeTurn(entry);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
   }
 
@@ -424,16 +437,40 @@ class App {
 
   async _analyzeTurn(entry) {
     const base = this._serverBase(); if (!base || !entry.source) return;
+    const isNote = this.context === "note";
+    const wantRisk = isNote || this.el.riskToggle.checked;
+    const wantClarify = isNote || this.el.clarifyToggle.checked;
     try {
       const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: this.el.langB.value,
           context: this.el.riskContext.value.trim(), history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
-          want_risk: this.el.riskToggle.checked, want_clarify: this.el.clarifyToggle.checked, token: this._token() || undefined }) });
+          want_risk: wantRisk, want_clarify: wantClarify, token: this._token() || undefined }) });
       if (!r.ok) return;
       const d = await r.json(); if (!d) return;
-      if (this.el.riskToggle.checked && d.risk_level && d.risk_level !== "none") { entry.risk = d; this._persist(); this._renderRisk(d); }
-      if (this.el.clarifyToggle.checked && d.clarify_suspected) { entry.clarify = d; this._persist(); this._renderClarify(d); }
+      let warned = false;
+      if (wantRisk && d.risk_level && d.risk_level !== "none") { entry.risk = d; warned = true; this._renderRisk(d); }
+      if (wantClarify && d.clarify_suspected) { entry.clarify = d; warned = true; this._renderClarify(d); }
+      if (warned) { this._persist(); if (isNote) this._appendWarn(entry); }
     } catch {}
+  }
+  /** Inline "참고/Note" warning under a turn (notes). */
+  _warnHtml(entry) {
+    let h = "";
+    if (entry.risk && entry.risk.risk_level && entry.risk.risk_level !== "none") {
+      const col = entry.risk.risk_level === "high" ? "text-rose-300" : entry.risk.risk_level === "medium" ? "text-amber-300" : "text-slate-400";
+      h += `<div class="${col}">⚠️ ${UI_LANG === "ko" ? "참고" : "Note"}: ${esc(entry.risk.subtitle_alert || "")}</div>`;
+    }
+    if (entry.clarify && entry.clarify.clarify_suspected) {
+      h += `<div class="text-sky-300">🔎 ${esc(entry.clarify.clarify_did_you_mean || "")}</div>`;
+    }
+    return h;
+  }
+  _appendWarn(entry) {
+    const h = this._warnHtml(entry); if (!h) return;
+    const w = document.createElement("div"); w.dataset.row = "1";
+    w.className = "rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs";
+    w.innerHTML = h; this.transcriptEl.appendChild(w);
+    this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
   }
   _renderClarify(d) {
     this.clarifyEl.innerHTML = `<div class="text-xs font-bold uppercase">🔎 ${UI_LANG === "ko" ? "혹시 이런 뜻?" : "Did you mean…?"}</div>
@@ -614,8 +651,11 @@ class App {
     const entries = log.map((e) => {
       let tr = e.translation || "";
       if (e.multi) tr += "  " + Object.entries(e.multi).map(([c, x]) => `[${c}] ${x}`).join("  ");
+      const warn = [];
+      if (e.risk && e.risk.risk_level && e.risk.risk_level !== "none") warn.push(`[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`);
+      if (e.clarify && e.clarify.clarify_suspected) warn.push(`(?) ${e.clarify.clarify_did_you_mean || ""}`);
       return { time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), source: e.source || "", translation: tr.trim(),
-        risk: e.risk && e.risk.risk_level && e.risk.risk_level !== "none" ? `[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}` : "" };
+        risk: warn.join(" · ") };
     });
     const title = this.context === "note" ? (this._note(this.activeNoteId)?.title || "회의 노트") : "빠른 통역";
     try {

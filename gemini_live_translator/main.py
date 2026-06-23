@@ -64,7 +64,7 @@ from services.exporters import EXPORTERS
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.18-b"
+APP_VERSION = "2026.06.18-c"
 
 load_dotenv()
 
