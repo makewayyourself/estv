@@ -64,14 +64,6 @@
               </span>
               <span class="text-slate-600">›</span>
             </button>
-            <button data-go="room" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
-              <span class="text-3xl">🔗</span>
-              <span class="flex-1">
-                <span class="block font-semibold" data-i18n="home.room">여러 기기 통역 (QR)</span>
-                <span class="block text-sm text-slate-400" data-i18n="home.roomDesc">QR로 참가자 초대 · 각자 자기 언어로 듣기</span>
-              </span>
-              <span class="text-slate-600">›</span>
-            </button>
             <button data-go="settings" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
               <span class="text-3xl">⚙️</span>
               <span class="flex-1">
@@ -89,6 +81,10 @@
 
         <!-- ============ TRANSLATE (quick) ============ -->
         <section data-view="translate" hidden>
+          <div class="mb-3 flex gap-2">
+            <button id="qkRoomBtn" class="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
+            <button id="qkSaveBtn" class="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.save">💾 노트로 저장</button>
+          </div>
           <div id="qkClarify" class="mb-3 hidden rounded-xl border border-sky-500/60 bg-sky-950/40 p-3 text-sky-100"></div>
           <div id="qkRisk" class="mb-3 hidden rounded-xl border p-3"></div>
           <div id="qkTranscript" class="scroll-thin fs-md min-h-[50vh] space-y-3">

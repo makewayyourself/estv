@@ -31,6 +31,7 @@ const I18N = {
     "join.intro": "통역 방에 참여합니다. 들을 언어를 선택하세요.", "join.lang": "듣기 언어", "join.go": "🎧 참여하고 듣기",
     "join.listening": "듣는 중", "join.leave": "나가기",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
+    "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "home.tagline": "Gemini Live Translator · 자동 언어 감지 · 다국어 자막",
     "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
     "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
@@ -65,6 +66,7 @@ const I18N = {
     "join.intro": "Join an interpreting room. Choose the language to hear.", "join.lang": "Listen in", "join.go": "🎧 Join & listen",
     "join.listening": "Listening", "join.leave": "Leave",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
+    "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "home.tagline": "Gemini Live Translator · auto language detection · multilingual captions",
     "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
     "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
@@ -144,6 +146,7 @@ class App {
      "homeVer","verInfo",
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
+     "qkRoomBtn","qkSaveBtn",
      "askInput","askBtn","askAnswer","summaryContent","viewMode",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
@@ -156,7 +159,7 @@ class App {
     // leaving a recording-capable view while live → stop / close connections
     if (this.view === "room" && view !== "room") this._roomStop(true);
     if (this.view === "join" && view !== "join") this._joinLeave(true);
-    if (this.running && view !== this.view && view !== "room") this.stop();
+    if (this.running && view !== this.view) this.stop();
 
     this.view = view;
     document.querySelectorAll("[data-view]").forEach((s) => (s.hidden = s.getAttribute("data-view") !== view));
@@ -194,8 +197,11 @@ class App {
   // ---- binding ------------------------------------------------------------
   _bind() {
     document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => this.show(b.getAttribute("data-go"))));
-    this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : this.view === "admin" ? "settings" : "home"));
+    this.el.backBtn.addEventListener("click", () => this.show(this.view === "note" ? "notes" : this.view === "room" ? "translate" : "home"));
     this.el.noteMenuBtn.addEventListener("click", () => (this.el.noteMenu.hidden = !this.el.noteMenu.hidden));
+    // quick translate: create a room / save as a note
+    this.el.qkRoomBtn.addEventListener("click", () => this.show("room"));
+    this.el.qkSaveBtn.addEventListener("click", () => this._saveQuickAsNote());
     // rooms
     this.el.roomStartBtn.addEventListener("click", () => this._roomStart());
     this.el.roomStopBtn.addEventListener("click", () => this._roomStop(false));
@@ -320,6 +326,15 @@ class App {
     this.notes.unshift({ id, title: t("msg.newNote"), createdAt: Date.now(), updatedAt: Date.now(), log: [], summary: "", topic: "" });
     this._saveNotes();
     this.show("note", { id });
+  }
+  /** Snapshot the current Quick Translate transcript into a saved meeting note. */
+  _saveQuickAsNote() {
+    if (!this.quickLog.length) { this._setStatus(this.running ? "live" : "idle", t("msg.nothingSave")); return; }
+    const log = this.quickLog.map((e) => ({ ...e }));
+    const title = log[0] && log[0].source ? log[0].source.slice(0, 24) : t("msg.newNote");
+    this.notes.unshift({ id: "n" + Date.now(), title, createdAt: Date.now(), updatedAt: Date.now(), log, summary: "", topic: "" });
+    this._saveNotes();
+    this._setStatus(this.running ? "live" : "idle", t("st.savedNote"));
   }
   _deleteActive() {
     if (!confirm(t("msg.confirmDelete"))) return;
