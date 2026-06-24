@@ -241,23 +241,34 @@
 
             <div class="rounded-xl border border-indigo-900/40 bg-indigo-950/10 p-3">
               <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-300" data-i18n="set.aiAssist">AI 보조 (실시간)</p>
-              <label class="flex cursor-pointer items-center justify-between py-1"><span class="font-medium text-indigo-300" data-i18n="set.answer">💬 답변 제안</span><input id="answerToggle" type="checkbox" class="h-4 w-4 accent-indigo-500" /></label>
-              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-emerald-300" data-i18n="set.upgrade">✨ 표현 업그레이드</span><input id="upgradeToggle" type="checkbox" class="h-4 w-4 accent-emerald-500" /></label>
-              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
-              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-indigo-300" data-i18n="set.answer">💬 답변 제안</span><input id="answerToggle" type="checkbox" class="h-4 w-4 accent-indigo-500" /></label>
+                <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-emerald-300" data-i18n="set.upgrade">✨ 표현 업그레이드</span><input id="upgradeToggle" type="checkbox" class="h-4 w-4 accent-emerald-500" /></label>
+                <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
+                <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
+              </div>
               <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
             </div>
 
-            <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
+            <!-- Operator section: hidden until the build version is tapped 5× -->
+            <div id="operatorBox" hidden class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
               <p class="mb-2 text-xs text-amber-200/80" data-i18n="admin.note">서버 운영자용 설정입니다.</p>
               <label class="mb-1 block font-medium text-slate-400" data-i18n="set.server">서버 주소</label>
               <input id="serverUrl" type="url" inputmode="url" placeholder="https://your-app.onrender.com" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
               <label class="mb-1 mt-3 block font-medium text-slate-400" data-i18n="set.token">접속 토큰</label>
               <input id="accessToken" type="password" autocomplete="off" data-i18n-ph="set.tokenPh" placeholder="서버 접속 토큰" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-              <button id="saveServerBtn" class="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
+              <div class="mt-2 flex gap-2">
+                <button id="saveServerBtn" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500" data-i18n="set.save">저장</button>
+                <button id="healthBtn" class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-300 hover:bg-slate-700" data-i18n="set.health">🔄 진단</button>
+              </div>
+              <div id="healthStatus" class="mt-2 text-xs text-slate-400"></div>
               <div class="mt-2 flex justify-between text-xs text-slate-500"><span data-i18n="set.model">모델</span><span id="modelInfo" class="font-mono text-slate-400">—</span></div>
               <div class="flex justify-between text-xs text-slate-500"><span>버전</span><span id="verInfo" class="font-mono text-slate-400">—</span></div>
             </div>
+
+            <p class="pt-2 text-center text-[10px] text-slate-700">
+              <span id="buildTap" class="cursor-pointer select-none">build <span id="setVer">—</span></span>
+            </p>
           </div>
         </section>
 
