@@ -50,6 +50,7 @@ from services.gemini_live import (
     SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
     build_config,
+    build_feedback_prompt,
     build_multitranslate_prompt,
     build_pronounce_prompt,
     build_qa_prompt,
@@ -65,7 +66,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.18-h"
+APP_VERSION = "2026.06.18-i"
 
 load_dotenv()
 
@@ -197,7 +198,7 @@ class RiskLevel(str, enum.Enum):
 
 
 class RiskAnalysis(BaseModel):
-    """Structured per-turn analysis (risk + meaning clarification)."""
+    """Structured per-turn copilot output (risk + clarify + answer + upgrade)."""
 
     risk_level: RiskLevel
     risk_types: List[str]
@@ -208,16 +209,25 @@ class RiskAnalysis(BaseModel):
     clarify_suspected: bool
     clarify_did_you_mean: str
     clarify_corrected_translation: str
+    # Answer suggestion (when the latest utterance is a question to answer).
+    should_answer: bool
+    answer_local: str
+    answer_native: str
+    # Native-level rewrite of the latest translation.
+    upgrade: str
 
 
 class AnalyzeRequest(BaseModel):
     original: str
     translation: str = ""
     alert_language: str = DEFAULT_LANG_A
+    target_language: str = "en"
     context: str = ""
     history: str = ""
     want_risk: bool = True
     want_clarify: bool = False
+    want_answer: bool = False
+    want_upgrade: bool = False
     token: str | None = None
 
 
@@ -225,6 +235,7 @@ _EMPTY_ANALYSIS = {
     "risk_level": "none", "risk_types": [], "subtitle_alert": "", "reason": "",
     "suggested_question": "", "clarify_suspected": False,
     "clarify_did_you_mean": "", "clarify_corrected_translation": "",
+    "should_answer": False, "answer_local": "", "answer_native": "", "upgrade": "",
 }
 
 
@@ -277,18 +288,19 @@ async def analyze(req: AnalyzeRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
     alert_language = normalize_lang(req.alert_language, DEFAULT_LANG_A)
+    target_language = normalize_lang(req.target_language, "en")
     prompt = build_risk_prompt(
         original[:2000],
         (req.translation or "")[:2000],
         alert_language,
         req.context[:200],
         (req.history or "")[:4000],
+        target_language,
     )
 
-    # Clarification needs real reasoning, so when it is requested we use the
-    # stronger model plus a thinking budget; a risk-only turn stays on the
-    # cheap/fast Lite model with no thinking.
-    if req.want_clarify:
+    # Reasoning-heavy tasks (clarify / answer suggestion / upgrade) use the
+    # stronger model + thinking; a risk-only turn stays on the cheap Lite model.
+    if req.want_clarify or req.want_answer or req.want_upgrade:
         model, thinking = CLARIFY_MODEL, ANALYSIS_THINKING_BUDGET
     else:
         model, thinking = RISK_MODEL, 0
@@ -300,6 +312,37 @@ async def analyze(req: AnalyzeRequest) -> dict:
         return dict(_EMPTY_ANALYSIS)
 
     return data
+
+
+class FeedbackRequest(BaseModel):
+    transcript: str
+    language: str = DEFAULT_LANG_A
+    token: str | None = None
+
+
+@app.post("/api/feedback")
+async def feedback(req: FeedbackRequest) -> dict:
+    """Post-meeting coaching feedback (key expressions, natural rewrites, tips)."""
+    _check_token(req.token)
+    transcript = (req.transcript or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Transcript is empty")
+    if len(transcript) > MAX_SUMMARY_CHARS:
+        transcript = transcript[-MAX_SUMMARY_CHARS:]
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    language = normalize_lang(req.language, DEFAULT_LANG_A)
+    prompt = build_feedback_prompt(transcript, language)
+    try:
+        response = await client.aio.models.generate_content(
+            model=SUMMARY_MODEL, contents=prompt
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Feedback failed")
+        raise HTTPException(status_code=502, detail=f"Feedback failed: {exc}")
+    return {"feedback": (response.text or "").strip()}
 
 
 class AskRequest(BaseModel):

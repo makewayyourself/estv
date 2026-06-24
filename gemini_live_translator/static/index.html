@@ -154,6 +154,7 @@
           <div class="mb-3 flex border-b border-slate-800 text-sm">
             <button data-tab="log" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabLog">기록</button>
             <button data-tab="summary" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabSummary">요약</button>
+            <button data-tab="feedback" class="note-tab flex-1 border-b-2 py-2 font-medium" data-i18n="note.tabFeedback">피드백</button>
           </div>
 
           <div data-pane="log">
@@ -173,6 +174,11 @@
             <div id="askAnswer" class="mb-3 hidden whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-200"></div>
             <button id="noteSummarizeBtn" class="mb-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500" data-i18n="note.summarizeBtn">요약 생성 / 갱신</button>
             <div id="summaryContent" class="whitespace-pre-wrap rounded-lg bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-200"></div>
+          </div>
+
+          <div data-pane="feedback" hidden>
+            <button id="noteFeedbackBtn" class="mb-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500" data-i18n="note.feedbackBtn">📊 피드백 생성 / 갱신</button>
+            <div id="feedbackContent" class="whitespace-pre-wrap rounded-lg bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-200"></div>
           </div>
         </section>
 
@@ -233,10 +239,13 @@
               <input id="speedRange" type="range" min="0.5" max="1.5" step="0.05" value="1.0" class="w-full accent-indigo-500" />
             </div>
 
-            <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3">
-              <label class="flex cursor-pointer items-center justify-between"><span class="font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
+            <div class="rounded-xl border border-indigo-900/40 bg-indigo-950/10 p-3">
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-300" data-i18n="set.aiAssist">AI 보조 (실시간)</p>
+              <label class="flex cursor-pointer items-center justify-between py-1"><span class="font-medium text-indigo-300" data-i18n="set.answer">💬 답변 제안</span><input id="answerToggle" type="checkbox" class="h-4 w-4 accent-indigo-500" /></label>
+              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-emerald-300" data-i18n="set.upgrade">✨ 표현 업그레이드</span><input id="upgradeToggle" type="checkbox" class="h-4 w-4 accent-emerald-500" /></label>
+              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
+              <label class="flex cursor-pointer items-center justify-between border-t border-indigo-900/30 py-1 pt-2"><span class="font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
               <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
-              <label class="mt-2 flex cursor-pointer items-center justify-between border-t border-amber-900/30 pt-2"><span class="font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
             </div>
 
             <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">

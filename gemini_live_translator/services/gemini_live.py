@@ -188,14 +188,16 @@ def build_risk_prompt(
     alert_language: str,
     context: str = "",
     history: str = "",
+    target_language: str = "en",
 ) -> str:
-    """Build the per-turn analysis prompt (risk detection + meaning clarify).
+    """Build the per-turn copilot prompt: risk + clarify + answer + upgrade.
 
-    Returns structured JSON (enforced via response_schema). All human-readable
-    fields are written in ``alert_language``. ``history`` carries the recent
-    conversation so the model can judge mis-recognition from context.
+    Returns structured JSON (enforced via response_schema). ``alert_language`` is
+    the user's language (for explanations); ``target_language`` is what they
+    actually speak to the other party. ``history`` is recent context.
     """
     lang_name = SUPPORTED_LANGUAGES.get(alert_language, "English")
+    tgt_name = SUPPORTED_LANGUAGES.get(target_language, "English")
     context_line = ""
     if context.strip():
         context_line = (
@@ -208,26 +210,45 @@ def build_risk_prompt(
         history_line = f"\nRecent conversation (for context):\n{history.strip()}\n"
 
     return (
-        "You are a real-time business-interpreting copilot. You do TWO things "
-        "for the latest utterance.\n\n"
+        "You are a real-time business-interpreting copilot. For the LATEST "
+        "utterance, do FOUR things.\n\n"
         "PART A — Risk: flag anything the listener should double-check before "
-        "acting (money/payment, contracts & liability, guarantees/exclusivity/"
-        "penalties/advance-payment, numbers·dates·quantities·currency·units, "
-        "culturally rude or overly blunt phrasing, personal/sensitive data, low "
-        "translation confidence). Be conservative — 'none' for ordinary small "
-        "talk; medium/high only for a real business risk.\n\n"
-        "PART B — Meaning clarification: the audio is transcribed live, so "
-        "unclear or slurred pronunciation can produce a wrong or nonsensical "
-        "translation. Using the recent conversation as context, judge whether "
-        "the utterance was likely MIS-RECOGNIZED. If you suspect so, set "
-        "clarify_suspected=true, put the most likely intended meaning in "
-        "clarify_did_you_mean phrased as a confirmation (e.g. 'Did you mean: …?'), "
-        "and give a fixed translation in clarify_corrected_translation. If the "
-        "utterance is clear, set clarify_suspected=false and leave those empty.\n\n"
-        f"Write subtitle_alert, clarify_did_you_mean and clarify_corrected_"
-        f"translation in {lang_name}.{context_line}{history_line}\n"
+        "acting (money/payment, contracts & liability, guarantees/penalties/"
+        "advance-payment, numbers·dates·quantities·units, rude/blunt phrasing, "
+        "sensitive data, low translation confidence). Be conservative — 'none' "
+        "for ordinary small talk; medium/high only for a real business risk.\n\n"
+        "PART B — Clarify: live transcription can mishear unclear speech. Using "
+        "context, judge if the utterance was likely MIS-RECOGNIZED. If so, set "
+        "clarify_suspected=true, put the likely intended meaning in "
+        "clarify_did_you_mean as a confirmation, and a fixed translation in "
+        "clarify_corrected_translation. Else false and empty.\n\n"
+        "PART C — Answer suggestion: decide if the LATEST utterance is a QUESTION "
+        "or request that the listener should answer. If yes, set should_answer="
+        f"true and propose a concise, natural reply in {tgt_name} "
+        "(answer_native) plus the same reply written in "
+        f"{lang_name} so the user understands it (answer_local). If it is not a "
+        "question to answer, set should_answer=false and leave those empty.\n\n"
+        "PART D — Expression upgrade: rewrite the LATEST TRANSLATION into a more "
+        f"natural, native-level {tgt_name} version (upgrade). If it is already "
+        "natural, return an empty string.\n\n"
+        f"Write subtitle_alert, clarify_* and answer_local in {lang_name}. Write "
+        f"answer_native and upgrade in {tgt_name}.{context_line}{history_line}\n"
         f"LATEST ORIGINAL (source language): {original}\n"
         f"LATEST TRANSLATION: {translation}\n"
+    )
+
+
+def build_feedback_prompt(transcript: str, language: str) -> str:
+    """Post-meeting feedback/coaching report (in the user's language)."""
+    lang_name = SUPPORTED_LANGUAGES.get(language, "English")
+    return (
+        "You are a language coach. From the meeting transcript below, produce a "
+        f"concise feedback report in {lang_name} using Markdown headings:\n"
+        "1. 핵심 표현 / Key expressions — useful phrases that appeared, polished.\n"
+        "2. 더 자연스럽게 / More natural — for clumsy lines, a native alternative.\n"
+        "3. 학습 포인트 / Learning points — 2-4 short tips.\n"
+        "Be specific and tied to the transcript; do not invent facts.\n\n"
+        "=== TRANSCRIPT ===\n" + transcript
     )
 
 

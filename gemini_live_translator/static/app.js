@@ -32,6 +32,9 @@ const I18N = {
     "join.listening": "듣는 중", "join.leave": "나가기",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
+    "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
+    "note.tabFeedback": "피드백", "note.feedbackBtn": "📊 피드백 생성 / 갱신",
+    "assist.answer": "답변 제안", "assist.upgrade": "표현 업그레이드", "assist.speak": "🔊 들려주기", "assist.copy": "복사", "msg.feedbackFail": "피드백 실패",
     "home.tagline": "Gemini Live Translator · 자동 언어 감지 · 다국어 자막",
     "tr.ph": "아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.",
     "notes.search": "주제·내용·날짜 검색", "notes.empty": "아직 노트가 없습니다. 아래 \"새 노트\"로 시작하세요.", "notes.new": "＋ 새 노트",
@@ -67,6 +70,9 @@ const I18N = {
     "join.listening": "Listening", "join.leave": "Leave",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
+    "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
+    "note.tabFeedback": "Feedback", "note.feedbackBtn": "📊 Generate / refresh feedback",
+    "assist.answer": "Answer suggestion", "assist.upgrade": "Expression upgrade", "assist.speak": "🔊 Speak", "assist.copy": "Copy", "msg.feedbackFail": "Feedback failed",
     "home.tagline": "Gemini Live Translator · auto language detection · multilingual captions",
     "tr.ph": "Tap Start below and speak to translate.<br />Pick up to 3 caption languages in Settings.",
     "notes.search": "Search topic · content · date", "notes.empty": "No notes yet. Tap \"New note\" below to start.", "notes.new": "＋ New note",
@@ -147,7 +153,8 @@ class App {
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
      "qkRoomBtn","qkSaveBtn",
-     "askInput","askBtn","askAnswer","summaryContent","viewMode",
+     "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
+     "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
      "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle",
@@ -223,6 +230,7 @@ class App {
     this.el.noteTitle.addEventListener("change", () => this._renameActive());
     this.el.noteDelete.addEventListener("click", () => this._deleteActive());
     this.el.noteSummarizeBtn.addEventListener("click", () => this._summarize());
+    this.el.noteFeedbackBtn.addEventListener("click", () => this._feedback());
     this.el.askBtn.addEventListener("click", () => this._ask());
     this.el.askInput.addEventListener("keydown", (e) => e.key === "Enter" && this._ask());
     this.el.noteExportMd.addEventListener("click", () => this._export("md"));
@@ -242,9 +250,13 @@ class App {
     this.el.speedRange.addEventListener("input", () => { this.playbackRate = parseFloat(this.el.speedRange.value); this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`; localStorage.setItem("playbackRate", String(this.playbackRate)); });
     this.el.riskToggle.checked = localStorage.getItem("riskGuard") === "1";
     this.el.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
+    this.el.answerToggle.checked = localStorage.getItem("answer") === "1";
+    this.el.upgradeToggle.checked = localStorage.getItem("upgrade") === "1";
     this.el.riskContext.value = localStorage.getItem("riskContext") || "";
     this.el.riskToggle.addEventListener("change", () => localStorage.setItem("riskGuard", this.el.riskToggle.checked ? "1" : "0"));
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
+    this.el.answerToggle.addEventListener("change", () => localStorage.setItem("answer", this.el.answerToggle.checked ? "1" : "0"));
+    this.el.upgradeToggle.addEventListener("change", () => localStorage.setItem("upgrade", this.el.upgradeToggle.checked ? "1" : "0"));
     this.el.riskContext.addEventListener("change", () => localStorage.setItem("riskContext", this.el.riskContext.value.trim()));
     this.el.serverUrl.value = this._serverBase();
     this.el.accessToken.value = this._token();
@@ -377,6 +389,7 @@ class App {
     this.el.noteDate.textContent = new Date(n.createdAt).toLocaleString();
     this.el.viewTitle.textContent = n.title;
     this.el.summaryContent.textContent = n.summary || "";
+    this.el.feedbackContent.textContent = n.feedback || "";
     this.el.askAnswer.classList.add("hidden");
     this._tab("log");
     this._renderLog(this.el.noteTranscript, n.log, "note-ph");
@@ -466,7 +479,7 @@ class App {
     this._persist();
     // Notes always get the context/meaning analysis (warnings in 참고);
     // Quick Translate only when the toggles are on.
-    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked) this._analyzeTurn(entry);
+    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
   }
 
@@ -490,18 +503,43 @@ class App {
     const isNote = this.context === "note";
     const wantRisk = isNote || this.el.riskToggle.checked;
     const wantClarify = isNote || this.el.clarifyToggle.checked;
+    const wantAnswer = this.el.answerToggle.checked;
+    const wantUpgrade = this.el.upgradeToggle.checked;
     try {
       const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: UI_LANG,
+        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: UI_LANG, target_language: this.el.langB.value,
           context: this.el.riskContext.value.trim(), history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
-          want_risk: wantRisk, want_clarify: wantClarify, token: this._token() || undefined }) });
+          want_risk: wantRisk, want_clarify: wantClarify, want_answer: wantAnswer, want_upgrade: wantUpgrade, token: this._token() || undefined }) });
       if (!r.ok) return;
       const d = await r.json(); if (!d) return;
       let warned = false;
       if (wantRisk && d.risk_level && d.risk_level !== "none") { entry.risk = d; warned = true; this._renderRisk(d); }
       if (wantClarify && d.clarify_suspected) { entry.clarify = d; warned = true; this._renderClarify(d); }
+      if (wantAnswer && d.should_answer && (d.answer_native || d.answer_local)) this._renderAnswer(d);
+      if (wantUpgrade && d.upgrade && d.upgrade.trim()) this._renderUpgrade(d.upgrade.trim());
       if (warned) { this._persist(); if (isNote) this._appendWarn(entry); }
     } catch {}
+  }
+  _renderAnswer(d) {
+    const body = `<div class="font-medium">${esc(d.answer_native || "")}</div>` +
+      (d.answer_local ? `<div class="mt-1 rounded bg-black/20 p-2 opacity-90">${esc(d.answer_local)}</div>` : "");
+    const actions = [
+      { label: t("assist.speak"), onClick: () => this._speak(d.answer_native, this.el.langB.value) },
+      { label: t("assist.copy"), onClick: () => navigator.clipboard && navigator.clipboard.writeText(d.answer_native || "").catch(() => {}) },
+    ];
+    this._pushAssist("answer", t("assist.answer"), body, actions);
+  }
+  _renderUpgrade(text) {
+    this._pushAssist("upgrade", t("assist.upgrade"), `<div class="font-medium">${esc(text)}</div>`,
+      [{ label: t("assist.copy"), onClick: () => navigator.clipboard && navigator.clipboard.writeText(text).catch(() => {}) }]);
+  }
+  /** Speak text aloud with the browser TTS in the given language. */
+  _speak(text, langCode) {
+    if (!text || !window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(text);
+    const map = { ko: "ko-KR", en: "en-US", ja: "ja-JP", zh: "zh-CN", fr: "fr-FR", es: "es-ES", ar: "ar-SA", ru: "ru-RU" };
+    u.lang = map[langCode] || "en-US";
+    window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
   }
   /** Inline "참고/Note" warning under a turn (notes). */
   _warnHtml(entry) {
@@ -710,6 +748,20 @@ class App {
       this._tab("summary");
     } catch (e) { this._setStatus("error", "요약 실패: " + e.message); }
     finally { this.el.noteSummarizeBtn.disabled = false; this.el.noteSummarizeBtn.textContent = prev; }
+  }
+  async _feedback() {
+    const log = this._currentLog(); if (!log.length) return;
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const prev = this.el.noteFeedbackBtn.textContent; this.el.noteFeedbackBtn.disabled = true; this.el.noteFeedbackBtn.textContent = "…";
+    try {
+      const r = await fetch(`${base}/api/feedback`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: this._transcriptText(), language: UI_LANG, token: this._token() || undefined }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+      const fb = (await r.json()).feedback || "";
+      this.el.feedbackContent.textContent = fb;
+      if (this.context === "note") { const n = this._note(this.activeNoteId); if (n) { n.feedback = fb; this._saveNotes(); } }
+    } catch (e) { this._setStatus("error", t("msg.feedbackFail") + ": " + e.message); }
+    finally { this.el.noteFeedbackBtn.disabled = false; this.el.noteFeedbackBtn.textContent = prev; }
   }
   async _ask() {
     const q = this.el.askInput.value.trim(); if (!q) return;
