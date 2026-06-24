@@ -11,7 +11,7 @@
  *   - In the Android app the user must type the URL into the "Server URL" box
  *     (it is then remembered on the device).
  */
-window.DEFAULT_SERVER_URL = "";
+window.DEFAULT_SERVER_URL = "https://interpretation-pbf4.onrender.com";
 
 /**
  * Optional: the server access token (must match ACCESS_TOKEN on the backend).
