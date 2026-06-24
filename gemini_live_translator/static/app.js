@@ -342,15 +342,32 @@ class App {
   async _healthCheck() {
     const base = this._serverBase();
     if (!base) { this.el.healthStatus.textContent = "🔴 " + t("st.setServer"); return; }
-    this.el.healthStatus.textContent = "⏳ …";
-    try {
-      const r = await fetch(`${base}/api/health`);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const d = await r.json();
-      this.el.healthStatus.textContent = `🟢 ${UI_LANG === "ko" ? "정상" : "OK"} · ${d.version || ""}${d.api_key_configured ? "" : (UI_LANG === "ko" ? " · ⚠️ 키 미설정" : " · ⚠️ no key")}`;
-    } catch (e) {
-      this.el.healthStatus.textContent = "🔴 " + (UI_LANG === "ko" ? "연결 오류" : "Error") + " (" + e.message + ")";
+    const ko = UI_LANG === "ko";
+    // Free-tier servers sleep; the first request must spin the container up
+    // (30-60s). Retry a few times — each attempt keeps the wake-up going —
+    // instead of giving up after one and falsely reporting "unreachable".
+    const tries = 3;
+    let lastErr = "";
+    for (let i = 1; i <= tries; i++) {
+      this.el.healthStatus.textContent = i === 1 ? "⏳ …" : `⏳ ${ko ? "서버 깨우는 중" : "waking server"}… (${i}/${tries})`;
+      try {
+        const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 25000);
+        const r = await fetch(`${base}/api/health`, { signal: ctrl.signal }); clearTimeout(to);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        if (this.el.homeVer) this.el.homeVer.textContent = d.version || "?";
+        if (this.el.verInfo) this.el.verInfo.textContent = d.version || "?";
+        if (this.el.setVer) this.el.setVer.textContent = d.version || "?";
+        if (d.model) this.el.modelInfo.textContent = d.model;
+        this.el.healthStatus.textContent = `🟢 ${ko ? "정상" : "OK"} · ${d.version || ""}${d.api_key_configured ? "" : (ko ? " · ⚠️ 키 미설정" : " · ⚠️ no key")}`;
+        return;
+      } catch (e) {
+        lastErr = e.name === "AbortError" ? (ko ? "응답 없음(시간 초과)" : "timeout") : e.message;
+      }
     }
+    this.el.healthStatus.textContent = "🔴 " + (ko
+      ? `연결 실패 (${lastErr}) — Render 서버가 꺼져 있거나 배포가 실패했을 수 있어요. Render 대시보드에서 서비스 상태를 확인하세요.`
+      : `Unreachable (${lastErr}) — the Render server may be down or the deploy failed. Check the Render dashboard.`);
   }
 
   _applyAppearance() {
