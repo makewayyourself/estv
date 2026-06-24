@@ -7,8 +7,39 @@
  * BridgeWebChromeClient maps RESOURCE_AUDIO_CAPTURE to the Android runtime
  * permission and prompts the user on first use.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
+
+// --- Stable debug signing -------------------------------------------------
+// Gradle auto-generates a *random* debug key each build, so a new APK can't
+// install over a previously-installed one (signature mismatch → "App not
+// installed"). Pin the debug signingConfig to a committed keystore so every
+// build shares one signature and updates install in place.
+const KEYSTORE_SRC = resolve("ci-debug.keystore");
+const gradlePath = resolve("android", "app", "build.gradle");
+if (existsSync(KEYSTORE_SRC) && existsSync(gradlePath)) {
+  copyFileSync(KEYSTORE_SRC, resolve("android", "app", "ci-debug.keystore"));
+  let gradle = readFileSync(gradlePath, "utf8");
+  if (!gradle.includes("ci-debug.keystore")) {
+    const signing = `
+    signingConfigs {
+        debug {
+            storeFile file('ci-debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }`;
+    // Inject as the first block inside `android { ... }`.
+    gradle = gradle.replace(/android\s*\{/, (m) => `${m}\n${signing}`);
+    writeFileSync(gradlePath, gradle, "utf8");
+    console.log("Pinned debug signingConfig to ci-debug.keystore.");
+  } else {
+    console.log("Debug signingConfig already pinned — nothing to do.");
+  }
+} else {
+  console.warn("ci-debug.keystore or app/build.gradle missing — skipping signing pin.");
+}
 
 const manifestPath = resolve(
   "android",
