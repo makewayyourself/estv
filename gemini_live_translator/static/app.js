@@ -39,6 +39,8 @@ const I18N = {
     "mjoin.intro": "회의에 참여합니다. 당신의 휴대폰이 마이크가 되어, 말하면 자동으로 통역·기록됩니다.",
     "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
+    "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
+    "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
@@ -88,6 +90,8 @@ const I18N = {
     "mjoin.intro": "Join the meeting. Your phone becomes a mic — speak and it's translated and logged automatically.",
     "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
+    "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
+    "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
@@ -179,6 +183,7 @@ class App {
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
      "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
+     "apkDownloadBtn","apkCopyBtn",
      "qkRoomBtn","qkSaveBtn",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
@@ -255,6 +260,10 @@ class App {
     this.el.meetSaveBtn.addEventListener("click", () => this._meetSaveNote());
     this.el.mjoinBtn.addEventListener("click", () => this._mjoinStart());
     this.el.mjoinLeaveBtn.addEventListener("click", () => this._mjoinLeave(false));
+    this.el.apkCopyBtn.addEventListener("click", () => {
+      const url = this.el.apkDownloadBtn.getAttribute("href");
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { const b = this.el.apkCopyBtn, p = b.textContent; b.textContent = t("set.apkCopied"); setTimeout(() => { b.textContent = p; }, 1500); }).catch(() => {});
+    });
 
     this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
     this.el.pauseBtn.addEventListener("click", () => this._togglePause());

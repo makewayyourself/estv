@@ -258,6 +258,14 @@
               <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
             </div>
 
+            <!-- App install (APK) — visible to everyone, for sharing with participants -->
+            <div class="rounded-xl border border-sky-900/40 bg-sky-950/10 p-3">
+              <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-sky-300" data-i18n="set.install">앱 설치 (Android)</p>
+              <p class="mb-2 text-xs text-slate-400" data-i18n="set.installHelp">최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.</p>
+              <a id="apkDownloadBtn" href="https://github.com/makewayyourself/estv/releases/download/apk-latest/app-debug.apk" download class="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 font-semibold text-white hover:bg-sky-500" data-i18n="set.apkBtn">📥 APK 다운로드</a>
+              <button id="apkCopyBtn" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700" data-i18n="set.apkCopy">🔗 다운로드 링크 복사</button>
+            </div>
+
             <!-- Operator section: hidden until the build version is tapped 5× -->
             <div id="operatorBox" hidden class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
               <p class="mb-2 text-xs text-amber-200/80" data-i18n="admin.note">서버 운영자용 설정입니다.</p>
