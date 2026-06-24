@@ -66,7 +66,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.18-k"
+APP_VERSION = "2026.06.18-l"
 
 load_dotenv()
 
@@ -765,6 +765,83 @@ async def room_join(ws: WebSocket) -> None:
         channel.subscribers.discard(ws)
         with suppress(Exception):
             await room.notify_host()
+
+
+# --- Multi-mic meeting rooms (BYOD distributed microphone array) ----------
+
+
+@app.websocket("/api/meeting/host")
+async def meeting_host(ws: WebSocket) -> None:
+    """Host opens a multi-mic meeting and picks the shared display language.
+    Requires the access token (the host spends the Gemini quota). The host is a
+    display-only 'board' showing the QR + live diarized transcript."""
+    await ws.accept()
+    room_id = (ws.query_params.get("room") or "").strip()
+    expected = (os.getenv("ACCESS_TOKEN") or "").strip()
+    if expected and not secrets.compare_digest(
+        (ws.query_params.get("token") or "").strip(), expected
+    ):
+        await _send_json(ws, {"type": "error", "message": "Unauthorized"})
+        await ws.close(code=1008)
+        return
+    if not room_id:
+        await ws.close(code=1008)
+        return
+    lang = normalize_lang(ws.query_params.get("lang"), DEFAULT_LANG_B)
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        await _send_json(ws, {"type": "error", "message": str(exc)})
+        await ws.close()
+        return
+
+    room = room_manager.create_meeting(room_id, client, lang)
+    room.displays.add(ws)
+    await _send_json(ws, {"type": "meeting_open", "lang": lang})
+    logger.info("Meeting %s opened (lang=%s)", room_id, lang)
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await room_manager.close_meeting(room_id)
+        logger.info("Meeting %s closed", room_id)
+
+
+@app.websocket("/api/meeting/join")
+async def meeting_join(ws: WebSocket) -> None:
+    """A participant joins a meeting as a labelled speaker (their socket channel
+    *is* their speaker id). They stream mic audio in and see the shared
+    diarized transcript."""
+    await ws.accept()
+    room_id = (ws.query_params.get("room") or "").strip()
+    name = (ws.query_params.get("name") or "").strip()[:24]
+    room = room_manager.get_meeting(room_id)
+    if not room:
+        await _send_json(ws, {"type": "error", "message": "Meeting not found or ended"})
+        await ws.close(code=1008)
+        return
+
+    ch, sid = await room.add_speaker(ws, name)
+    await _send_json(ws, {
+        "type": "joined_meeting", "sid": sid, "name": ch.name,
+        "lang": room.target_lang, "history": room.log[-50:],
+    })
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            data = msg.get("bytes")
+            if data:
+                await ch.feed(data)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await room.remove_speaker(sid, ws)
 
 
 # Mounted last (at the web root) so the explicit /api routes above take

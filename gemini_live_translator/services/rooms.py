@@ -133,9 +133,159 @@ class Room:
         self.channels.clear()
 
 
+# ---------------------------------------------------------------------------
+# Multi-mic "meeting" rooms (BYOD distributed microphone array)
+#
+# Each participant's phone is a microphone. The *socket channel itself* is the
+# speaker id, so no AI diarization model is needed — the server labels every
+# utterance by which channel it arrived on. Each speaker gets its own Gemini
+# Live translate session (source auto-detected, translated to the meeting's
+# shared language). The Live session is opened lazily on the first audio chunk,
+# so a participant who never speaks costs nothing (client-side VAD only sends
+# audio while they are actually talking). Captions only — no audio is played
+# back into the room, which sidesteps cross-device echo/howling entirely.
+# ---------------------------------------------------------------------------
+
+
+class SpeakerChannel:
+    """One Gemini Live translate session bound to a single speaker (one phone)."""
+
+    def __init__(self, room: "MeetingRoom", sid: str, name: str, target_lang: str) -> None:
+        self.room = room
+        self.sid = sid
+        self.name = name
+        self.target_lang = target_lang
+        self.session = None
+        self._cm = None
+        self._task: asyncio.Task | None = None
+        self._start_lock = asyncio.Lock()
+        self._src = ""
+        self._tr = ""
+
+    async def _ensure_started(self) -> None:
+        if self.session is not None:
+            return
+        async with self._start_lock:
+            if self.session is not None:
+                return
+            config = build_config(lang_b=self.target_lang)  # translate, target=meeting lang
+            self._cm = self.room.client.aio.live.connect(model=DEFAULT_MODEL, config=config)
+            self.session = await self._cm.__aenter__()
+            self._task = asyncio.create_task(self._pump_out())
+
+    async def _pump_out(self) -> None:
+        try:
+            async for resp in self.session.receive():
+                sc = resp.server_content
+                if not sc:
+                    continue
+                if sc.input_transcription and sc.input_transcription.text:
+                    self._src += sc.input_transcription.text
+                    await self.room.broadcast({
+                        "type": "diar", "phase": "partial", "sid": self.sid,
+                        "name": self.name, "role": "source", "text": sc.input_transcription.text,
+                    })
+                if sc.output_transcription and sc.output_transcription.text:
+                    self._tr += sc.output_transcription.text
+                    await self.room.broadcast({
+                        "type": "diar", "phase": "partial", "sid": self.sid,
+                        "name": self.name, "role": "translation", "text": sc.output_transcription.text,
+                    })
+                if sc.turn_complete or sc.generation_complete:
+                    src, tr = self._src.strip(), self._tr.strip()
+                    self._src = ""
+                    self._tr = ""
+                    if src or tr:
+                        await self.room.commit({
+                            "sid": self.sid, "name": self.name, "source": src, "translation": tr,
+                        })
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("speaker %s/%s ended: %s", self.room.id, self.sid, exc)
+
+    async def feed(self, pcm: bytes) -> None:
+        await self._ensure_started()
+        if self.session:
+            with suppress(Exception):
+                await self.session.send_realtime_input(
+                    audio=types.Blob(data=pcm, mime_type=INPUT_MIME_TYPE)
+                )
+
+    async def close(self) -> None:
+        if self._task:
+            self._task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._task
+        if self._cm:
+            with suppress(Exception):
+                await self._cm.__aexit__(None, None, None)
+
+
+class MeetingRoom:
+    """A multi-mic room: every participant is a labelled speaker; everyone sees
+    the shared, diarized transcript."""
+
+    def __init__(self, room_id: str, client, target_lang: str) -> None:
+        self.id = room_id
+        self.client = client
+        self.target_lang = target_lang
+        self.speakers: dict[str, SpeakerChannel] = {}
+        self.displays: set = set()  # all connected WebSockets (host + participants)
+        self.log: list[dict] = []   # committed utterances (for note export)
+        self._lock = asyncio.Lock()
+        self._n = 0
+
+    def _next_label(self) -> str:
+        self._n += 1
+        n, s = self._n, ""
+        while n > 0:
+            n, r = divmod(n - 1, 26)
+            s = chr(65 + r) + s
+        return s  # A, B, ... Z, AA, AB ...
+
+    async def add_speaker(self, ws, name: str) -> tuple[SpeakerChannel, str]:
+        async with self._lock:
+            sid = self._next_label()
+        label = name.strip() or f"화자 {sid}"
+        ch = SpeakerChannel(self, sid, label, self.target_lang)
+        self.speakers[sid] = ch
+        self.displays.add(ws)
+        await self.broadcast({"type": "roster", "speakers": self.roster()})
+        return ch, sid
+
+    async def remove_speaker(self, sid: str, ws) -> None:
+        self.displays.discard(ws)
+        ch = self.speakers.pop(sid, None)
+        if ch:
+            await ch.close()
+        with suppress(Exception):
+            await self.broadcast({"type": "roster", "speakers": self.roster()})
+
+    def roster(self) -> list[dict]:
+        return [{"sid": s.sid, "name": s.name} for s in self.speakers.values()]
+
+    async def broadcast(self, payload: dict) -> None:
+        text = json.dumps(payload, ensure_ascii=False)
+        for ws in list(self.displays):
+            with suppress(Exception):
+                await ws.send_text(text)
+
+    async def commit(self, utt: dict) -> None:
+        self.log.append(utt)
+        await self.broadcast({"type": "diar", "phase": "final", **utt})
+
+    async def close(self) -> None:
+        with suppress(Exception):
+            await self.broadcast({"type": "meeting_ended"})
+        for ch in list(self.speakers.values()):
+            await ch.close()
+        self.speakers.clear()
+        self.displays.clear()
+
+
 class RoomManager:
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
+        self.meetings: dict[str, MeetingRoom] = {}
 
     def create(self, room_id: str, client) -> Room:
         room = Room(room_id, client)
@@ -149,6 +299,19 @@ class RoomManager:
         room = self.rooms.pop(room_id, None)
         if room:
             await room.close()
+
+    def create_meeting(self, room_id: str, client, target_lang: str) -> MeetingRoom:
+        m = MeetingRoom(room_id, client, target_lang)
+        self.meetings[room_id] = m
+        return m
+
+    def get_meeting(self, room_id: str) -> MeetingRoom | None:
+        return self.meetings.get(room_id)
+
+    async def close_meeting(self, room_id: str) -> None:
+        m = self.meetings.pop(room_id, None)
+        if m:
+            await m.close()
 
 
 manager = RoomManager()

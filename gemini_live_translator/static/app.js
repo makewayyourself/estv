@@ -30,6 +30,15 @@ const I18N = {
     "room.copy": "복사", "room.participants": "참여자", "room.stop": "방 종료",
     "join.intro": "통역 방에 참여합니다. 들을 언어를 선택하세요.", "join.lang": "듣기 언어", "join.go": "🎧 참여하고 듣기",
     "join.listening": "듣는 중", "join.leave": "나가기",
+    "home.meet": "다화자 회의 (QR 마이크)", "home.meetDesc": "참가자 폰이 각자 마이크 · 화자별 자막 자동 구분",
+    "title.meet": "다화자 회의", "title.mjoin": "회의 참여 (마이크)",
+    "meet.intro": "참가자들이 각자 휴대폰을 마이크로 사용합니다. 누가 말했는지 자동으로 구분되어 화자별 자막으로 표시됩니다.",
+    "meet.lang": "공용 표시(번역) 언어", "meet.start": "👥 회의 시작 (QR 띄우기)",
+    "meet.scan": "참가자가 이 QR을 스캔하면 자기 폰이 마이크가 됩니다.",
+    "meet.save": "💾 노트로 저장", "meet.stop": "회의 종료", "meet.noteTitle": "다화자 회의",
+    "mjoin.intro": "회의에 참여합니다. 당신의 휴대폰이 마이크가 되어, 말하면 자동으로 통역·기록됩니다.",
+    "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
+    "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
@@ -70,6 +79,15 @@ const I18N = {
     "room.copy": "Copy", "room.participants": "Participants", "room.stop": "End room",
     "join.intro": "Join an interpreting room. Choose the language to hear.", "join.lang": "Listen in", "join.go": "🎧 Join & listen",
     "join.listening": "Listening", "join.leave": "Leave",
+    "home.meet": "Multi-speaker meeting (QR mics)", "home.meetDesc": "Each phone is a mic · captions auto-labelled by speaker",
+    "title.meet": "Multi-speaker meeting", "title.mjoin": "Join meeting (mic)",
+    "meet.intro": "Each participant uses their own phone as a microphone. Who said what is detected automatically and shown as per-speaker captions.",
+    "meet.lang": "Shared display (translation) language", "meet.start": "👥 Start meeting (show QR)",
+    "meet.scan": "When a participant scans this QR, their phone becomes a microphone.",
+    "meet.save": "💾 Save as note", "meet.stop": "End meeting", "meet.noteTitle": "Multi-speaker meeting",
+    "mjoin.intro": "Join the meeting. Your phone becomes a mic — speak and it's translated and logged automatically.",
+    "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
+    "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
@@ -141,8 +159,10 @@ class App {
     this._applyAppearance();
     this._populateLangs();
     this._refreshHealth();
-    const room = new URLSearchParams(location.search).get("room");
-    if (room) this.show("join", { room });
+    const qs = new URLSearchParams(location.search);
+    const room = qs.get("room"), meet = qs.get("meet");
+    if (meet) this.show("mjoin", { room: meet });
+    else if (room) this.show("join", { room });
     else this.show("home");
   }
 
@@ -157,6 +177,8 @@ class App {
      "homeVer","verInfo",
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
+     "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
+     "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
      "qkRoomBtn","qkSaveBtn",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
@@ -172,6 +194,8 @@ class App {
     // leaving a recording-capable view while live → stop / close connections
     if (this.view === "room" && view !== "room") this._roomStop(true);
     if (this.view === "join" && view !== "join") this._joinLeave(true);
+    if (this.view === "meet" && view !== "meet") this._meetStop(true);
+    if (this.view === "mjoin" && view !== "mjoin") this._mjoinLeave(true);
     if (this.running && view !== this.view) this.stop();
     if (this._focusOn) this._exitFocus();
 
@@ -203,6 +227,8 @@ class App {
       if (view === "notes") this._renderNotesList();
       if (view === "room") { this.el.roomIdle.hidden = false; this.el.roomLive.hidden = true; }
       if (view === "join") this._joinSetup(opts.room || this.joinRoom);
+      if (view === "meet") this._meetSetup();
+      if (view === "mjoin") this._mjoinSetup(opts.room || this.meetRoom);
     }
     if (view === "home") this.el.viewTitle.innerHTML = `<span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">${t("title.home")}</span>`;
     this._refreshToggle();
@@ -222,6 +248,13 @@ class App {
     this.el.roomCopyBtn.addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(this.el.roomLink.value).catch(() => {}); });
     this.el.joinBtn.addEventListener("click", () => this._joinStart());
     this.el.joinLeaveBtn.addEventListener("click", () => this._joinLeave(false));
+    // multi-mic meeting (diarized)
+    this.el.meetStartBtn.addEventListener("click", () => this._meetStart());
+    this.el.meetStopBtn.addEventListener("click", () => this._meetStop(false));
+    this.el.meetCopyBtn.addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(this.el.meetLink.value).catch(() => {}); });
+    this.el.meetSaveBtn.addEventListener("click", () => this._meetSaveNote());
+    this.el.mjoinBtn.addEventListener("click", () => this._mjoinStart());
+    this.el.mjoinLeaveBtn.addEventListener("click", () => this._mjoinLeave(false));
 
     this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
     this.el.pauseBtn.addEventListener("click", () => this._togglePause());
@@ -679,6 +712,7 @@ class App {
   }
   async _teardown() {
     if (this._turnTimer) this._finalizeTurn();
+    this._audioSink = null;
     if (this.workletNode) { this.workletNode.port.onmessage = null; this.workletNode.disconnect(); this.workletNode = null; }
     if (this.micSource) { this.micSource.disconnect(); this.micSource = null; }
     if (this.mediaStream) { this.mediaStream.getTracks().forEach((x) => x.stop()); this.mediaStream = null; }
@@ -740,7 +774,11 @@ class App {
     await this.captureContext.audioWorklet.addModule("./audio-processor.js");
     this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
     this.workletNode = new AudioWorkletNode(this.captureContext, "pcm-capture-processor");
-    this.workletNode.port.onmessage = (e) => { if (!this.paused && this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(e.data); };
+    this.workletNode.port.onmessage = (e) => {
+      if (this.paused) return;
+      if (this._audioSink) return this._audioSink(e.data);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(e.data);
+    };
     this.micSource.connect(this.workletNode);
     const sink = this.captureContext.createGain(); sink.gain.value = 0;
     this.workletNode.connect(sink); sink.connect(this.captureContext.destination);
@@ -948,6 +986,161 @@ class App {
     if (!this[key]) { const w = this._bubble(role, ""); this.el.joinTranscript.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
     this.el.joinTranscript.scrollTop = this.el.joinTranscript.scrollHeight;
+  }
+
+  // ---- multi-mic meeting (diarized; channel = speaker) --------------------
+  _meetSetup() {
+    if (!this.el.meetLang.options.length) {
+      for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; this.el.meetLang.appendChild(o); }
+      this.el.meetLang.value = localStorage.getItem("langB") || DEFAULT_LANG_B;
+    }
+    this.el.meetIdle.hidden = false; this.el.meetLive.hidden = true;
+  }
+  async _meetStart() {
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const id = Math.random().toString(36).slice(2, 8);
+    this.meetId = id; this._meetLog = []; this._diarTurn = {};
+    const lang = this.el.meetLang.value, tok = this._token();
+    const url = `${this._wsBase()}/api/meeting/host?room=${id}&lang=${lang}${tok ? `&token=${encodeURIComponent(tok)}` : ""}`;
+    this.el.meetStartBtn.disabled = true;
+    try {
+      await new Promise((res, rej) => {
+        const ws = new WebSocket(url);
+        ws.onopen = () => res();
+        ws.onerror = () => rej(new Error(t("st.cantReach")));
+        ws.onmessage = (e) => this._onMeetMsg(e);
+        ws.onclose = (ev) => { if (this.meetHostWs) { this.meetHostWs = null; if (this.view === "meet") this._setStatus("error", ev.code === 1008 ? t("st.tokenBad") : t("st.roomEnded")); } };
+        this.meetHostWs = ws;
+      });
+      this._diarTranscript = this.el.meetTranscript; this.el.meetTranscript.innerHTML = "";
+      const link = `${base}/?meet=${id}`;
+      this.el.meetLink.value = link;
+      if (window.QRCode) window.QRCode.toCanvas(this.el.meetQr, link, { width: 200, margin: 1 }, () => {});
+      this.el.meetRoster.innerHTML = "";
+      this.el.meetIdle.hidden = true; this.el.meetLive.hidden = false;
+      this._setStatus("live", t("st.hosting"));
+    } catch (e) { this._setStatus("error", e.message); }
+    finally { this.el.meetStartBtn.disabled = false; }
+  }
+  _meetStop(silent) {
+    const ws = this.meetHostWs; this.meetHostWs = null;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    this.el.meetLive.hidden = true; this.el.meetIdle.hidden = false;
+    if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+  _onMeetMsg(e) {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "diar") this._onDiar(m);
+    else if (m.type === "roster") this._renderRoster(m.speakers);
+    else if (m.type === "error") this._setStatus("error", m.message);
+  }
+  _meetSaveNote() {
+    if (!this._meetLog || !this._meetLog.length) { this._setStatus("live", t("msg.nothingSave")); return; }
+    const log = this._meetLog.map((e) => ({ t: e.t, source: `${e.name}: ${e.source}`, translation: e.translation }));
+    const title = (this._meetLog[0] && this._meetLog[0].source ? this._meetLog[0].source.slice(0, 24) : t("meet.noteTitle"));
+    this.notes.unshift({ id: "n" + Date.now(), title, createdAt: Date.now(), updatedAt: Date.now(), log, summary: "", topic: "" });
+    this._saveNotes();
+    this._setStatus("live", t("st.savedNote"));
+  }
+
+  // participant side (a microphone)
+  _mjoinSetup(roomId) {
+    this.meetRoom = roomId;
+    this.el.mjoinName.value = localStorage.getItem("mjoinName") || "";
+    this.el.mjoinForm.hidden = false; this.el.mjoinLive.hidden = true;
+  }
+  async _mjoinStart() {
+    const base = this._serverBase(); if (!base) return this._setStatus("error", t("st.setServer"));
+    const name = this.el.mjoinName.value.trim(); localStorage.setItem("mjoinName", name);
+    const url = `${this._wsBase()}/api/meeting/join?room=${this.meetRoom}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
+    this.el.mjoinBtn.disabled = true;
+    this._meetLog = []; this._diarTurn = {};
+    try {
+      await new Promise((res, rej) => {
+        const ws = new WebSocket(url);
+        ws.onopen = () => res();
+        ws.onerror = () => rej(new Error(t("st.roomEnded")));
+        ws.onmessage = (e) => this._onMjoinMsg(e);
+        ws.onclose = () => { if (this.meetWs) { this.meetWs = null; if (this.view === "mjoin") { this._setStatus("error", t("st.roomEnded")); this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false; this._teardown(); } } };
+        this.meetWs = ws;
+      });
+      this._diarTranscript = this.el.mjoinTranscript; this.el.mjoinTranscript.innerHTML = "";
+      // VAD-gated mic: only send audio while actually speaking → no idle cost
+      this._vadUntil = 0;
+      this._audioSink = (buf) => {
+        if (this._vadGate(buf) && this.meetWs && this.meetWs.readyState === WebSocket.OPEN) this.meetWs.send(buf);
+      };
+      await this._startCapture();
+      this.el.mjoinForm.hidden = true; this.el.mjoinLive.hidden = false;
+      this._setStatus("live", t("st.joined"));
+    } catch (e) { this._setStatus("error", e.message); this.meetWs = null; }
+    finally { this.el.mjoinBtn.disabled = false; }
+  }
+  _onMjoinMsg(e) {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "joined_meeting") {
+      this.el.mjoinLabel.textContent = m.name || m.sid;
+      if (Array.isArray(m.history)) m.history.forEach((u) => this._onDiar({ ...u, phase: "final" }));
+    } else if (m.type === "diar") this._onDiar(m);
+    else if (m.type === "meeting_ended") { this._setStatus("idle", t("st.roomEnded")); this._mjoinLeave(true); }
+    else if (m.type === "error") this._setStatus("error", m.message);
+  }
+  _mjoinLeave(silent) {
+    const ws = this.meetWs; this.meetWs = null;
+    this._teardown();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false;
+    if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+  _vadGate(buf) {
+    const pcm = new Int16Array(buf); let sum = 0;
+    for (let i = 0; i < pcm.length; i++) { const v = pcm[i] / 0x8000; sum += v * v; }
+    const rms = Math.sqrt(sum / pcm.length);
+    const now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (rms > 0.018) this._vadUntil = now + 700; // speaking → 700ms hangover so word tails aren't cut
+    const active = now < (this._vadUntil || 0);
+    if (this.el.mjoinSpeak) this.el.mjoinSpeak.style.opacity = active ? "1" : "0.2";
+    return active;
+  }
+
+  // ---- diarized transcript (shared by host board + participant) ----------
+  _speakerColor(sid) {
+    const pal = ["border-sky-500/40 bg-sky-500/5","border-emerald-500/40 bg-emerald-500/5","border-amber-500/40 bg-amber-500/5","border-fuchsia-500/40 bg-fuchsia-500/5","border-rose-500/40 bg-rose-500/5","border-indigo-500/40 bg-indigo-500/5"];
+    const i = (sid.charCodeAt(0) - 65 + (sid.length - 1) * 7) % pal.length;
+    return pal[(i + pal.length) % pal.length];
+  }
+  _diarCard(m) {
+    const card = document.createElement("div");
+    card.className = "rounded-xl border p-2.5 " + this._speakerColor(m.sid);
+    const head = document.createElement("div"); head.className = "mb-1 text-xs font-semibold text-slate-300"; head.textContent = m.name || ("화자 " + m.sid);
+    const src = document.createElement("div"); src.className = "diar-src text-sm text-slate-200";
+    const tr = document.createElement("div"); tr.className = "diar-tr mt-0.5 text-sm font-medium text-sky-300";
+    card.append(head, src, tr);
+    return card;
+  }
+  _onDiar(m) {
+    const cont = this._diarTranscript; if (!cont) return;
+    let turn = this._diarTurn[m.sid];
+    if (!turn) { const c = this._diarCard(m); cont.appendChild(c); turn = this._diarTurn[m.sid] = { card: c }; }
+    const srcEl = turn.card.querySelector(".diar-src"), trEl = turn.card.querySelector(".diar-tr");
+    if (m.phase === "final") {
+      srcEl.textContent = m.source || ""; trEl.textContent = m.translation || "";
+      delete this._diarTurn[m.sid];
+      (this._meetLog || (this._meetLog = [])).push({ name: m.name, source: m.source || "", translation: m.translation || "", t: Date.now() });
+    } else {
+      (m.role === "translation" ? trEl : srcEl).textContent += m.text;
+    }
+    cont.scrollTop = cont.scrollHeight;
+  }
+  _renderRoster(speakers) {
+    if (!this.el.meetRoster) return;
+    this.el.meetRoster.innerHTML = "";
+    (speakers || []).forEach((s) => {
+      const chip = document.createElement("span");
+      chip.className = "rounded-full border px-2 py-0.5 text-xs " + this._speakerColor(s.sid);
+      chip.textContent = s.name || ("화자 " + s.sid);
+      this.el.meetRoster.appendChild(chip);
+    });
   }
 }
 

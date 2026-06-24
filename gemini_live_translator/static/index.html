@@ -74,6 +74,14 @@
               </span>
               <span class="text-slate-600">›</span>
             </button>
+            <button data-go="meet" class="card flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left hover:border-indigo-500/60 hover:shadow-lg hover:shadow-indigo-500/5">
+              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-2xl">👥</span>
+              <span class="flex-1">
+                <span class="block font-semibold" data-i18n="home.meet">다화자 회의 (QR 마이크)</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.meetDesc">참가자 폰이 각자 마이크 · 화자별 자막 자동 구분</span>
+              </span>
+              <span class="text-slate-600">›</span>
+            </button>
             <button data-go="notes" class="card flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left hover:border-indigo-500/60 hover:shadow-lg hover:shadow-indigo-500/5">
               <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-2xl">📝</span>
               <span class="flex-1">
@@ -307,6 +315,56 @@
               <button id="joinLeaveBtn" class="rounded border border-slate-700 bg-slate-800 px-2 py-1 hover:bg-slate-700" data-i18n="join.leave">나가기</button>
             </div>
             <div id="joinTranscript" class="scroll-thin fs-md min-h-[60vh] space-y-3"></div>
+          </div>
+        </section>
+
+        <!-- ============ MEETING (host board, multi-mic) ============ -->
+        <section data-view="meet" hidden>
+          <div id="meetIdle">
+            <p class="mb-4 text-sm text-slate-400" data-i18n="meet.intro">
+              참가자들이 각자 휴대폰을 마이크로 사용합니다. 누가 말했는지 자동으로 구분되어
+              화자별 자막으로 표시됩니다. 아래는 모두가 함께 보는 <b>공용 표시 언어</b>입니다.
+            </p>
+            <label class="mb-1 block text-sm font-medium text-slate-400" data-i18n="meet.lang">공용 표시(번역) 언어</label>
+            <select id="meetLang" class="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none"></select>
+            <button id="meetStartBtn" class="w-full rounded-xl bg-sky-600 px-4 py-3 font-semibold text-white hover:bg-sky-500" data-i18n="meet.start">👥 회의 시작 (QR 띄우기)</button>
+          </div>
+          <div id="meetLive" hidden>
+            <div class="text-center">
+              <canvas id="meetQr" class="mx-auto rounded-lg bg-white p-2"></canvas>
+              <p class="mt-2 text-sm text-slate-400" data-i18n="meet.scan">참가자가 이 QR을 스캔하면 자기 폰이 마이크가 됩니다.</p>
+              <div class="mt-2 flex gap-2">
+                <input id="meetLink" readonly class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200" />
+                <button id="meetCopyBtn" class="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700" data-i18n="room.copy">복사</button>
+              </div>
+            </div>
+            <div id="meetRoster" class="mt-3 flex flex-wrap gap-1.5"></div>
+            <div id="meetTranscript" class="scroll-thin fs-md mt-3 min-h-[40vh] space-y-2"></div>
+            <div class="mt-3 flex gap-2">
+              <button id="meetSaveBtn" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 font-semibold text-slate-200 hover:bg-slate-700" data-i18n="meet.save">💾 노트로 저장</button>
+              <button id="meetStopBtn" class="flex-1 rounded-xl border border-rose-900/50 bg-rose-950/30 px-4 py-3 font-semibold text-rose-300 hover:bg-rose-950/60" data-i18n="meet.stop">회의 종료</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ MEETING JOIN (participant = a microphone) ============ -->
+        <section data-view="mjoin" hidden>
+          <div id="mjoinForm">
+            <p class="mb-3 text-sm text-slate-400" data-i18n="mjoin.intro">회의에 참여합니다. 당신의 휴대폰이 마이크가 되어, 말하면 자동으로 통역·기록됩니다.</p>
+            <label class="mb-1 block text-sm font-medium text-slate-400" data-i18n="mjoin.name">표시 이름 (선택)</label>
+            <input id="mjoinName" maxlength="24" data-i18n-ph="mjoin.namePh" placeholder="예: 홍길동 / 영업팀" class="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+            <button id="mjoinBtn" class="w-full rounded-xl bg-sky-600 px-4 py-3 font-semibold text-white hover:bg-sky-500" data-i18n="mjoin.go">🎙️ 참여하고 말하기</button>
+          </div>
+          <div id="mjoinLive" hidden>
+            <div class="mb-2 flex items-center justify-between text-xs text-slate-400">
+              <span><span data-i18n="mjoin.you">당신</span> · <span id="mjoinLabel" class="font-semibold text-sky-400"></span></span>
+              <button id="mjoinLeaveBtn" class="rounded border border-slate-700 bg-slate-800 px-2 py-1 hover:bg-slate-700" data-i18n="join.leave">나가기</button>
+            </div>
+            <div class="mb-3 flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 py-3">
+              <span id="mjoinSpeak" class="inline-block h-3 w-3 rounded-full bg-emerald-500 opacity-20 transition"></span>
+              <span class="text-sm text-slate-300" data-i18n="mjoin.speak">말하면 자동으로 전송됩니다</span>
+            </div>
+            <div id="mjoinTranscript" class="scroll-thin fs-md min-h-[45vh] space-y-2"></div>
           </div>
         </section>
       </main>
