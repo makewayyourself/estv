@@ -43,6 +43,7 @@ const I18N = {
     "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
+    "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
     "note.tabFeedback": "피드백", "note.feedbackBtn": "📊 피드백 생성 / 갱신",
@@ -96,6 +97,7 @@ const I18N = {
     "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
+    "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
     "note.tabFeedback": "Feedback", "note.feedbackBtn": "📊 Generate / refresh feedback",
@@ -949,13 +951,15 @@ class App {
     const tok = this._token();
     const url = `${this._wsBase()}/api/room/host?room=${id}${tok ? `&token=${encodeURIComponent(tok)}` : ""}`;
     this.el.roomStartBtn.disabled = true;
+    this._setStatus("connecting", t("st.waking"));
     try {
       await new Promise((res, rej) => {
         const ws = new WebSocket(url); ws.binaryType = "arraybuffer";
-        ws.onopen = () => res();
-        ws.onerror = () => rej(new Error(t("st.cantReach")));
+        const to = setTimeout(() => { try { ws.close(); } catch (_) {} rej(new Error(t("st.timeout"))); }, 30000);
+        ws.onopen = () => { clearTimeout(to); res(); };
+        ws.onerror = () => { clearTimeout(to); rej(new Error(t("st.cantReach"))); };
         ws.onmessage = (e) => { try { const m = JSON.parse(e.data); if (m.type === "participants") this.el.roomCount.textContent = m.count; else if (m.type === "error") this._setStatus("error", m.message); } catch {} };
-        ws.onclose = () => { if (this.hostWs) this._roomStop(true); };
+        ws.onclose = () => { clearTimeout(to); if (this.hostWs) this._roomStop(true); };
         this.hostWs = ws;
       });
       this.ws = this.hostWs; this.running = true; this.paused = false;
@@ -1045,13 +1049,15 @@ class App {
     const lang = this.el.meetLang.value, tok = this._token();
     const url = `${this._wsBase()}/api/meeting/host?room=${id}&lang=${lang}${tok ? `&token=${encodeURIComponent(tok)}` : ""}`;
     this.el.meetStartBtn.disabled = true;
+    this._setStatus("connecting", t("st.waking"));
     try {
       await new Promise((res, rej) => {
         const ws = new WebSocket(url);
-        ws.onopen = () => res();
-        ws.onerror = () => rej(new Error(t("st.cantReach")));
+        const to = setTimeout(() => { try { ws.close(); } catch (_) {} rej(new Error(t("st.timeout"))); }, 30000);
+        ws.onopen = () => { clearTimeout(to); res(); };
+        ws.onerror = () => { clearTimeout(to); rej(new Error(t("st.cantReach"))); };
         ws.onmessage = (e) => this._onMeetMsg(e);
-        ws.onclose = (ev) => { if (this.meetHostWs) { this.meetHostWs = null; if (this.view === "meet") this._setStatus("error", ev.code === 1008 ? t("st.tokenBad") : t("st.roomEnded")); } };
+        ws.onclose = (ev) => { clearTimeout(to); if (this.meetHostWs) { this.meetHostWs = null; if (this.view === "meet") this._setStatus("error", ev.code === 1008 ? t("st.tokenBad") : t("st.roomEnded")); } };
         this.meetHostWs = ws;
       });
       this._diarTranscript = this.el.meetTranscript; this.el.meetTranscript.innerHTML = "";
