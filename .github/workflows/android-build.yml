@@ -24,6 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Use a fixed debug keystore (so updates install over old builds)
+        # Without this, Gradle generates a fresh random debug key every run, so
+        # each APK has a different signature and Android refuses to install a new
+        # build over a previously-installed one ("App not installed").
+        run: |
+          mkdir -p ~/.android
+          cp ci-debug.keystore ~/.android/debug.keystore
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
