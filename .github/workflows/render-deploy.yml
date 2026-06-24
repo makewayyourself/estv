@@ -1,0 +1,41 @@
+name: Deploy to Render
+
+# Triggers a Render deploy of the backend by calling the service's Deploy Hook.
+# Runs on every push to main that touches the app, and can be run manually from
+# the Actions tab (Run workflow).
+#
+# One-time setup (required):
+#   1. Render dashboard → the "interpretation" service → Settings → Deploy Hook
+#      → copy the URL (looks like https://api.render.com/deploy/srv-XXXX?key=YYYY)
+#   2. GitHub repo → Settings → Secrets and variables → Actions → New repository
+#      secret → name: RENDER_DEPLOY_HOOK, value: the URL from step 1
+#
+# After that, this runs on GitHub's infrastructure (not blocked) and tells
+# Render to redeploy the latest commit.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "gemini_live_translator/**"
+      - "render.yaml"
+      - ".github/workflows/render-deploy.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          if [ -z "${RENDER_DEPLOY_HOOK}" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK secret is not set. Add it in repo Settings → Secrets and variables → Actions (see this file's header)."
+            exit 1
+          fi
+          echo "Calling Render deploy hook…"
+          code=$(curl -fsS -w "%{http_code}" -o /tmp/resp -X POST "${RENDER_DEPLOY_HOOK}") || { echo "curl failed"; cat /tmp/resp || true; exit 1; }
+          echo "Render responded HTTP ${code}"
+          cat /tmp/resp || true
+          echo "Deploy triggered. Watch progress in the Render dashboard (Deploys tab)."
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
