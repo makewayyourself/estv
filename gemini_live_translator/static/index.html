@@ -6,20 +6,32 @@
     <title>Gemini Live Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
+      :root { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+      body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
       .pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
       @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(.82)} }
+      @keyframes slideUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+      .slide-up { animation: slideUp .22s ease-out; }
       .scroll-thin { scrollbar-width: thin; scrollbar-color: #3f3f5f transparent; }
       .scroll-thin::-webkit-scrollbar { width: 6px; }
       .scroll-thin::-webkit-scrollbar-thumb { background: #3f3f5f; border-radius: 3px; }
       [data-view][hidden] { display: none; }
-      /* font scale on transcript areas */
       .fs-sm { font-size: 0.9rem; } .fs-md { font-size: 1rem; } .fs-lg { font-size: 1.15rem; } .fs-xl { font-size: 1.3rem; }
+      /* Brand gradient + primary button */
+      .grad-text { background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc); -webkit-background-clip:text; background-clip:text; color:transparent; }
+      .btn-primary { background:linear-gradient(90deg,#4f46e5,#6366f1); box-shadow:0 6px 20px -6px rgba(79,70,229,.6); }
+      .btn-primary:hover { filter:brightness(1.08); }
+      .card { transition: border-color .15s, transform .15s, box-shadow .15s; }
+      .card:hover { transform: translateY(-1px); }
 
       /* Light theme overrides */
-      body.light { background:#eef2f7; color:#0f172a; }
+      body.light { background:#f4f6fb; color:#0f172a; }
       body.light .bg-slate-950,body.light .bg-slate-900,body.light .bg-slate-900\/60{background:#fff!important}
       body.light .bg-slate-950\/60,body.light .bg-slate-950\/50,body.light .bg-slate-800{background:#f1f5f9!important}
+      body.light .bg-slate-950\/90{background:rgba(255,255,255,.9)!important}
       body.light .border-slate-800,body.light .border-slate-700{border-color:#e2e8f0!important}
       body.light .text-slate-100,body.light .text-slate-200{color:#0f172a!important}
       body.light .text-slate-300{color:#334155!important}
@@ -47,46 +59,47 @@
       <main class="flex-1 px-4 py-5">
         <!-- ============ HOME ============ -->
         <section data-view="home">
+          <!-- Hero -->
+          <div class="mb-6 mt-2 text-center">
+            <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl btn-primary text-2xl">🎧</div>
+            <h2 class="text-2xl font-extrabold tracking-tight"><span class="grad-text">Gemini Live Translator</span></h2>
+            <p class="mt-1 text-sm text-slate-400" data-i18n="home.tagline">실시간 통역 · 자동 언어 감지 · 다국어 자막</p>
+          </div>
           <div class="space-y-3">
-            <button data-go="translate" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
-              <span class="text-3xl">🎙️</span>
+            <button data-go="translate" class="card flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left hover:border-indigo-500/60 hover:shadow-lg hover:shadow-indigo-500/5">
+              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-2xl">🎙️</span>
               <span class="flex-1">
-                <span class="block font-semibold" data-i18n="home.translate">빠른 통역</span>
-                <span class="block text-sm text-slate-400" data-i18n="home.translateDesc">즉석 실시간 통역·자막 (저장 안 함)</span>
+                <span class="block font-semibold" data-i18n="home.translate">실시간 통역</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.translateDesc">즉석 통역·자막 · 방 만들기(QR) · 저장</span>
               </span>
               <span class="text-slate-600">›</span>
             </button>
-            <button data-go="notes" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
-              <span class="text-3xl">📝</span>
+            <button data-go="notes" class="card flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left hover:border-indigo-500/60 hover:shadow-lg hover:shadow-indigo-500/5">
+              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-2xl">📝</span>
               <span class="flex-1">
                 <span class="block font-semibold" data-i18n="home.notes">회의 노트</span>
                 <span class="block text-sm text-slate-400" data-i18n="home.notesDesc">녹음·기록·요약 · 주제/날짜로 검색</span>
               </span>
               <span class="text-slate-600">›</span>
             </button>
-            <button data-go="settings" class="flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:border-indigo-500/60">
-              <span class="text-3xl">⚙️</span>
+            <button data-go="settings" class="card flex w-full items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left hover:border-indigo-500/60 hover:shadow-lg hover:shadow-indigo-500/5">
+              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-500/15 text-2xl">⚙️</span>
               <span class="flex-1">
                 <span class="block font-semibold" data-i18n="home.settings">설정</span>
-                <span class="block text-sm text-slate-400" data-i18n="home.settingsDesc">언어·테마·서버·표시언어·보기모드</span>
+                <span class="block text-sm text-slate-400" data-i18n="home.settingsDesc">언어·테마·AI 보조·서버 (운영자)</span>
               </span>
               <span class="text-slate-600">›</span>
             </button>
           </div>
-          <p class="mt-6 text-center text-xs text-slate-600" data-i18n="home.tagline">
-            Gemini Live Translator · 자동 언어 감지 · 다국어 자막
-          </p>
-          <p class="mt-1 text-center text-[10px] text-slate-700">build <span id="homeVer">—</span></p>
+          <p class="mt-6 text-center text-[10px] text-slate-700">build <span id="homeVer">—</span></p>
         </section>
 
         <!-- ============ TRANSLATE (quick) ============ -->
         <section data-view="translate" hidden>
           <div class="mb-3 flex gap-2">
-            <button id="qkRoomBtn" class="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
-            <button id="qkSaveBtn" class="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.save">💾 노트로 저장</button>
+            <button id="qkRoomBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
+            <button id="qkSaveBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.save">💾 노트로 저장</button>
           </div>
-          <div id="qkClarify" class="mb-3 hidden rounded-xl border border-sky-500/60 bg-sky-950/40 p-3 text-sky-100"></div>
-          <div id="qkRisk" class="mb-3 hidden rounded-xl border p-3"></div>
           <div id="qkTranscript" class="scroll-thin fs-md min-h-[50vh] space-y-3">
             <p class="qk-ph mt-10 text-center text-sm text-slate-600" data-i18n="tr.ph">
               아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.
@@ -144,8 +157,6 @@
           </div>
 
           <div data-pane="log">
-            <div id="noteClarify" class="mb-3 hidden rounded-xl border border-sky-500/60 bg-sky-950/40 p-3 text-sky-100"></div>
-            <div id="noteRisk" class="mb-3 hidden rounded-xl border p-3"></div>
             <div id="noteTranscript" class="scroll-thin fs-md min-h-[40vh] space-y-3">
               <p class="note-ph mt-10 text-center text-sm text-slate-600" data-i18n="note.ph">
                 아래 <b>시작</b>을 누르면 녹음·통역이 시작되고 여기에 기록됩니다.
@@ -282,6 +293,8 @@
 
       <!-- ============ BOTTOM CONTROL BAR (translate + note) ============ -->
       <div id="controlBar" hidden class="sticky bottom-0 z-20 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
+        <!-- Live assist cards (answer suggestion · expression upgrade · note · clarify) -->
+        <div id="assistCards" class="mb-2 space-y-2"></div>
         <div class="mb-2 flex items-center justify-center gap-2">
           <button id="modeAudioBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.audio">🔊 음성+자막</button>
           <button id="modeTextBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.text">📝 자막만</button>

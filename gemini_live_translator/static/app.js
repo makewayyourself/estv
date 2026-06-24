@@ -124,7 +124,7 @@ class App {
 
     // active view targets (set on navigation)
     this.view = "home";
-    this.transcriptEl = null; this.riskEl = null; this.clarifyEl = null;
+    this.transcriptEl = null;
 
     this._cache();
     this._bind();
@@ -141,7 +141,7 @@ class App {
     ["backBtn","viewTitle","statusDot","statusText","controlBar","newNoteBtn",
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
      "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn",
-     "qkTranscript","qkRisk","qkClarify","noteTranscript","noteRisk","noteClarify",
+     "qkTranscript","noteTranscript","assistCards",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
      "homeVer","verInfo",
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
@@ -176,13 +176,13 @@ class App {
 
     if (view === "translate") {
       this.context = "quick"; this.quickLog = []; this._clearTranscript(this.el.qkTranscript, "qk-ph");
-      this.transcriptEl = this.el.qkTranscript; this.riskEl = this.el.qkRisk; this.clarifyEl = this.el.qkClarify;
+      this.transcriptEl = this.el.qkTranscript; this._clearAssist();
       this._setMode(localStorage.getItem("audioOutput") !== "0", true);
       this.el.viewTitle.innerHTML = t("title.translate");
     } else if (view === "note") {
       this.context = "note"; this.activeNoteId = opts.id;
       this.audioOutput = false; // notes never play audio
-      this.transcriptEl = this.el.noteTranscript; this.riskEl = this.el.noteRisk; this.clarifyEl = this.el.noteClarify;
+      this.transcriptEl = this.el.noteTranscript; this._clearAssist();
       this._openNote(opts.id);
     } else {
       this.el.viewTitle.textContent = t("title." + view);
@@ -397,11 +397,14 @@ class App {
   _bubble(role, text) {
     const isTr = role === "translation";
     const wrap = document.createElement("div"); wrap.dataset.row = "1";
-    wrap.className = isTr ? "flex justify-end" : "flex justify-start";
+    wrap.className = isTr ? "flex flex-col items-end" : "flex flex-col items-start";
+    const tag = document.createElement("span");
+    tag.className = "mb-0.5 px-1 text-[10px] font-semibold uppercase tracking-wide " + (isTr ? "text-indigo-300" : "text-slate-500");
+    tag.textContent = isTr ? (UI_LANG === "ko" ? "번역" : "Translation") : (UI_LANG === "ko" ? "원문" : "Source");
     const b = document.createElement("div");
-    b.className = isTr ? "max-w-[85%] rounded-2xl rounded-tr-sm bg-indigo-600/90 px-4 py-2.5 text-white"
-                       : "max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800 px-4 py-2.5 text-slate-200";
-    b.textContent = text; wrap.appendChild(b); return wrap;
+    b.className = isTr ? "max-w-[85%] rounded-2xl rounded-tr-sm bg-indigo-600/90 px-4 py-2.5 text-white shadow-sm"
+                       : "max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800 px-4 py-2.5 text-slate-200 shadow-sm";
+    b.textContent = text; wrap.appendChild(tag); wrap.appendChild(b); return wrap;
   }
   _showRole(role) {
     // View-mode only filters meeting notes; Quick Translate always shows all.
@@ -439,7 +442,7 @@ class App {
     this._turnTimer = setTimeout(() => this._finalizeTurn(), 1800);
     if (!this._showRole(role)) return;
     const key = role === "translation" ? "_trLine" : "_srcLine";
-    if (!this[key]) { const w = this._bubble(role, ""); this.transcriptEl.appendChild(w); this[key] = w.firstChild; }
+    if (!this[key]) { const w = this._bubble(role, ""); this.transcriptEl.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
     this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
   }
@@ -519,18 +522,55 @@ class App {
     w.innerHTML = h; this.transcriptEl.appendChild(w);
     this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
   }
+  /**
+   * Push a live assist card into the shared stack (above the control bar).
+   * type → accent color. Keeps at most 3 cards (newest on top).
+   */
+  _pushAssist(type, headline, bodyHtml, actions) {
+    const theme = {
+      answer: ["border-indigo-500/60 bg-indigo-950/40 text-indigo-100", "💬"],
+      upgrade: ["border-emerald-500/60 bg-emerald-950/40 text-emerald-100", "✨"],
+      risk_low: ["border-slate-600 bg-slate-800 text-slate-200", "💡"],
+      risk_medium: ["border-amber-500/60 bg-amber-950/40 text-amber-100", "⚠️"],
+      risk_high: ["border-rose-500/70 bg-rose-950/40 text-rose-100", "🚨"],
+      clarify: ["border-sky-500/60 bg-sky-950/40 text-sky-100", "🔎"],
+    }[type] || ["border-slate-600 bg-slate-800 text-slate-200", "•"];
+    const card = document.createElement("div");
+    card.className = `slide-up rounded-xl border p-3 text-sm ${theme[0]}`;
+    card.innerHTML =
+      `<div class="mb-1 flex items-start justify-between gap-2">
+         <span class="text-xs font-bold">${theme[1]} ${esc(headline)}</span>
+         <button class="shrink-0 text-xs opacity-60 hover:opacity-100" data-x>✕</button>
+       </div>${bodyHtml}`;
+    card.querySelector("[data-x]").addEventListener("click", () => card.remove());
+    if (actions) {
+      const row = document.createElement("div");
+      row.className = "mt-2 flex flex-wrap gap-2";
+      for (const a of actions) {
+        const b = document.createElement("button");
+        b.className = "rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10";
+        b.textContent = a.label;
+        b.addEventListener("click", a.onClick);
+        row.appendChild(b);
+      }
+      card.appendChild(row);
+    }
+    this.el.assistCards.prepend(card);
+    while (this.el.assistCards.children.length > 3) this.el.assistCards.lastChild.remove();
+  }
+  _clearAssist() { if (this.el.assistCards) this.el.assistCards.innerHTML = ""; }
+
   _renderClarify(d) {
-    this.clarifyEl.innerHTML = `<div class="text-xs font-bold uppercase">🔎 ${UI_LANG === "ko" ? "혹시 이런 뜻?" : "Did you mean…?"}</div>
-      <div class="mt-1 text-sm font-medium">${esc(d.clarify_did_you_mean)}</div>
-      <div class="mt-1 rounded bg-black/20 p-2 text-sm">${esc(d.clarify_corrected_translation)}</div>`;
-    this.clarifyEl.classList.remove("hidden");
+    const head = UI_LANG === "ko" ? "혹시 이런 뜻?" : "Did you mean…?";
+    this._pushAssist("clarify", head,
+      `<div class="font-medium">${esc(d.clarify_did_you_mean)}</div>
+       <div class="mt-1 rounded bg-black/20 p-2">${esc(d.clarify_corrected_translation)}</div>`);
   }
   _renderRisk(d) {
-    const lv = { low: ["border-slate-600 bg-slate-800 text-slate-200","💡"], medium: ["border-amber-500/60 bg-amber-950/40 text-amber-100","⚠️"], high: ["border-rose-500/70 bg-rose-950/40 text-rose-100","🚨"] }[d.risk_level] || ["",""];
-    this.riskEl.className = `mb-3 rounded-xl border p-3 ${lv[0]}`;
-    this.riskEl.innerHTML = `<div class="text-sm font-medium">${lv[1]} ${esc(d.subtitle_alert)}</div>
-      ${d.suggested_question ? `<div class="mt-2 rounded bg-black/20 p-2 text-sm">❓ ${esc(d.suggested_question)}</div>` : ""}`;
-    this.riskEl.classList.remove("hidden");
+    const head = UI_LANG === "ko" ? "참고" : "Note";
+    this._pushAssist("risk_" + d.risk_level, head,
+      `<div class="font-medium">${esc(d.subtitle_alert)}</div>` +
+      (d.suggested_question ? `<div class="mt-2 rounded bg-black/20 p-2">❓ ${esc(d.suggested_question)}</div>` : ""));
   }
 
   // ---- session lifecycle --------------------------------------------------
@@ -801,7 +841,7 @@ class App {
   _joinAppend(role, text) {
     if (!text) return;
     const key = role === "translation" ? "_joinTr" : "_joinSrc";
-    if (!this[key]) { const w = this._bubble(role, ""); this.el.joinTranscript.appendChild(w); this[key] = w.firstChild; }
+    if (!this[key]) { const w = this._bubble(role, ""); this.el.joinTranscript.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
     this.el.joinTranscript.scrollTop = this.el.joinTranscript.scrollHeight;
   }
