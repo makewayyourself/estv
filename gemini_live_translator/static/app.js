@@ -529,13 +529,23 @@ class App {
       const wh = this._warnHtml(e);
       if (wh) { const w = document.createElement("div"); w.dataset.row = "1"; w.className = "rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs"; w.innerHTML = wh; el.appendChild(w); }
     }
-    el.scrollTop = el.scrollHeight;
+    this._autoScroll(el);
   }
   _multiBlock(tr) {
     const w = document.createElement("div"); w.dataset.row = "1";
     w.className = "rounded-lg bg-slate-800/60 px-3 py-2";
     w.innerHTML = Object.entries(tr).map(([c, x]) => `<div class="flex gap-2"><span class="shrink-0 font-mono text-[10px] uppercase text-sky-400">${c}</span><span class="text-slate-300">${esc(x)}</span></div>`).join("");
     return w;
+  }
+
+  _autoScroll(el) {
+    if (!el) return;
+    // The transcript isn't a fixed-height scroll box — it grows the page — so
+    // element.scrollTop is a no-op; the window is the actual scroller. Nudge the
+    // window to the bottom so new captions stay visible. (If a layout ever makes
+    // the element itself scrollable, honor that too.)
+    if (el.scrollHeight > el.clientHeight + 4) el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight));
   }
 
   _appendTranscript(role, text) {
@@ -548,7 +558,7 @@ class App {
     const key = role === "translation" ? "_trLine" : "_srcLine";
     if (!this[key]) { const w = this._bubble(role, ""); this.transcriptEl.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
-    this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+    this._autoScroll(this.transcriptEl);
     if (this._focusOn && key === "_trLine") this.el.focusCaption.textContent = this[key].textContent;
   }
 
@@ -605,7 +615,7 @@ class App {
       if (!Object.keys(tr).length) return;
       entry.multi = tr; this._persist();
       this.transcriptEl.appendChild(this._multiBlock(tr));
-      this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+      this._autoScroll(this.transcriptEl);
     } catch {}
   }
 
@@ -669,7 +679,7 @@ class App {
     const w = document.createElement("div"); w.dataset.row = "1";
     w.className = "rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs";
     w.innerHTML = h; this.transcriptEl.appendChild(w);
-    this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+    this._autoScroll(this.transcriptEl);
   }
   /**
    * Push a live assist card into the shared stack (above the control bar).
@@ -1017,7 +1027,7 @@ class App {
     const key = role === "translation" ? "_joinTr" : "_joinSrc";
     if (!this[key]) { const w = this._bubble(role, ""); this.el.joinTranscript.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
-    this.el.joinTranscript.scrollTop = this.el.joinTranscript.scrollHeight;
+    this._autoScroll(this.el.joinTranscript);
   }
 
   // ---- multi-mic meeting (diarized; channel = speaker) --------------------
@@ -1162,7 +1172,7 @@ class App {
     } else {
       (m.role === "translation" ? trEl : srcEl).textContent += m.text;
     }
-    cont.scrollTop = cont.scrollHeight;
+    this._autoScroll(cont);
   }
   _renderRoster(speakers) {
     if (!this.el.meetRoster) return;
