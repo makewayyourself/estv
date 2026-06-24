@@ -269,8 +269,9 @@
               <button id="apkCopyBtn" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700" data-i18n="set.apkCopy">🔗 다운로드 링크 복사</button>
             </div>
 
-            <!-- Operator section: hidden until the build version is tapped 5× -->
-            <div id="operatorBox" hidden class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
+            <!-- Server connection — required to connect (host/operator). Always
+                 visible: participants join via QR and never open Settings. -->
+            <div id="operatorBox" class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-3 text-sm">
               <p class="mb-2 text-xs text-amber-200/80" data-i18n="admin.note">서버 운영자용 설정입니다.</p>
               <label class="mb-1 block font-medium text-slate-400" data-i18n="set.server">서버 주소</label>
               <input id="serverUrl" type="url" inputmode="url" placeholder="https://your-app.onrender.com" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none" />
