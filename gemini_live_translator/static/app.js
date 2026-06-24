@@ -194,7 +194,7 @@ class App {
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
-     "uiLang","themeSel","fontSel","langA","langB","displayLang1","displayLang2","displayLang3",
+     "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
      "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle",
      "serverUrl","accessToken","saveServerBtn","modelInfo",
      "operatorBox","healthBtn","healthStatus","buildTap","setVer"].forEach((id) => (this.el[id] = $(id)));
@@ -394,14 +394,6 @@ class App {
     const fillB = (sel, sv) => { sel.innerHTML = ""; for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === sv) o.selected = true; sel.appendChild(o); } };
     fillB(this.el.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
     this.el.langB.addEventListener("change", () => localStorage.setItem("langB", this.el.langB.value));
-    // Source language: "auto" by default; pin it when auto-detect mis-reads the
-    // spoken language (e.g. Arabic), which corrupts the original-text caption.
-    const savedA = localStorage.getItem("langA") || "auto";
-    this.el.langA.innerHTML = "";
-    for (const [c, l] of [["auto", t("set.auto")], ...Object.entries(LANGUAGES)]) {
-      const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === savedA) o.selected = true; this.el.langA.appendChild(o);
-    }
-    this.el.langA.addEventListener("change", () => localStorage.setItem("langA", this.el.langA.value));
     const ds = [this.el.displayLang1, this.el.displayLang2, this.el.displayLang3];
     const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
     ds.forEach((sel, i) => {
@@ -791,7 +783,7 @@ class App {
   _token() { const s = (localStorage.getItem("accessToken") || "").trim(); return s || (window.DEFAULT_ACCESS_TOKEN || "").trim(); }
   _wsUrl() {
     const base = this._serverBase(); if (!base) throw new Error(t("st.setServer"));
-    const p = new URLSearchParams({ a: (localStorage.getItem("langA") || "auto"), b: this.el.langB.value, voice: this.el.voiceSelect.value });
+    const p = new URLSearchParams({ a: "auto", b: this.el.langB.value, voice: this.el.voiceSelect.value });
     const tok = this._token(); if (tok) p.set("token", tok);
     return `${base.replace(/^http/i, "ws")}/api/stream?${p.toString()}`;
   }

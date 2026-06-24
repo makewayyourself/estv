@@ -334,18 +334,13 @@ def build_config(
     model = model or DEFAULT_MODEL
 
     if is_translate_model(model):
-        # Hint the input transcription with the spoken language when known.
-        # Empty (auto-detect) can misread some languages (e.g. Arabic) and show
-        # the original-text caption in the wrong language; pinning fixes it.
-        if lang_a and lang_a != AUTO_DETECT:
-            in_transcription = types.AudioTranscriptionConfig(
-                language_codes=[_target_code(lang_a)]
-            )
-        else:
-            in_transcription = types.AudioTranscriptionConfig()
+        # NOTE: AudioTranscriptionConfig.language_codes (a source-language hint)
+        # is only supported in Vertex / Enterprise Agent Platform mode, NOT the
+        # Gemini Developer API (API-key) mode we run on — passing it crashes the
+        # session. So we leave the input transcription on auto-detect.
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
-            input_audio_transcription=in_transcription,
+            input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             translation_config=types.TranslationConfig(
                 target_language_code=_target_code(lang_b),
