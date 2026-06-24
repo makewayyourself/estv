@@ -39,6 +39,7 @@ const I18N = {
     "mjoin.intro": "회의에 참여합니다. 당신의 휴대폰이 마이크가 되어, 말하면 자동으로 통역·기록됩니다.",
     "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
+    "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
     "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
@@ -90,6 +91,7 @@ const I18N = {
     "mjoin.intro": "Join the meeting. Your phone becomes a mic — speak and it's translated and logged automatically.",
     "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
+    "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
     "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
@@ -189,7 +191,7 @@ class App {
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
-     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle",
+     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle",
      "serverUrl","accessToken","saveServerBtn","modelInfo",
      "operatorBox","healthBtn","healthStatus","buildTap","setVer"].forEach((id) => (this.el[id] = $(id)));
   }
@@ -303,11 +305,16 @@ class App {
     this.el.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
     this.el.answerToggle.checked = localStorage.getItem("answer") === "1";
     this.el.upgradeToggle.checked = localStorage.getItem("upgrade") === "1";
+    this.el.earphoneToggle.checked = localStorage.getItem("earphoneMode") === "1";
     this.el.riskContext.value = localStorage.getItem("riskContext") || "";
     this.el.riskToggle.addEventListener("change", () => localStorage.setItem("riskGuard", this.el.riskToggle.checked ? "1" : "0"));
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
     this.el.answerToggle.addEventListener("change", () => localStorage.setItem("answer", this.el.answerToggle.checked ? "1" : "0"));
     this.el.upgradeToggle.addEventListener("change", () => localStorage.setItem("upgrade", this.el.upgradeToggle.checked ? "1" : "0"));
+    this.el.earphoneToggle.addEventListener("change", () => {
+      localStorage.setItem("earphoneMode", this.el.earphoneToggle.checked ? "1" : "0");
+      if (this.running || this.meetWs) this._setStatus(this.running ? "live" : "idle", t("set.earphoneApply"));
+    });
     this.el.riskContext.addEventListener("change", () => localStorage.setItem("riskContext", this.el.riskContext.value.trim()));
     this.el.serverUrl.value = this._serverBase();
     this.el.accessToken.value = this._token();
@@ -778,7 +785,13 @@ class App {
 
   // ---- capture ------------------------------------------------------------
   async _startCapture() {
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // Earphone(Bluetooth) mode: turning OFF the voice-processing constraints
+    // keeps Android in MEDIA audio mode so BT routes via A2DP and the
+    // translated audio actually plays in the earphones. With echoCancellation
+    // on, Android forces communication mode (SCO/HFP) which a WebView can't
+    // drive, so sound never reaches the BT earphones.
+    const proc = localStorage.getItem("earphoneMode") !== "1";
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: proc, noiseSuppression: proc, autoGainControl: proc } });
     this.captureContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: INPUT_SAMPLE_RATE });
     await this.captureContext.audioWorklet.addModule("./audio-processor.js");
     this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
