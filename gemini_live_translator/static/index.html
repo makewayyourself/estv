@@ -19,6 +19,9 @@
       .scroll-thin::-webkit-scrollbar { width: 6px; }
       .scroll-thin::-webkit-scrollbar-thumb { background: #3f3f5f; border-radius: 3px; }
       [data-view][hidden] { display: none; }
+      /* `hidden` must win over Tailwind display utilities (e.g. .flex) on overlays.
+         The id selector outranks the class so the attribute stays authoritative. */
+      #focusOverlay[hidden] { display: none; }
       .fs-sm { font-size: 0.9rem; } .fs-md { font-size: 1rem; } .fs-lg { font-size: 1.15rem; } .fs-xl { font-size: 1.3rem; }
       /* Brand gradient + primary button */
       .grad-text { background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc); -webkit-background-clip:text; background-clip:text; color:transparent; }
