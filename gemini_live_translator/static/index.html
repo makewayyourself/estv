@@ -318,6 +318,7 @@
         <div class="mb-2 flex items-center justify-center gap-2">
           <button id="modeAudioBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.audio">🔊 음성+자막</button>
           <button id="modeTextBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.text">📝 자막만</button>
+          <button id="focusBtn" class="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-800" data-i18n="mode.focus">🌙 집중</button>
         </div>
         <div class="flex items-center gap-2">
           <button id="toggleBtn" class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50">
@@ -340,6 +341,18 @@
 
       <!-- New-note FAB (notes list) -->
       <button id="newNoteBtn" hidden class="sticky bottom-4 z-20 mx-4 mb-4 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow-lg hover:bg-indigo-500" data-i18n="notes.new">＋ 새 노트</button>
+    </div>
+
+    <!-- ============ FOCUS / SCREEN-OFF OVERLAY ============ -->
+    <!-- Dims the screen to save battery during long meetings while audio keeps
+         translating. Mirrors the latest caption large. Tap anywhere to exit. -->
+    <div id="focusOverlay" hidden class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black px-6 text-center">
+      <div class="mb-6 flex items-center gap-2 text-emerald-400">
+        <span id="focusPulse" class="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500"></span>
+        <span class="text-xs font-medium uppercase tracking-widest" data-i18n="focus.live">통역 중</span>
+      </div>
+      <div id="focusCaption" class="max-w-2xl text-2xl font-semibold leading-relaxed text-slate-200"></div>
+      <div class="absolute bottom-10 text-xs text-slate-600" data-i18n="focus.hint">화면을 탭하면 해제됩니다</div>
     </div>
 
     <script src="./config.js"></script>

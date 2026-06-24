@@ -49,7 +49,9 @@ const I18N = {
     "set.save": "저장", "set.health": "🔄 진단", "set.model": "모델", "set.admin": "🔒 관리자 · 서버 설정",
     "admin.note": "서버 운영자용 설정입니다. 일반 사용자는 건드릴 필요가 없습니다.", "title.admin": "관리자 설정",
     "vm.label": "보기 모드", "note.save": "저장(내보내기)", "note.summarizeBtn": "요약 생성 / 갱신",
-    "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "ctrl.start": "시작", "ctrl.stop": "정지",
+    "mode.audio": "🔊 음성+자막", "mode.text": "📝 자막만", "mode.focus": "🌙 집중",
+    "focus.live": "통역 중", "focus.hint": "화면을 탭하면 해제됩니다",
+    "ctrl.start": "시작", "ctrl.stop": "정지",
     "pron.title": "발음", "pron.roman": "로마자", "pron.hangul": "한글",
     "title.home": "Gemini Live Translator", "title.translate": "빠른 통역", "title.notes": "회의 노트", "title.settings": "관리자 설정",
     "st.idle": "대기", "st.connecting": "연결 중…", "st.live": "통역 중 — 말하세요", "st.paused": "일시정지",
@@ -87,7 +89,9 @@ const I18N = {
     "set.save": "Save", "set.health": "🔄 Check", "set.model": "Model", "set.admin": "🔒 Admin · server settings",
     "admin.note": "Operator settings. Regular users don't need these.", "title.admin": "Admin",
     "vm.label": "View mode", "note.save": "Export", "note.summarizeBtn": "Generate / refresh summary",
-    "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "ctrl.start": "Start", "ctrl.stop": "Stop",
+    "mode.audio": "🔊 Audio + captions", "mode.text": "📝 Captions only", "mode.focus": "🌙 Focus",
+    "focus.live": "Translating", "focus.hint": "Tap the screen to exit",
+    "ctrl.start": "Start", "ctrl.stop": "Stop",
     "pron.title": "Pronunciation", "pron.roman": "Roman", "pron.hangul": "Hangul",
     "title.home": "Gemini Live Translator", "title.translate": "Quick Translate", "title.notes": "Meeting Notes", "title.settings": "Admin · Settings",
     "st.idle": "Idle", "st.connecting": "Connecting…", "st.live": "Live — speak now", "st.paused": "Paused",
@@ -148,6 +152,7 @@ class App {
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
      "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn",
      "qkTranscript","noteTranscript","assistCards",
+     "focusBtn","focusOverlay","focusCaption",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
      "homeVer","verInfo",
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
@@ -168,6 +173,7 @@ class App {
     if (this.view === "room" && view !== "room") this._roomStop(true);
     if (this.view === "join" && view !== "join") this._joinLeave(true);
     if (this.running && view !== this.view) this.stop();
+    if (this._focusOn) this._exitFocus();
 
     this.view = view;
     document.querySelectorAll("[data-view]").forEach((s) => (s.hidden = s.getAttribute("data-view") !== view));
@@ -224,6 +230,8 @@ class App {
     this.el.scriptSelect.addEventListener("change", () => this._lastTranslationText && this._pronounce());
     this.el.modeAudioBtn.addEventListener("click", () => this._setMode(true));
     this.el.modeTextBtn.addEventListener("click", () => this._setMode(false));
+    this.el.focusBtn.addEventListener("click", () => this._enterFocus());
+    this.el.focusOverlay.addEventListener("click", () => this._exitFocus());
 
     // notes
     this.el.newNoteBtn.addEventListener("click", () => this._newNote());
@@ -482,6 +490,26 @@ class App {
     if (!this[key]) { const w = this._bubble(role, ""); this.transcriptEl.appendChild(w); this[key] = w.lastElementChild; }
     this[key].textContent += text;
     this.transcriptEl.scrollTop = this.transcriptEl.scrollHeight;
+    if (this._focusOn && key === "_trLine") this.el.focusCaption.textContent = this[key].textContent;
+  }
+
+  // ---- focus / screen-off mode -------------------------------------------
+  // Dims the screen to save battery during long meetings; audio keeps running.
+  // Wake Lock prevents the OS sleeping and cutting the mic/session. Tap exits.
+  async _enterFocus() {
+    if (this.view !== "translate") return;
+    this._focusOn = true;
+    this.el.focusCaption.textContent = this._lastTranslationText || "";
+    this.el.focusOverlay.hidden = false;
+    try {
+      if ("wakeLock" in navigator) this._wakeLock = await navigator.wakeLock.request("screen");
+    } catch (_) { /* wake lock optional */ }
+  }
+
+  _exitFocus() {
+    this._focusOn = false;
+    this.el.focusOverlay.hidden = true;
+    if (this._wakeLock) { try { this._wakeLock.release(); } catch (_) {} this._wakeLock = null; }
   }
 
   _finalizeTurn() { clearTimeout(this._turnTimer); this._turnTimer = null; this._commitTurn(); this._srcLine = null; this._trLine = null; }
