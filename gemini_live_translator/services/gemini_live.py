@@ -334,9 +334,18 @@ def build_config(
     model = model or DEFAULT_MODEL
 
     if is_translate_model(model):
+        # Hint the input transcription with the spoken language when known.
+        # Empty (auto-detect) can misread some languages (e.g. Arabic) and show
+        # the original-text caption in the wrong language; pinning fixes it.
+        if lang_a and lang_a != AUTO_DETECT:
+            in_transcription = types.AudioTranscriptionConfig(
+                language_codes=[_target_code(lang_a)]
+            )
+        else:
+            in_transcription = types.AudioTranscriptionConfig()
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
-            input_audio_transcription=types.AudioTranscriptionConfig(),
+            input_audio_transcription=in_transcription,
             output_audio_transcription=types.AudioTranscriptionConfig(),
             translation_config=types.TranslationConfig(
                 target_language_code=_target_code(lang_b),

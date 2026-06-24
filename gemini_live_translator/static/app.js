@@ -54,7 +54,8 @@ const I18N = {
     "note.summarize": "요약", "note.delete": "삭제", "note.ph": "아래 <b>시작</b>을 누르면 녹음·통역이 시작되고 여기에 기록됩니다.",
     "qa.ph": "예: 결제 조건이 어떻게 정해졌지?", "qa.ask": "질문",
     "set.uiLang": "앱 언어", "set.theme": "테마", "set.dark": "🌙 밤(어둡게)", "set.light": "☀️ 낮(밝게)",
-    "set.fontSize": "글자 크기", "set.output": "출력(들리는) 언어", "set.outputHelp": "음성으로 나갈 1개 언어. 입력 언어는 자동 감지됩니다.",
+    "set.fontSize": "글자 크기", "set.output": "출력(들리는) 언어", "set.outputHelp": "음성으로 나갈 1개 언어.",
+    "set.auto": "자동 감지", "set.source": "말하는(입력) 언어", "set.sourceHelp": "보통 '자동 감지'면 됩니다. 원문 자막이 엉뚱한 언어로 뜨면(예: 아랍어) 여기서 말하는 언어를 직접 지정하세요.",
     "set.display": "표시(자막) 언어 · 최대 3", "set.displayHelp": "각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기).",
     "set.voice": "음성 (목소리)", "set.speed": "빠르기", "set.risk": "🛡️ 리스크 감지", "set.riskCtx": "분야 (예: oil trading)",
     "set.clarify": "🔎 의미 확인", "set.server": "서버 주소", "set.token": "접속 토큰", "set.tokenPh": "서버 접속 토큰",
@@ -106,7 +107,8 @@ const I18N = {
     "note.summarize": "Summarize", "note.delete": "Delete", "note.ph": "Tap <b>Start</b> below to begin recording — it appears here.",
     "qa.ph": "e.g. What payment terms were agreed?", "qa.ask": "Ask",
     "set.uiLang": "App language", "set.theme": "Theme", "set.dark": "🌙 Dark", "set.light": "☀️ Light",
-    "set.fontSize": "Font size", "set.output": "Output (spoken) language", "set.outputHelp": "One spoken language. Source is auto-detected.",
+    "set.fontSize": "Font size", "set.output": "Output (spoken) language", "set.outputHelp": "One spoken language.",
+    "set.auto": "Auto-detect", "set.source": "Spoken (input) language", "set.sourceHelp": "Usually 'Auto-detect' is fine. If the original-text caption shows the wrong language (e.g. Arabic), set the spoken language here.",
     "set.display": "Caption languages · up to 3", "set.displayHelp": "Show each utterance in these languages (everyone reads their own).",
     "set.voice": "Voice", "set.speed": "Speed", "set.risk": "🛡️ Risk Guard", "set.riskCtx": "Industry (e.g. oil trading)",
     "set.clarify": "🔎 Clarify", "set.server": "Server URL", "set.token": "Access token", "set.tokenPh": "server access token",
@@ -190,7 +192,7 @@ class App {
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
-     "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
+     "uiLang","themeSel","fontSel","langA","langB","displayLang1","displayLang2","displayLang3",
      "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle",
      "serverUrl","accessToken","saveServerBtn","modelInfo",
      "operatorBox","healthBtn","healthStatus","buildTap","setVer"].forEach((id) => (this.el[id] = $(id)));
@@ -373,6 +375,14 @@ class App {
     const fillB = (sel, sv) => { sel.innerHTML = ""; for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === sv) o.selected = true; sel.appendChild(o); } };
     fillB(this.el.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
     this.el.langB.addEventListener("change", () => localStorage.setItem("langB", this.el.langB.value));
+    // Source language: "auto" by default; pin it when auto-detect mis-reads the
+    // spoken language (e.g. Arabic), which corrupts the original-text caption.
+    const savedA = localStorage.getItem("langA") || "auto";
+    this.el.langA.innerHTML = "";
+    for (const [c, l] of [["auto", t("set.auto")], ...Object.entries(LANGUAGES)]) {
+      const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === savedA) o.selected = true; this.el.langA.appendChild(o);
+    }
+    this.el.langA.addEventListener("change", () => localStorage.setItem("langA", this.el.langA.value));
     const ds = [this.el.displayLang1, this.el.displayLang2, this.el.displayLang3];
     const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
     ds.forEach((sel, i) => {
@@ -752,7 +762,7 @@ class App {
   _token() { const s = (localStorage.getItem("accessToken") || "").trim(); return s || (window.DEFAULT_ACCESS_TOKEN || "").trim(); }
   _wsUrl() {
     const base = this._serverBase(); if (!base) throw new Error(t("st.setServer"));
-    const p = new URLSearchParams({ a: "auto", b: this.el.langB.value, voice: this.el.voiceSelect.value });
+    const p = new URLSearchParams({ a: (localStorage.getItem("langA") || "auto"), b: this.el.langB.value, voice: this.el.voiceSelect.value });
     const tok = this._token(); if (tok) p.set("token", tok);
     return `${base.replace(/^http/i, "ws")}/api/stream?${p.toString()}`;
   }
