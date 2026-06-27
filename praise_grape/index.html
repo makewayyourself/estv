@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🍇 칭찬 포도</title>
+<style>
+  :root{
+    --bg1:#faf5ff; --bg2:#f3e8ff;
+    --grape-empty:#e9d5ff; --grape-empty-stroke:#c4b5fd;
+    --grape-full:#7c3aed; --grape-full-2:#6d28d9;
+    --leaf:#34d399; --stem:#92400e;
+    --ink:#4c1d95; --accent:#9333ea;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--ink); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:16px 14px 40px; user-select:none;
+  }
+  h1{font-size:26px; margin:6px 0 2px; letter-spacing:-0.5px;}
+  .sub{font-size:13px; color:var(--accent); margin:0 0 12px; opacity:.85;}
+
+  /* 프로필 탭 */
+  .profiles{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:14px; max-width:520px;}
+  .profiles button{
+    border:2px solid var(--grape-empty-stroke); background:#fff; color:var(--ink);
+    padding:7px 14px; border-radius:999px; font-size:14px; font-weight:700; cursor:pointer;
+    transition:.15s;
+  }
+  .profiles button.active{background:var(--grape-full); color:#fff; border-color:var(--grape-full);}
+  .profiles .add{border-style:dashed; color:var(--accent);}
+
+  /* 보드 카드 */
+  .card{
+    background:#fff; border-radius:28px; padding:18px 16px 22px;
+    box-shadow:0 12px 40px rgba(124,58,237,.15); width:100%; max-width:430px;
+    text-align:center; position:relative; overflow:hidden;
+  }
+  .title-row{display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:6px;}
+  .title-row .name{font-size:20px; font-weight:800;}
+  .title-row .name:focus{outline:2px dashed var(--accent); border-radius:6px;}
+  .goal{font-size:13px; color:var(--accent); margin-bottom:10px;}
+  .goal b{font-size:15px;}
+
+  /* 진행 바 */
+  .bar{height:12px; background:var(--grape-empty); border-radius:999px; overflow:hidden; margin:0 6px 14px;}
+  .bar > i{display:block; height:100%; width:0;
+    background:linear-gradient(90deg,#a855f7,var(--grape-full)); border-radius:999px; transition:width .4s ease;}
+
+  /* 포도 SVG */
+  svg{width:100%; height:auto; display:block;}
+  .grape{cursor:pointer; transition:transform .12s;}
+  .grape:active{transform:scale(.9);}
+  .gc{transition:fill .25s, stroke .25s;}
+
+  .pop{animation:pop .4s ease;}
+  @keyframes pop{0%{transform:scale(.3);}60%{transform:scale(1.25);}100%{transform:scale(1);}}
+
+  /* 버튼들 */
+  .actions{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; justify-content:center;}
+  .actions button{
+    border:none; border-radius:14px; padding:11px 16px; font-size:14px; font-weight:700;
+    cursor:pointer; transition:.15s; flex:1; min-width:120px;
+  }
+  .btn-fill{background:var(--grape-full); color:#fff;}
+  .btn-fill:active{background:var(--grape-full-2);}
+  .btn-undo{background:#f3e8ff; color:var(--accent);}
+  .btn-reset{background:#fee2e2; color:#dc2626;}
+  .count-big{font-size:42px; font-weight:900; line-height:1; margin:4px 0;}
+  .count-big small{font-size:18px; color:var(--accent); font-weight:700;}
+
+  /* 칭찬 기록 */
+  .log{max-width:430px; width:100%; margin-top:18px;}
+  .log h3{font-size:14px; color:var(--accent); margin:0 0 8px; padding-left:4px;}
+  .log ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .log li{background:#fff; border-radius:12px; padding:9px 12px; font-size:13px;
+    display:flex; justify-content:space-between; gap:10px; box-shadow:0 2px 8px rgba(124,58,237,.06);}
+  .log li span:last-child{color:#a78bca; font-size:11px; white-space:nowrap;}
+  .log .empty{color:#c4b5fd; font-size:13px; text-align:center; padding:14px;}
+
+  /* 축하 모달 */
+  .modal{position:fixed; inset:0; background:rgba(76,29,149,.45); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .modal.show{display:flex;}
+  .modal .box{background:#fff; border-radius:28px; padding:30px 26px; text-align:center; max-width:330px; animation:pop .4s ease;}
+  .modal .box .emoji{font-size:60px;}
+  .modal .box h2{margin:8px 0 4px; font-size:24px;}
+  .modal .box p{color:var(--accent); font-size:15px; margin:0 0 18px;}
+  .modal .box button{background:var(--grape-full); color:#fff; border:none; border-radius:14px;
+    padding:12px 26px; font-size:15px; font-weight:700; cursor:pointer;}
+
+  .confetti{position:fixed; top:-10px; width:10px; height:14px; z-index:60; pointer-events:none; border-radius:2px;}
+
+  .hint{font-size:12px; color:#b69de0; margin-top:6px;}
+</style>
+</head>
+<body>
+  <h1>🍇 칭찬 포도</h1>
+  <p class="sub">잘했을 때마다 포도알을 콕! 다 채우면 선물 받아요</p>
+
+  <div class="profiles" id="profiles"></div>
+
+  <div class="card">
+    <div class="title-row">
+      <span class="name" id="childName" contenteditable="true" spellcheck="false">우리 아이</span>
+    </div>
+    <div class="goal">목표: <b id="goalText" contenteditable="true" spellcheck="false">아이스크림 먹기</b> 🎁</div>
+    <div class="count-big"><span id="cnt">0</span><small> / <span id="total">30</span></small></div>
+    <div class="bar"><i id="barFill"></i></div>
+    <svg id="grapeSvg" viewBox="0 0 360 460" aria-label="포도판"></svg>
+    <div class="actions">
+      <button class="btn-fill" id="btnFill">👍 칭찬 +1</button>
+      <button class="btn-undo" id="btnUndo">↩︎ 취소</button>
+      <button class="btn-reset" id="btnReset">🔄 새 포도</button>
+    </div>
+    <div class="hint">포도알을 직접 눌러도 채워져요</div>
+  </div>
+
+  <div class="log">
+    <h3>📜 칭찬 기록</h3>
+    <ul id="logList"></ul>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <div class="emoji">🎉🍇🎉</div>
+      <h2>포도 완성!</h2>
+      <p id="modalMsg">선물 받을 시간이에요!</p>
+      <button id="modalClose">와아! 🥳</button>
+    </div>
+  </div>
+
+<script>
+/* ---------- 포도알 좌표 (위가 넓고 아래로 갈수록 좁아지는 송이 모양) ---------- */
+const ROWS = [4,5,5,4,4,3,2,2,1]; // = 30알
+const R = 26, GAP_X = 56, GAP_Y = 46, TOP = 70, CX = 180;
+const POS = [];
+ROWS.forEach((n,row)=>{
+  const rowW = (n-1)*GAP_X;
+  for(let i=0;i<n;i++){
+    POS.push({ x: CX - rowW/2 + i*GAP_X, y: TOP + row*GAP_Y });
+  }
+});
+const TOTAL = POS.length;
+
+/* 채워진 포도알 안의 랜덤 표정 */
+const FACES = ['^_^','^o^','>_<','^▿^','◕‿◕','˃ᴗ˂'];
+
+/* ---------- 상태 저장 ---------- */
+const KEY = 'praiseGrape.v1';
+let store = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s&&s.profiles) return s; }catch(e){}
+  return { current:0, profiles:[ newProfile('우리 아이') ] };
+}
+function newProfile(name){
+  return { name, goal:'아이스크림 먹기', filled:0, faces:[], log:[] };
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
+function cur(){ return store.profiles[store.current]; }
+
+/* ---------- 렌더 ---------- */
+const svg = document.getElementById('grapeSvg');
+function buildSvg(){
+  let s = '';
+  // 줄기
+  s += `<path d="M180 64 q14 -26 30 -40" stroke="var(--stem)" stroke-width="9" fill="none" stroke-linecap="round"/>`;
+  // 잎
+  s += `<path d="M150 40 q-46 -22 -70 6 q34 8 44 30 q14 -26 26 -36z" fill="var(--leaf)"/>`;
+  s += `<path d="M168 36 q-10 -40 22 -50 q12 34 -6 56 z" fill="#10b981"/>`;
+  // 포도알
+  POS.forEach((p,i)=>{
+    s += `<g class="grape" data-i="${i}" transform="translate(${p.x},${p.y})">
+      <circle class="gc" r="${R}" cx="0" cy="0" fill="var(--grape-empty)" stroke="var(--grape-empty-stroke)" stroke-width="2.5"></circle>
+      <circle r="6" cx="-8" cy="-9" fill="rgba(255,255,255,.55)"></circle>
+      <text class="face" x="0" y="5" text-anchor="middle" font-size="11" fill="#fff" style="display:none;font-weight:700"></text>
+    </g>`;
+  });
+  svg.innerHTML = s;
+  svg.querySelectorAll('.grape').forEach(g=>{
+    g.addEventListener('click',()=>toggle(+g.dataset.i));
+  });
+}
+function paint(animateIdx=-1){
+  const c = cur();
+  document.querySelectorAll('.grape').forEach(g=>{
+    const i = +g.dataset.i;
+    const on = i < c.filled;
+    const circle = g.querySelector('.gc');
+    const face = g.querySelector('.face');
+    circle.setAttribute('fill', on?'var(--grape-full)':'var(--grape-empty)');
+    circle.setAttribute('stroke', on?'var(--grape-full-2)':'var(--grape-empty-stroke)');
+    if(on){ face.style.display=''; face.textContent = c.faces[i] || '^_^'; }
+    else { face.style.display='none'; }
+    if(i===animateIdx){ g.classList.add('pop'); setTimeout(()=>g.classList.remove('pop'),400); }
+  });
+  document.getElementById('cnt').textContent = c.filled;
+  document.getElementById('total').textContent = TOTAL;
+  document.getElementById('barFill').style.width = (c.filled/TOTAL*100)+'%';
+  document.getElementById('childName').textContent = c.name;
+  document.getElementById('goalText').textContent = c.goal;
+  renderLog();
+}
+function renderLog(){
+  const c = cur();
+  const ul = document.getElementById('logList');
+  if(!c.log.length){ ul.innerHTML = '<li class="empty">아직 칭찬 기록이 없어요</li>'; return; }
+  ul.innerHTML = c.log.slice().reverse().map(e=>
+    `<li><span>${e.n}번째 포도알 ✨</span><span>${e.t}</span></li>`).join('');
+}
+function renderProfiles(){
+  const box = document.getElementById('profiles');
+  box.innerHTML = store.profiles.map((p,i)=>
+    `<button class="${i===store.current?'active':''}" data-i="${i}">${p.name}</button>`).join('')
+    + `<button class="add" id="addProfile">＋ 추가</button>`;
+  box.querySelectorAll('button[data-i]').forEach(b=>{
+    b.addEventListener('click',()=>{ store.current=+b.dataset.i; save(); paint(); renderProfiles(); });
+  });
+  document.getElementById('addProfile').addEventListener('click',()=>{
+    const name = prompt('아이 이름을 입력하세요','새 친구');
+    if(name===null) return;
+    store.profiles.push(newProfile(name.trim()||'새 친구'));
+    store.current = store.profiles.length-1;
+    save(); paint(); renderProfiles();
+  });
+}
+
+/* ---------- 동작 ---------- */
+function nowStr(){ const d=new Date(); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function fillOne(){
+  const c = cur();
+  if(c.filled >= TOTAL) return;
+  c.faces[c.filled] = FACES[Math.floor(Math.random()*FACES.length)];
+  c.filled++;
+  c.log.push({ n:c.filled, t:nowStr() });
+  save(); paint(c.filled-1);
+  if(c.filled===TOTAL) celebrate();
+}
+function undoOne(){
+  const c = cur();
+  if(c.filled<=0) return;
+  c.filled--; c.faces[c.filled]=null; c.log.pop();
+  save(); paint();
+}
+function toggle(i){
+  const c = cur();
+  if(i < c.filled){ // 그 알 포함 뒤쪽을 비움 -> 가장 가까운 동작은 그 자리까지 채우기/비우기
+    c.filled = i; c.faces.length = i; c.log = c.log.slice(0,i);
+  } else {
+    while(c.filled <= i && c.filled < TOTAL){
+      c.faces[c.filled] = FACES[Math.floor(Math.random()*FACES.length)];
+      c.filled++; c.log.push({ n:c.filled, t:nowStr() });
+    }
+  }
+  save(); paint(i);
+  if(c.filled===TOTAL) celebrate();
+}
+function resetBoard(){
+  const c = cur();
+  if(!confirm(`${c.name}의 포도를 새로 시작할까요? (기록이 지워져요)`)) return;
+  c.filled=0; c.faces=[]; c.log=[];
+  save(); paint();
+}
+
+/* ---------- 축하 ---------- */
+function celebrate(){
+  const c = cur();
+  document.getElementById('modalMsg').textContent = `약속한 선물 "${c.goal}" 받을 시간! 🎁`;
+  document.getElementById('modal').classList.add('show');
+  for(let i=0;i<60;i++) shootConfetti();
+}
+function shootConfetti(){
+  const el = document.createElement('div');
+  el.className='confetti';
+  const colors=['#7c3aed','#a855f7','#f472b6','#34d399','#fbbf24','#60a5fa'];
+  el.style.background = colors[Math.floor(Math.random()*colors.length)];
+  el.style.left = Math.random()*100+'vw';
+  const dur = 2+Math.random()*2;
+  el.style.transition = `transform ${dur}s linear, opacity ${dur}s linear`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{
+    el.style.transform = `translateY(105vh) rotate(${Math.random()*720}deg)`;
+    el.style.opacity = '0';
+  });
+  setTimeout(()=>el.remove(), dur*1000+100);
+}
+
+/* ---------- 이름/목표 편집 ---------- */
+function bindEditable(id, key){
+  const el = document.getElementById(id);
+  el.addEventListener('blur',()=>{
+    const v = el.textContent.trim() || (key==='name'?'우리 아이':'선물');
+    cur()[key]=v; el.textContent=v; save();
+    if(key==='name') renderProfiles();
+  });
+  el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } });
+}
+
+/* ---------- 초기화 ---------- */
+buildSvg();
+renderProfiles();
+paint();
+bindEditable('childName','name');
+bindEditable('goalText','goal');
+document.getElementById('btnFill').addEventListener('click',fillOne);
+document.getElementById('btnUndo').addEventListener('click',undoOne);
+document.getElementById('btnReset').addEventListener('click',resetBoard);
+document.getElementById('modalClose').addEventListener('click',()=>document.getElementById('modal').classList.remove('show'));
+</script>
+</body>
+</html>
