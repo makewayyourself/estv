@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>🍇 칭찬 포도 — 추천 이벤트</title>
+<title>🍇 픽셀로지 칭찬 포도 — 회원 추천</title>
 <style>
   :root{
     --bg1:#faf5ff; --bg2:#f3e8ff;
@@ -23,6 +23,9 @@
   }
   h1{font-size:24px; margin:6px 0 2px; letter-spacing:-0.5px;}
   .sub{font-size:13px; color:var(--accent); margin:0 0 6px; opacity:.85;}
+  .rule{font-size:12.5px; background:#f5f3ff; color:var(--ink); border:1.5px solid var(--grape-empty-stroke);
+    padding:8px 14px; border-radius:14px; margin-bottom:10px; max-width:440px; text-align:center; line-height:1.5;}
+  .rule b{color:var(--grape-full);}
   .demo-flag{font-size:11px; background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:999px; margin-bottom:14px; font-weight:700;}
   .nav{display:flex; gap:8px; margin-bottom:14px;}
   .nav a{font-size:12px; text-decoration:none; color:var(--accent); border:1.5px solid var(--grape-empty-stroke);
@@ -106,21 +109,22 @@
 </style>
 </head>
 <body>
-  <h1>🍇 칭찬 포도 추천 이벤트</h1>
-  <p class="sub">친구를 초대할 때마다 포도알이 채워져요</p>
+  <h1>🍇 픽셀로지 칭찬 포도</h1>
+  <p class="sub">픽셀로지소비자협동조합 회원 추천 프로그램</p>
+  <div class="rule">신규 가입 회원의 <b>추천인이 본인(나)</b>일 때, 나의 칭찬 포도알이 채워집니다 🍇</div>
   <div class="demo-flag">⚠️ 프로토타입 — 가짜 데이터로 동작을 체험하는 데모입니다</div>
 
   <div class="nav">
     <a href="index.html">🍼 칭찬판</a>
-    <a href="promo.html" class="on">🎁 추천 이벤트</a>
+    <a href="promo.html" class="on">🎁 회원 추천</a>
   </div>
 
   <!-- 내 추천 코드 -->
   <div class="card">
-    <h2>🔗 내 추천 코드</h2>
+    <h2>🔗 내 회원 추천 코드</h2>
     <div class="ref-box">
       <div class="ref-code">
-        <small>이 코드로 친구가 가입하면 포도알이 채워져요</small>
+        <small>신규 회원이 이 코드로 가입하면(추천인=나) 포도알 획득</small>
         <b id="myCode">GRAPE-1234</b>
       </div>
       <button class="copy-btn" id="copyBtn">링크<br>복사</button>
@@ -130,7 +134,7 @@
       <div class="stat"><div class="n"><span class="tier" id="sTier">🥉 브론즈</span></div><div class="l">내 등급</div></div>
       <div class="stat"><div class="n" id="sChance">0%</div><div class="l">이번주 당첨확률</div></div>
     </div>
-    <button class="btn btn-primary" id="inviteBtn">🙋 친구가 내 링크로 가입! (데모)</button>
+    <button class="btn btn-primary" id="inviteBtn">🙋 신규 회원이 내 추천으로 가입! (데모)</button>
   </div>
 
   <!-- 내 포도판 -->
@@ -176,7 +180,8 @@
   </div>
 
   <p class="foot">
-    ※ 실제 추천 추적과 공정한 추첨은 서버(백엔드)가 있어야 동작합니다. 이 페이지는 그 흐름을 미리 체험해보는 프론트엔드 프로토타입이에요.<br>
+    🤝 픽셀로지소비자협동조합 회원 추천 프로그램 (시범 화면)<br>
+    ※ 실제 회원 추천 추적과 공정한 추첨은 서버(백엔드)가 있어야 동작합니다. 이 페이지는 그 흐름을 미리 체험해보는 프론트엔드 프로토타입이에요.<br>
     ※ 실제 경품 프로모션 운영 시에는 「경품류 제공에 관한 불공정거래행위 고시」 등 관련 규정 확인이 필요합니다.
   </p>
 
@@ -311,7 +316,7 @@ function runDraw(){
   if(drawing) return;
   const refPool = community.filter(m=>m.referrals>0);          // 추천인 풀
   const newPool = community.filter(m=>m.referredBy!=null);     // 신규 가입자(피추천) 풀
-  if(!refPool.length || !newPool.length){ alert('추첨할 참가자가 부족해요. 친구 초대를 먼저 해보세요!'); return; }
+  if(!refPool.length || !newPool.length){ alert('추첨할 참가자가 부족해요. 회원 추천을 먼저 해보세요!'); return; }
   drawing=true;
   document.getElementById('drawBtn').disabled=true;
   document.getElementById('slotRef').classList.remove('win');
