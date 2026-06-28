@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🍇 칭찬 포도 — 추천 이벤트</title>
+<style>
+  :root{
+    --bg1:#faf5ff; --bg2:#f3e8ff;
+    --grape-empty:#e9d5ff; --grape-empty-stroke:#c4b5fd;
+    --grape-full:#7c3aed; --grape-full-2:#6d28d9;
+    --leaf:#34d399; --stem:#92400e;
+    --ink:#4c1d95; --accent:#9333ea; --gold:#f59e0b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--ink); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:16px 14px 48px;
+  }
+  h1{font-size:24px; margin:6px 0 2px; letter-spacing:-0.5px;}
+  .sub{font-size:13px; color:var(--accent); margin:0 0 6px; opacity:.85;}
+  .demo-flag{font-size:11px; background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:999px; margin-bottom:14px; font-weight:700;}
+  .nav{display:flex; gap:8px; margin-bottom:14px;}
+  .nav a{font-size:12px; text-decoration:none; color:var(--accent); border:1.5px solid var(--grape-empty-stroke);
+    background:#fff; padding:6px 12px; border-radius:999px; font-weight:700;}
+  .nav a.on{background:var(--grape-full); color:#fff; border-color:var(--grape-full);}
+
+  .card{background:#fff; border-radius:24px; padding:18px 16px; box-shadow:0 10px 34px rgba(124,58,237,.13);
+    width:100%; max-width:440px; margin-bottom:16px;}
+  .card h2{font-size:16px; margin:0 0 12px; display:flex; align-items:center; gap:6px;}
+
+  /* 추천 코드 */
+  .ref-box{display:flex; gap:8px; align-items:stretch;}
+  .ref-code{flex:1; background:linear-gradient(135deg,#a855f7,var(--grape-full)); color:#fff; border-radius:14px;
+    padding:12px 14px; text-align:left;}
+  .ref-code small{display:block; font-size:11px; opacity:.85;}
+  .ref-code b{font-size:22px; letter-spacing:1px;}
+  .copy-btn{background:var(--grape-full); color:#fff; border:none; border-radius:14px; padding:0 16px;
+    font-size:13px; font-weight:700; cursor:pointer;}
+  .copy-btn:active{background:var(--grape-full-2);}
+
+  /* 통계 */
+  .stats{display:flex; gap:8px; margin-top:6px;}
+  .stat{flex:1; background:#faf5ff; border-radius:14px; padding:12px 8px; text-align:center;}
+  .stat .n{font-size:24px; font-weight:900; line-height:1;}
+  .stat .l{font-size:11px; color:var(--accent); margin-top:4px;}
+  .tier{display:inline-flex; align-items:center; gap:4px; font-weight:800;}
+
+  /* 포도판 */
+  svg{width:100%; height:auto; display:block; max-height:300px;}
+  .grape{transition:transform .12s;}
+  .gc{transition:fill .25s, stroke .25s;}
+  .pop{animation:pop .45s ease;}
+  @keyframes pop{0%{transform:scale(.3);}60%{transform:scale(1.3);}100%{transform:scale(1);}}
+  .board-cap{font-size:12px; color:var(--accent); text-align:center; margin-top:4px;}
+
+  .btn{border:none; border-radius:14px; padding:13px 16px; font-size:14px; font-weight:800; cursor:pointer; width:100%;}
+  .btn-primary{background:var(--grape-full); color:#fff; margin-top:12px;}
+  .btn-primary:active{background:var(--grape-full-2);}
+  .btn-gold{background:linear-gradient(135deg,#fbbf24,var(--gold)); color:#fff;}
+  .btn-ghost{background:#f3e8ff; color:var(--accent);}
+  .btn:disabled{opacity:.5; cursor:default;}
+
+  /* 추첨 */
+  .draw-head{text-align:center;}
+  .countdown{font-size:13px; color:var(--accent); margin-bottom:4px;}
+  .countdown b{font-size:18px;}
+  .reel{display:flex; gap:10px; margin:14px 0;}
+  .reel .slot{flex:1; background:#faf5ff; border:2px solid var(--grape-empty-stroke); border-radius:16px;
+    padding:14px 6px; text-align:center; min-height:92px; display:flex; flex-direction:column; justify-content:center;}
+  .reel .slot .role{font-size:11px; color:var(--accent); font-weight:700; margin-bottom:6px;}
+  .reel .slot .who{font-size:18px; font-weight:900; min-height:24px;}
+  .reel .slot .prize{font-size:12px; color:var(--gold); font-weight:800; margin-top:6px; min-height:16px;}
+  .reel .slot.win{border-color:var(--gold); background:#fffbeb; animation:pop .5s ease;}
+
+  /* 리더보드 */
+  .lb{list-style:none; margin:0; padding:0;}
+  .lb li{display:flex; align-items:center; gap:10px; padding:9px 6px; border-bottom:1px solid #f3e8ff; font-size:14px;}
+  .lb li:last-child{border-bottom:none;}
+  .lb .rank{width:24px; font-weight:900; text-align:center; color:var(--accent);}
+  .lb .nm{flex:1; font-weight:600;}
+  .lb .nm .me-tag{font-size:10px; background:var(--grape-full); color:#fff; padding:2px 6px; border-radius:6px; margin-left:6px;}
+  .lb .ct{font-weight:800; color:var(--grape-full);}
+  .lb li.me{background:#faf5ff; border-radius:10px;}
+
+  /* 당첨 이력 */
+  .hist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+  .hist li{background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:10px 12px; font-size:13px;}
+  .hist li b{color:var(--gold);}
+  .hist .empty{color:#c4b5fd; text-align:center; padding:10px; background:none; border:none;}
+
+  .modal{position:fixed; inset:0; background:rgba(76,29,149,.5); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .modal.show{display:flex;}
+  .modal .box{background:#fff; border-radius:26px; padding:28px 24px; text-align:center; max-width:340px; animation:pop .45s ease;}
+  .modal .emoji{font-size:54px;}
+  .modal h2{margin:8px 0 4px; font-size:22px;}
+  .modal p{color:var(--accent); font-size:14px; margin:0 0 16px; line-height:1.5;}
+  .modal .box button{background:var(--grape-full); color:#fff; border:none; border-radius:14px; padding:11px 24px; font-size:15px; font-weight:700; cursor:pointer;}
+  .confetti{position:fixed; top:-10px; width:10px; height:14px; z-index:60; pointer-events:none; border-radius:2px;}
+
+  .foot{font-size:11px; color:#b69de0; text-align:center; max-width:440px; line-height:1.6; margin-top:4px;}
+</style>
+</head>
+<body>
+  <h1>🍇 칭찬 포도 추천 이벤트</h1>
+  <p class="sub">친구를 초대할 때마다 포도알이 채워져요</p>
+  <div class="demo-flag">⚠️ 프로토타입 — 가짜 데이터로 동작을 체험하는 데모입니다</div>
+
+  <div class="nav">
+    <a href="index.html">🍼 칭찬판</a>
+    <a href="promo.html" class="on">🎁 추천 이벤트</a>
+  </div>
+
+  <!-- 내 추천 코드 -->
+  <div class="card">
+    <h2>🔗 내 추천 코드</h2>
+    <div class="ref-box">
+      <div class="ref-code">
+        <small>이 코드로 친구가 가입하면 포도알이 채워져요</small>
+        <b id="myCode">GRAPE-1234</b>
+      </div>
+      <button class="copy-btn" id="copyBtn">링크<br>복사</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="sRef">0</div><div class="l">내 추천 수</div></div>
+      <div class="stat"><div class="n"><span class="tier" id="sTier">🥉 브론즈</span></div><div class="l">내 등급</div></div>
+      <div class="stat"><div class="n" id="sChance">0%</div><div class="l">이번주 당첨확률</div></div>
+    </div>
+    <button class="btn btn-primary" id="inviteBtn">🙋 친구가 내 링크로 가입! (데모)</button>
+  </div>
+
+  <!-- 내 포도판 -->
+  <div class="card">
+    <h2>🍇 내 추천 포도</h2>
+    <svg id="grapeSvg" viewBox="0 0 360 420" aria-label="추천 포도판"></svg>
+    <div class="board-cap" id="boardCap">한 송이(10알)를 완성할 때마다 응모권 1장! 🎟️</div>
+  </div>
+
+  <!-- 주간 추첨 -->
+  <div class="card">
+    <h2>🎰 이번 주 랜덤 추첨</h2>
+    <div class="draw-head">
+      <div class="countdown">다음 추첨까지 <b id="cd">--</b></div>
+    </div>
+    <div class="reel">
+      <div class="slot" id="slotRef">
+        <div class="role">👑 추천인 중 1명</div>
+        <div class="who" id="whoRef">?</div>
+        <div class="prize" id="przRef"></div>
+      </div>
+      <div class="slot" id="slotNew">
+        <div class="role">🌱 신규 가입자 중 1명</div>
+        <div class="who" id="whoNew">?</div>
+        <div class="prize" id="przNew"></div>
+      </div>
+    </div>
+    <button class="btn btn-gold" id="drawBtn">🎲 이번 주 추첨 돌리기 (데모)</button>
+    <p style="font-size:11px;color:var(--accent);text-align:center;margin:10px 0 0;">
+      추천을 많이 한 사람일수록 응모권이 많아 당첨 확률이 올라가요</p>
+  </div>
+
+  <!-- 리더보드 -->
+  <div class="card">
+    <h2>🏆 추천 리더보드</h2>
+    <ul class="lb" id="lb"></ul>
+  </div>
+
+  <!-- 당첨 이력 -->
+  <div class="card">
+    <h2>📜 당첨 이력</h2>
+    <ul class="hist" id="hist"></ul>
+  </div>
+
+  <p class="foot">
+    ※ 실제 추천 추적과 공정한 추첨은 서버(백엔드)가 있어야 동작합니다. 이 페이지는 그 흐름을 미리 체험해보는 프론트엔드 프로토타입이에요.<br>
+    ※ 실제 경품 프로모션 운영 시에는 「경품류 제공에 관한 불공정거래행위 고시」 등 관련 규정 확인이 필요합니다.
+  </p>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <div class="emoji" id="mEmoji">🎉</div>
+      <h2 id="mTitle">축하합니다!</h2>
+      <p id="mMsg"></p>
+      <button id="mClose">확인 🥳</button>
+    </div>
+  </div>
+
+<script>
+/* ====================== 포도판 ====================== */
+const BUNCH = 10;                       // 한 송이 = 10알
+const ROWS = [3,3,2,1,1];               // 10알 송이 모양
+const R=24, GX=58, GY=52, TOP=64, CXX=180;
+const POS=[]; ROWS.forEach((n,row)=>{const w=(n-1)*GX; for(let i=0;i<n;i++) POS.push({x:CXX-w/2+i*GX,y:TOP+row*GY});});
+const svg=document.getElementById('grapeSvg');
+function buildSvg(){
+  let s='';
+  s+=`<path d="M180 60 q14 -24 30 -38" stroke="var(--stem)" stroke-width="9" fill="none" stroke-linecap="round"/>`;
+  s+=`<path d="M150 38 q-46 -22 -70 6 q34 8 44 30 q14 -26 26 -36z" fill="var(--leaf)"/>`;
+  s+=`<path d="M168 34 q-10 -38 22 -48 q12 32 -6 54 z" fill="#10b981"/>`;
+  POS.forEach((p,i)=>{ s+=`<g class="grape" data-i="${i}" transform="translate(${p.x},${p.y})">
+     <circle class="gc" r="${R}" fill="var(--grape-empty)" stroke="var(--grape-empty-stroke)" stroke-width="2.5"></circle>
+     <circle r="6" cx="-7" cy="-8" fill="rgba(255,255,255,.55)"></circle></g>`;});
+  svg.innerHTML=s;
+}
+function paintBoard(animateIdx=-1){
+  const inBunch = me.referrals % BUNCH;
+  const shown = (me.referrals>0 && inBunch===0) ? BUNCH : inBunch; // 딱 떨어지면 가득 찬 송이 표시
+  document.querySelectorAll('.grape').forEach(g=>{
+    const i=+g.dataset.i, on=i<shown, c=g.querySelector('.gc');
+    c.setAttribute('fill', on?'var(--grape-full)':'var(--grape-empty)');
+    c.setAttribute('stroke', on?'var(--grape-full-2)':'var(--grape-empty-stroke)');
+    if(i===animateIdx){ g.classList.add('pop'); setTimeout(()=>g.classList.remove('pop'),450); }
+  });
+  const bunches = Math.floor(me.referrals/BUNCH);
+  document.getElementById('boardCap').innerHTML =
+    `완성한 송이 <b>${bunches}</b> · 응모권 <b>${bunches}</b>장 🎟️ &nbsp;(이번 송이 ${shown}/${BUNCH})`;
+}
+
+/* ====================== 가짜 커뮤니티 ====================== */
+const NAMES=['민준','서연','도윤','지우','하준','서윤','예준','지유','시우','하은','주원','지호','수아','지훈','다은',
+  '건우','은서','우진','채원','선우','지아','유준','윤서','준서','soo','jin','루카','토리','별이','코코'];
+const PRIZES=['스타벅스 기프티콘','치킨 세트','영화 예매권 2매','편의점 5천원권','아이스크림 케이크','BHC 뿌링클','배달 1만원권','다이소 1만원권'];
+
+const KEY='grapePromo.v2';
+function rint(n){ return Math.floor(Math.random()*n); }
+function genCommunity(){
+  // 각 멤버: {name, code, referrals, referredBy}
+  const arr = NAMES.map((nm,idx)=>({ name:nm, code:'GRAPE-'+(1000+idx*7%9000), referrals:0, referredBy:null }));
+  // 무작위 추천 관계 생성
+  for(let i=0;i<arr.length;i++){
+    if(Math.random()<0.6){                       // 60%는 누군가의 추천으로 가입
+      let r; do{ r=rint(arr.length); }while(r===i);
+      arr[i].referredBy = arr[r].name;
+      arr[r].referrals++;
+    }
+  }
+  return arr;
+}
+let store = load();
+let community = store.community;
+let me = store.me;
+
+function load(){
+  try{ const s=JSON.parse(localStorage.getItem(KEY)); if(s&&s.me&&s.community) return s; }catch(e){}
+  const community = genCommunity();
+  const me = { name:'나', code:'GRAPE-'+ (1000+rint(8999)), referrals:2, referredBy:null };
+  community.push(me);
+  return { me, community, history:[] };
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
+
+/* ====================== 등급 / 확률 ====================== */
+function tierOf(n){
+  if(n>=20) return '💎 다이아';
+  if(n>=10) return '🥇 골드';
+  if(n>=5)  return '🥈 실버';
+  return '🥉 브론즈';
+}
+function entries(member){ return Math.max(1, member.referrals); } // 응모권 = 추천수(최소1)
+function refStats(){
+  document.getElementById('myCode').textContent = me.code;
+  document.getElementById('sRef').textContent = me.referrals;
+  document.getElementById('sTier').textContent = tierOf(me.referrals);
+  // 이번주 당첨확률 = 내 응모권 / 추천인 전체 응모권합
+  const pool = community.filter(m=>m.referrals>0);
+  const total = pool.reduce((a,m)=>a+entries(m),0) || 1;
+  const myPart = me.referrals>0 ? entries(me)/total*100 : 0;
+  document.getElementById('sChance').textContent = myPart.toFixed(1)+'%';
+}
+
+/* ====================== 리더보드 ====================== */
+function renderLB(){
+  const top=[...community].sort((a,b)=>b.referrals-a.referrals).slice(0,8);
+  document.getElementById('lb').innerHTML = top.map((m,i)=>{
+    const medal=['🥇','🥈','🥉'][i]||(i+1);
+    const isMe = m===me;
+    return `<li class="${isMe?'me':''}"><span class="rank">${medal}</span>
+      <span class="nm">${m.name}${isMe?'<span class="me-tag">나</span>':''} <span style="font-size:11px;color:#a78bca">${tierOf(m.referrals)}</span></span>
+      <span class="ct">${m.referrals}명</span></li>`;
+  }).join('');
+}
+
+/* ====================== 친구 초대 (데모) ====================== */
+function invite(){
+  const friend = { name: NAMES[rint(NAMES.length)]+ (rint(90)+10), code:'GRAPE-'+(1000+rint(8999)),
+    referrals:0, referredBy: me.name };
+  community.push(friend);
+  me.referrals++;
+  save();
+  refStats(); renderLB();
+  paintBoard((me.referrals-1)%BUNCH);
+  if(me.referrals%BUNCH===0){
+    showModal('🎟️','응모권 획득!', `포도 한 송이를 완성했어요!<br>이번 주 추첨 응모권 <b>${Math.floor(me.referrals/BUNCH)}</b>장째 적립 🎉`);
+    burst(40);
+  }
+}
+
+/* ====================== 주간 추첨 ====================== */
+let drawing=false;
+function weightedPick(pool){               // 응모권 가중 랜덤
+  const total = pool.reduce((a,m)=>a+entries(m),0);
+  let r = Math.random()*total;
+  for(const m of pool){ r-=entries(m); if(r<=0) return m; }
+  return pool[pool.length-1];
+}
+function runDraw(){
+  if(drawing) return;
+  const refPool = community.filter(m=>m.referrals>0);          // 추천인 풀
+  const newPool = community.filter(m=>m.referredBy!=null);     // 신규 가입자(피추천) 풀
+  if(!refPool.length || !newPool.length){ alert('추첨할 참가자가 부족해요. 친구 초대를 먼저 해보세요!'); return; }
+  drawing=true;
+  document.getElementById('drawBtn').disabled=true;
+  document.getElementById('slotRef').classList.remove('win');
+  document.getElementById('slotNew').classList.remove('win');
+  document.getElementById('przRef').textContent='';
+  document.getElementById('przNew').textContent='';
+
+  const winRef = weightedPick(refPool);
+  const winNew = newPool[rint(newPool.length)];                // 신규는 동등 추첨
+  const prizeRef = PRIZES[rint(PRIZES.length)];
+  const prizeNew = PRIZES[rint(PRIZES.length)];
+
+  let ticks=0; const maxT=28;
+  const spin=setInterval(()=>{
+    document.getElementById('whoRef').textContent = refPool[rint(refPool.length)].name;
+    document.getElementById('whoNew').textContent = newPool[rint(newPool.length)].name;
+    ticks++;
+    if(ticks>=maxT){
+      clearInterval(spin);
+      document.getElementById('whoRef').textContent = winRef.name;
+      document.getElementById('whoNew').textContent = winNew.name;
+      document.getElementById('przRef').textContent = '🎁 '+prizeRef;
+      document.getElementById('przNew').textContent = '🎁 '+prizeNew;
+      document.getElementById('slotRef').classList.add('win');
+      document.getElementById('slotNew').classList.add('win');
+      burst(70);
+      const wonByMe = (winRef===me?'추천인':'') ;
+      store.history.unshift({ d:weekLabel(), ref:winRef.name, refPrize:prizeRef, neu:winNew.name, newPrize:prizeNew });
+      save(); renderHist();
+      const mine = winRef===me;
+      showModal(mine?'🏆':'🎉', mine?'당신이 당첨!':'이번 주 당첨자 발표!',
+        `👑 추천인: <b>${winRef.name}</b> → ${prizeRef}<br>🌱 신규: <b>${winNew.name}</b> → ${prizeNew}` +
+        (mine?'<br><br>축하해요! 추천을 많이 한 보람이 있네요 🎊':''));
+      drawing=false;
+      document.getElementById('drawBtn').disabled=false;
+    }
+  },70);
+}
+function renderHist(){
+  const el=document.getElementById('hist');
+  if(!store.history.length){ el.innerHTML='<li class="empty">아직 추첨 이력이 없어요</li>'; return; }
+  el.innerHTML = store.history.slice(0,8).map(h=>
+    `<li><b>${h.d}</b><br>👑 ${h.ref} · ${h.refPrize}<br>🌱 ${h.neu} · ${h.newPrize}</li>`).join('');
+}
+function weekLabel(){
+  // 데모용 주차 라벨 (실제 날짜 대신 회차 표기)
+  return (store.history.length+1)+'회차 추첨';
+}
+
+/* ====================== 카운트다운 (다음 월요일 0시) ====================== */
+function tickCountdown(){
+  const now=new Date();
+  const next=new Date(now);
+  const day=now.getDay();                       // 0=일
+  let add=(8-day)%7; if(add===0) add=7;         // 다음 월요일
+  next.setDate(now.getDate()+add); next.setHours(0,0,0,0);
+  let diff=Math.max(0,next-now);
+  const d=Math.floor(diff/86400000); diff%=86400000;
+  const h=Math.floor(diff/3600000); diff%=3600000;
+  const m=Math.floor(diff/60000);
+  document.getElementById('cd').textContent=`${d}일 ${h}시간 ${m}분`;
+}
+
+/* ====================== 모달 / 컨페티 ====================== */
+function showModal(emoji,title,msg){
+  document.getElementById('mEmoji').textContent=emoji;
+  document.getElementById('mTitle').textContent=title;
+  document.getElementById('mMsg').innerHTML=msg;
+  document.getElementById('modal').classList.add('show');
+}
+function burst(n){
+  const colors=['#7c3aed','#a855f7','#f472b6','#34d399','#fbbf24','#60a5fa'];
+  for(let i=0;i<n;i++){
+    const el=document.createElement('div'); el.className='confetti';
+    el.style.background=colors[rint(colors.length)];
+    el.style.left=Math.random()*100+'vw';
+    const dur=2+Math.random()*2;
+    el.style.transition=`transform ${dur}s linear, opacity ${dur}s linear`;
+    document.body.appendChild(el);
+    requestAnimationFrame(()=>{ el.style.transform=`translateY(105vh) rotate(${Math.random()*720}deg)`; el.style.opacity='0'; });
+    setTimeout(()=>el.remove(),dur*1000+100);
+  }
+}
+
+/* ====================== 공유 링크 복사 ====================== */
+function copyLink(){
+  const url=`${location.origin}${location.pathname}?ref=${me.code}`;
+  const done=()=>{ const b=document.getElementById('copyBtn'); const o=b.innerHTML; b.innerHTML='복사<br>완료!'; setTimeout(()=>b.innerHTML=o,1500); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done,()=>prompt('아래 링크를 복사하세요',url)); }
+  else prompt('아래 링크를 복사하세요',url);
+}
+
+/* ====================== 초기화 ====================== */
+buildSvg(); paintBoard(); refStats(); renderLB(); renderHist(); tickCountdown();
+setInterval(tickCountdown,60000);
+document.getElementById('inviteBtn').addEventListener('click',invite);
+document.getElementById('drawBtn').addEventListener('click',runDraw);
+document.getElementById('copyBtn').addEventListener('click',copyLink);
+document.getElementById('mClose').addEventListener('click',()=>document.getElementById('modal').classList.remove('show'));
+</script>
+</body>
+</html>
