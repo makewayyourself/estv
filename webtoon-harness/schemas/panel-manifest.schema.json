@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://webtoon-harness/schemas/panel-manifest.schema.json",
+  "title": "Episode Panel Manifest",
+  "description": "Per-episode list of panels driving render, validation, lettering overlay, and viewer assembly. Written as 04_visual/ep{NN}_panels.json. The single structure shared by prompt-smith, panel-artists, panel-validator, letterer, and episode-compositor.",
+  "type": "object",
+  "required": ["episode", "backend", "panels"],
+  "additionalProperties": false,
+  "properties": {
+    "episode": { "type": "integer", "minimum": 1 },
+    "backend": { "type": "string", "description": "image backend used (codex|gpt-image|gemini|local-sd)" },
+    "panels": {
+      "type": "array",
+      "minItems": 50,
+      "description": "DESIGN §5: at least 50 panels per episode",
+      "items": {
+        "type": "object",
+        "required": ["id", "scene_id", "location", "group", "prompt_ref", "art_path", "lettering_mode"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^panel_[0-9]{3}$" },
+          "scene_id": { "type": "string", "description": "scene grouping for continuity, e.g. S03" },
+          "location": { "type": "string", "pattern": "^LOC_[A-Z0-9_]+$" },
+          "group": { "type": "string", "enum": ["A", "B", "C"], "description": "render distribution group / owning panel-artist" },
+          "characters": { "type": "array", "items": { "type": "string", "pattern": "^CHAR_[A-Z0-9_]+$" } },
+          "prompt_ref": { "type": "string", "description": "anchor in ep{NN}_prompts.md" },
+          "seed": { "type": ["integer", "null"] },
+          "art_path": { "type": "string", "description": "05_panels/ep{NN}/panel_NNN.png (art only unless baked)" },
+          "lettering_mode": { "type": "string", "enum": ["overlay", "bake"], "default": "overlay", "description": "U1: overlay is default; bake opt-in" },
+          "balloons": {
+            "type": "array",
+            "description": "overlay text layer rendered by scripts/lettering/overlay.mjs",
+            "items": {
+              "type": "object",
+              "required": ["text", "box"],
+              "additionalProperties": false,
+              "properties": {
+                "speaker": { "type": "string" },
+                "text": { "type": "string", "description": "Hangul dialogue — rendered with bundled font, always correct" },
+                "kind": { "type": "string", "enum": ["speech", "thought", "narration", "sfx", "shout"], "default": "speech" },
+                "box": {
+                  "type": "object",
+                  "required": ["x", "y", "w", "h"],
+                  "description": "percentage of panel dimensions (0-100)",
+                  "properties": {
+                    "x": { "type": "number" }, "y": { "type": "number" },
+                    "w": { "type": "number" }, "h": { "type": "number" }
+                  }
+                },
+                "tail": { "type": "string", "enum": ["none", "up", "down", "left", "right"], "default": "down" },
+                "style": { "type": "string", "description": "optional CSS class override" }
+              }
+            }
+          },
+          "validation": {
+            "type": "object",
+            "description": "filled by panel-validator (U5)",
+            "properties": {
+              "verdict": { "type": "string", "enum": ["ACCEPT", "REGEN", "ACCEPT-FLAG", "PENDING"] },
+              "tries": { "type": "integer", "minimum": 0 },
+              "c1_ref_similarity": { "type": ["number", "null"], "description": "perceptual/embedding score vs reference sheet" },
+              "notes": { "type": "string" }
+            }
+          },
+          "cache_key": { "type": ["string", "null"], "description": "sha256(prompt+refs+seed+backend) — U6" }
+        }
+      }
+    }
+  }
+}

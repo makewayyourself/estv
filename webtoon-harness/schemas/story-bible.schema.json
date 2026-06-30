@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://webtoon-harness/schemas/story-bible.schema.json",
+  "title": "Story Bible",
+  "description": "Structured single source of truth for a series: characters, locations, world rules, props. Owned by character-designer + worldbuilder (U4). Reused across every episode; never re-derived.",
+  "type": "object",
+  "required": ["series", "characters", "locations"],
+  "additionalProperties": false,
+  "properties": {
+    "series": {
+      "type": "object",
+      "required": ["title", "logline", "genre"],
+      "additionalProperties": true,
+      "properties": {
+        "title": { "type": "string" },
+        "logline": { "type": "string" },
+        "genre": { "type": "array", "items": { "type": "string" } },
+        "tone": { "type": "string" },
+        "target_reader": { "type": "string" },
+        "art_style_ref": { "type": "string", "description": "pointer to 04_visual/style-bible.md" }
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "role", "appearance_tokens"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^CHAR_[A-Z0-9_]+$", "description": "stable id, e.g. CHAR_JIHU" },
+          "name": { "type": "string" },
+          "role": { "type": "string", "enum": ["protagonist", "deuteragonist", "antagonist", "supporting", "minor"] },
+          "appearance_tokens": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "consistency tokens injected into every render prompt (hair, eyes, outfit, marks)"
+          },
+          "reference_sheet": { "type": "string", "description": "path under 04_visual/refs/ once rendered" },
+          "personality": { "type": "string" },
+          "arc": { "type": "string" },
+          "speech_style": { "type": "string", "description": "how their dialogue reads — used by dialogue-writer" }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token", "name"],
+        "additionalProperties": true,
+        "properties": {
+          "token": { "type": "string", "pattern": "^LOC_[A-Z0-9_]+$", "description": "location token, e.g. LOC_ROOFTOP" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "lighting": { "type": "string" },
+          "recurring": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    "world_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule"],
+        "properties": {
+          "id": { "type": "string" },
+          "rule": { "type": "string" },
+          "established_in": { "type": "string", "description": "episode where the rule first appears" }
+        }
+      }
+    },
+    "props": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "significance": { "type": "string" }
+        }
+      }
+    }
+  }
+}
