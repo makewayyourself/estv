@@ -10,7 +10,7 @@ All rendering personas call **one** command — never a backend directly:
 
 ```sh
 scripts/imagegen/render.sh \
-  --backend  "${WT_IMG_BACKEND:-codex}" \   # codex | gpt-image | gemini | local-sd
+  --backend  "${WT_IMG_BACKEND:-codex}" \   # codex | gpt-image | gemini | local-sd | placeholder
   --prompt-file <path.md|.txt> \            # the panel prompt (required)
   --out        <path.png> \                 # output PNG (required)
   --ref        <ref.png> \                  # reference sheet anchor (repeatable, optional)
@@ -47,6 +47,19 @@ stdout (callers may capture it).
 3. `chmod +x` it. Select it with `--backend <name>` or `export WT_IMG_BACKEND=<name>`.
 
 No other file needs to change — that is the whole point of U3.
+
+### `placeholder` backend (offline demo/test/CI)
+
+`backends/placeholder.sh` is a credential-free, fully offline backend. It calls **no**
+AI model — it draws a deterministic, art-only stand-in panel (gradient by location/seed,
+simple staged figures, negative space for overlay text) with python3 + Pillow. Use it to
+smoke-test the whole render → validate → overlay → viewer chain without any keys:
+
+```sh
+export WT_IMG_BACKEND=placeholder   # then run the pipeline as usual
+```
+
+Swap back to a real backend (`codex`/`gpt-image`/`gemini`/`local-sd`) for final art.
 
 ## Prompt convention (works with U1 lettering)
 

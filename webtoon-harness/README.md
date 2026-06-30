@@ -29,6 +29,7 @@
    ```sh
    export WT_IMG_BACKEND=codex          # 또는 gpt-image / gemini / local-sd
    # gpt-image: OPENAI_API_KEY, gemini: GEMINI_API_KEY, local-sd: WT_SD_URL
+   # 자격증명 없이 전체 파이프라인을 시험만 하려면: WT_IMG_BACKEND=placeholder (오프라인 데모, python3+Pillow)
    ```
 3. Claude Code에서 자연어로 요청:
    - "트렌드 반영해서 웹툰 1화 만들어줘" → 오케스트레이터가 전체 파이프라인 실행
