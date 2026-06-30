@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{TITLE}}</title>
+<style>
+  {{FONT_FACE}}
+  :root{
+    --max:820px; --bg:#0d0d10; --panel-gap:0px; --scene-gap:18px;
+    --balloon-bg:#ffffff; --balloon-fg:#141414; --balloon-radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:#eee;
+    font-family:'WTKR','Apple SD Gothic Neo','Noto Sans KR',sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  header.wt-bar{
+    position:sticky; top:0; z-index:10; backdrop-filter:blur(8px);
+    background:rgba(13,13,16,.72); padding:10px 16px; font-size:14px;
+    border-bottom:1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center;
+  }
+  header.wt-bar b{font-weight:700}
+  header.wt-bar .sp{flex:1}
+  .viewer{max-width:var(--max); margin:0 auto; background:#000}
+  /* Each panel: art image with absolutely-positioned overlay balloons (U1). */
+  .panel{position:relative; margin:0 0 var(--panel-gap) 0; line-height:0}
+  .panel + .panel[data-scene]:not([data-scene=""]){margin-top:var(--scene-gap)}
+  .panel img{width:100%; height:auto; display:block}
+  /* Overlay text layer — real font, perfect Hangul, editable. */
+  .balloon{
+    position:absolute; line-height:1.32; word-break:keep-all;
+    background:var(--balloon-bg); color:var(--balloon-fg);
+    border-radius:var(--balloon-radius); padding:2.0% 2.6%;
+    font-size:clamp(13px,2.7vw,21px); font-weight:500;
+    box-shadow:0 2px 6px rgba(0,0,0,.35); display:flex; align-items:center;
+  }
+  .balloon.thought{border-radius:48% / 60%; font-style:italic}
+  .balloon.narration{background:rgba(0,0,0,.82); color:#fff; border-radius:6px; font-weight:600}
+  .balloon.shout{font-weight:800; letter-spacing:.5px}
+  .balloon.sfx{background:transparent; color:#fff; font-weight:800; box-shadow:none;
+    text-shadow:0 0 6px #000, 0 0 2px #000; justify-content:center}
+  /* Speech tails */
+  .tail{position:absolute; width:0; height:0}
+  .tail-down{bottom:-10px; left:22%; border:8px solid transparent; border-top-color:var(--balloon-bg)}
+  .tail-up{top:-10px; left:22%; border:8px solid transparent; border-bottom-color:var(--balloon-bg)}
+  .tail-left{left:-10px; top:35%; border:8px solid transparent; border-right-color:var(--balloon-bg)}
+  .tail-right{right:-10px; top:35%; border:8px solid transparent; border-left-color:var(--balloon-bg)}
+  footer.wt-end{padding:40px 16px 80px; text-align:center; color:#888; font-size:14px}
+</style>
+</head>
+<body>
+<header class="wt-bar"><b>{{TITLE}}</b><span class="sp"></span><span class="wt-hint">세로로 스크롤하세요 ↓</span></header>
+<main class="viewer">
+{{PANELS}}
+</main>
+<footer class="wt-end">— 다음 화에서 계속 —</footer>
+</body>
+</html>
