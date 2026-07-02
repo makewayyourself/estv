@@ -834,17 +834,18 @@ class App {
     this.workletNode.port.onmessage = (e) => {
       if (this.paused) return;
       if (this._audioSink) return this._audioSink(e.data);
-      // Half-duplex: while our own translated audio is playing, the mic mostly
-      // hears that playback (esp. on speaker / earphone-mode without AEC).
-      // Feeding it back re-translates our own output → repeat loops and
-      // wrong-language detections. Drop mic frames until playback (+ a short
-      // tail) is done.
-      if (this._playbackBusy()) return;
-      // Ambient-noise gate: skip frames below the speech-energy threshold so
-      // background chatter/noise doesn't reach the model (a major source of
-      // wrong-language detection). Off via Settings toggle if it clips speech.
-      if (this._noiseGateOn() && !this._vadGate(e.data)) return;
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(e.data);
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      // Gates replace frames with SILENCE rather than dropping them: Gemini
+      // detects end-of-turn from silence in the stream, so dropped frames
+      // starve turn detection (very late, garbled translations).
+      //  - half-duplex: only in earphone mode (AEC off) — normal mode's AEC
+      //    already cancels our own playback from the mic.
+      //  - noise gate: quiet background sound becomes silence, so ambient
+      //    chatter can't trigger wrong-language detections.
+      const gated =
+        (localStorage.getItem("earphoneMode") === "1" && this._playbackBusy()) ||
+        (this._noiseGateOn() && !this._vadGate(e.data));
+      this.ws.send(gated ? new ArrayBuffer(e.data.byteLength) : e.data);
     };
     this.micSource.connect(this.workletNode);
     const sink = this.captureContext.createGain(); sink.gain.value = 0;
@@ -1140,10 +1141,17 @@ class App {
         this.meetWs = ws;
       });
       this._diarTranscript = this.el.mjoinTranscript; this.el.mjoinTranscript.innerHTML = "";
-      // VAD-gated mic: only send audio while actually speaking → no idle cost
-      this._vadUntil = 0;
+      // VAD-gated mic: stream only while speaking (idle costs nothing), but
+      // after speech ends send a short silence tail so Gemini's turn detection
+      // can finalize the utterance — dropping to nothing mid-stream leaves
+      // turns hanging (late/garbled results).
+      this._vadUntil = 0; this._meetTailUntil = 0;
       this._audioSink = (buf) => {
-        if (this._vadGate(buf) && this.meetWs && this.meetWs.readyState === WebSocket.OPEN) this.meetWs.send(buf);
+        if (!this.meetWs || this.meetWs.readyState !== WebSocket.OPEN) return;
+        const now = (window.performance && performance.now) ? performance.now() : Date.now();
+        if (this._vadGate(buf)) { this._meetTailUntil = 0; this.meetWs.send(buf); }
+        else if (!this._meetTailUntil) { this._meetTailUntil = now + 1200; this.meetWs.send(new ArrayBuffer(buf.byteLength)); }
+        else if (now < this._meetTailUntil) this.meetWs.send(new ArrayBuffer(buf.byteLength));
       };
       await this._startCapture();
       this.el.mjoinForm.hidden = true; this.el.mjoinLive.hidden = false;
@@ -1180,7 +1188,9 @@ class App {
     for (let i = 0; i < pcm.length; i++) { const v = pcm[i] / 0x8000; sum += v * v; }
     const rms = Math.sqrt(sum / pcm.length);
     const now = (window.performance && performance.now) ? performance.now() : Date.now();
-    if (rms > 0.018) this._vadUntil = now + 700; // speaking → 700ms hangover so word tails aren't cut
+    // 0.010: low enough for normal-volume speech (0.018 missed quiet voices);
+    // 1s hangover so soft syllables mid-sentence don't chop the utterance.
+    if (rms > 0.010) this._vadUntil = now + 1000;
     const active = now < (this._vadUntil || 0);
     if (this.el.mjoinSpeak) this.el.mjoinSpeak.style.opacity = active ? "1" : "0.2";
     return active;
