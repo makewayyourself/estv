@@ -275,6 +275,10 @@
                 <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
               </div>
               <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+              <label class="mb-1 mt-3 block text-xs font-medium text-slate-400" data-i18n="set.glossary">📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)</label>
+              <input id="glossaryInput" type="text" data-i18n-ph="set.glossaryPh" placeholder="예: 안현모(내 이름), ABC무역(회사), FOB, 선하증권" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
+              <label class="mb-1 mt-3 block text-xs font-medium text-slate-400" data-i18n="set.assistLang">🌐 AI 보조 표시 언어 (내가 읽을 수 있는 언어)</label>
+              <select id="assistLang" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 focus:outline-none"></select>
             </div>
 
             <!-- App install (APK) — visible to everyone, for sharing with participants -->

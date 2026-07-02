@@ -41,6 +41,8 @@ const I18N = {
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
     "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
     "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
+    "set.glossary": "📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)", "set.glossaryPh": "예: 안현모(내 이름), ABC무역(회사), FOB, 선하증권",
+    "set.assistLang": "🌐 AI 보조 표시 언어 (내가 읽을 수 있는 언어)",
     "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
@@ -96,6 +98,8 @@ const I18N = {
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
     "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
     "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
+    "set.glossary": "📖 Glossary — names, companies, terms (used to auto-correct mishearings)", "set.glossaryPh": "e.g. Hyunmo Ahn (my name), ABC Trading (company), FOB, B/L",
+    "set.assistLang": "🌐 AI assist language (the language YOU read)",
     "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
@@ -197,7 +201,7 @@ class App {
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
-     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle","noiseGateToggle",
+     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle","noiseGateToggle","glossaryInput","assistLang",
      "serverUrl","accessToken","saveServerBtn","modelInfo",
      "operatorBox","healthBtn","healthStatus","buildTap","setVer"].forEach((id) => (this.el[id] = $(id)));
   }
@@ -308,12 +312,14 @@ class App {
     this.el.fontSel.addEventListener("change", () => this._applyFont(this.el.fontSel.value));
     this.el.speedRange.addEventListener("input", () => { this.playbackRate = parseFloat(this.el.speedRange.value); this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`; localStorage.setItem("playbackRate", String(this.playbackRate)); });
     this.el.riskToggle.checked = localStorage.getItem("riskGuard") === "1";
-    this.el.clarifyToggle.checked = localStorage.getItem("clarify") === "1";
+    this.el.clarifyToggle.checked = localStorage.getItem("clarify") !== "0"; // default ON — mishearing names is fatal in business
     this.el.answerToggle.checked = localStorage.getItem("answer") === "1";
     this.el.upgradeToggle.checked = localStorage.getItem("upgrade") === "1";
     this.el.earphoneToggle.checked = localStorage.getItem("earphoneMode") === "1";
     this.el.noiseGateToggle.checked = localStorage.getItem("noiseGate") !== "0";
     this.el.noiseGateToggle.addEventListener("change", () => localStorage.setItem("noiseGate", this.el.noiseGateToggle.checked ? "1" : "0"));
+    this.el.glossaryInput.value = localStorage.getItem("glossary") || "";
+    this.el.glossaryInput.addEventListener("change", () => localStorage.setItem("glossary", this.el.glossaryInput.value.trim()));
     this.el.riskContext.value = localStorage.getItem("riskContext") || "";
     this.el.riskToggle.addEventListener("change", () => localStorage.setItem("riskGuard", this.el.riskToggle.checked ? "1" : "0"));
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
@@ -398,6 +404,10 @@ class App {
     const fillB = (sel, sv) => { sel.innerHTML = ""; for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === sv) o.selected = true; sel.appendChild(o); } };
     fillB(this.el.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
     this.el.langB.addEventListener("change", () => localStorage.setItem("langB", this.el.langB.value));
+    // Language the AI-assist cards (answer/clarify/risk) are written in —
+    // the language the USER reads, independent of the app UI language.
+    fillB(this.el.assistLang, localStorage.getItem("assistLang") || UI_LANG);
+    this.el.assistLang.addEventListener("change", () => localStorage.setItem("assistLang", this.el.assistLang.value));
     const ds = [this.el.displayLang1, this.el.displayLang2, this.el.displayLang3];
     const saved = JSON.parse(localStorage.getItem("displayLangs") || "[]");
     ds.forEach((sel, i) => {
@@ -643,8 +653,10 @@ class App {
     const wantUpgrade = this.el.upgradeToggle.checked;
     try {
       const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ original: entry.source, translation: entry.translation, alert_language: UI_LANG, target_language: this.el.langB.value,
-          context: this.el.riskContext.value.trim(), history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
+        body: JSON.stringify({ original: entry.source, translation: entry.translation,
+          alert_language: (localStorage.getItem("assistLang") || UI_LANG), target_language: this.el.langB.value,
+          context: [this.el.riskContext.value.trim(), (localStorage.getItem("glossary") || "").trim() && ("Glossary (correct names/terms): " + localStorage.getItem("glossary").trim())].filter(Boolean).join("\n"),
+          history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
           want_risk: wantRisk, want_clarify: wantClarify, want_answer: wantAnswer, want_upgrade: wantUpgrade, token: this._token() || undefined }) });
       if (!r.ok) return;
       const d = await r.json(); if (!d) return;
