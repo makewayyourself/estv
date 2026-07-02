@@ -40,6 +40,7 @@ const I18N = {
     "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
     "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
+    "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
     "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
@@ -94,6 +95,7 @@ const I18N = {
     "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
     "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
+    "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
     "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
@@ -195,7 +197,7 @@ class App {
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
-     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle",
+     "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle","noiseGateToggle",
      "serverUrl","accessToken","saveServerBtn","modelInfo",
      "operatorBox","healthBtn","healthStatus","buildTap","setVer"].forEach((id) => (this.el[id] = $(id)));
   }
@@ -310,6 +312,8 @@ class App {
     this.el.answerToggle.checked = localStorage.getItem("answer") === "1";
     this.el.upgradeToggle.checked = localStorage.getItem("upgrade") === "1";
     this.el.earphoneToggle.checked = localStorage.getItem("earphoneMode") === "1";
+    this.el.noiseGateToggle.checked = localStorage.getItem("noiseGate") !== "0";
+    this.el.noiseGateToggle.addEventListener("change", () => localStorage.setItem("noiseGate", this.el.noiseGateToggle.checked ? "1" : "0"));
     this.el.riskContext.value = localStorage.getItem("riskContext") || "";
     this.el.riskToggle.addEventListener("change", () => localStorage.setItem("riskGuard", this.el.riskToggle.checked ? "1" : "0"));
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
@@ -830,6 +834,16 @@ class App {
     this.workletNode.port.onmessage = (e) => {
       if (this.paused) return;
       if (this._audioSink) return this._audioSink(e.data);
+      // Half-duplex: while our own translated audio is playing, the mic mostly
+      // hears that playback (esp. on speaker / earphone-mode without AEC).
+      // Feeding it back re-translates our own output → repeat loops and
+      // wrong-language detections. Drop mic frames until playback (+ a short
+      // tail) is done.
+      if (this._playbackBusy()) return;
+      // Ambient-noise gate: skip frames below the speech-energy threshold so
+      // background chatter/noise doesn't reach the model (a major source of
+      // wrong-language detection). Off via Settings toggle if it clips speech.
+      if (this._noiseGateOn() && !this._vadGate(e.data)) return;
       if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(e.data);
     };
     this.micSource.connect(this.workletNode);
@@ -849,6 +863,10 @@ class App {
     const s = this.playbackContext.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(this.playbackContext.destination);
     const now = this.playbackContext.currentTime; if (this.nextPlayTime < now) this.nextPlayTime = now + 0.05;
     s.start(this.nextPlayTime); this.nextPlayTime += b.duration / this.playbackRate;
+    // Remember when playback (incl. queue) ends + a 300ms reverb tail, so the
+    // half-duplex mic gate knows how long to hold.
+    const perfNow = (window.performance && performance.now) ? performance.now() : Date.now();
+    this._lastPlaybackEnd = perfNow + (this.nextPlayTime - now) * 1000 + 300;
   }
   _finalizeAudio() {
     if (!this._curAudioChunks.length) return;
@@ -1149,6 +1167,14 @@ class App {
     this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false;
     if (!silent) this._setStatus("idle", t("st.idle"));
   }
+  _playbackBusy() {
+    // True while queued translated audio is still playing (+300ms tail for
+    // room reverb), and only in a mode that actually emits audio.
+    if (!this.audioOutput || !this.playbackContext || this.playbackContext.state === "closed") return false;
+    return this.nextPlayTime > this.playbackContext.currentTime + 0.001 ||
+           (this._lastPlaybackEnd || 0) > ((window.performance && performance.now) ? performance.now() : Date.now());
+  }
+  _noiseGateOn() { return localStorage.getItem("noiseGate") !== "0"; } // default ON
   _vadGate(buf) {
     const pcm = new Int16Array(buf); let sum = 0;
     for (let i = 0; i < pcm.length; i++) { const v = pcm[i] / 0x8000; sum += v * v; }

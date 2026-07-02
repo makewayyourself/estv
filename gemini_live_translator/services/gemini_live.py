@@ -344,7 +344,12 @@ def build_config(
             output_audio_transcription=types.AudioTranscriptionConfig(),
             translation_config=types.TranslationConfig(
                 target_language_code=_target_code(lang_b),
-                echo_target_language=True,
+                # echo_target_language=True re-speaks anything already in the
+                # target language. Combined with the phone speaker feeding the
+                # mic, that created an infinite repeat loop (translation plays →
+                # mic hears it → it's target-language → model re-speaks it → …).
+                # Off: target-language speech simply passes without re-speaking.
+                echo_target_language=False,
             ),
         )
 
