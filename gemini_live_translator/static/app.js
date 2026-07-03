@@ -49,6 +49,7 @@ const I18N = {
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
+    "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
     "note.tabFeedback": "피드백", "note.feedbackBtn": "📊 피드백 생성 / 갱신",
@@ -108,6 +109,7 @@ const I18N = {
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
+    "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
     "note.tabFeedback": "Feedback", "note.feedbackBtn": "📊 Generate / refresh feedback",
@@ -213,7 +215,7 @@ class App {
      "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
      "apkDownloadBtn","apkCopyBtn",
-     "qkRoomBtn","qkSaveBtn",
+     "qkRoomBtn","qkSaveBtn","qkLangSel",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
@@ -430,7 +432,21 @@ class App {
   _populateLangs() {
     const fillB = (sel, sv) => { sel.innerHTML = ""; for (const [c, l] of Object.entries(LANGUAGES)) { const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === sv) o.selected = true; sel.appendChild(o); } };
     fillB(this.el.langB, localStorage.getItem("langB") || DEFAULT_LANG_B);
-    this.el.langB.addEventListener("change", () => localStorage.setItem("langB", this.el.langB.value));
+    this.el.langB.addEventListener("change", () => { localStorage.setItem("langB", this.el.langB.value); this.el.qkLangSel.value = this.el.langB.value; });
+    // In-place output-language switch on the Quick Translate screen: going to
+    // Settings drops the session to idle, so switch here and — if a session is
+    // live — transparently reconnect with the new target language (the Gemini
+    // config is fixed per connection).
+    fillB(this.el.qkLangSel, localStorage.getItem("langB") || DEFAULT_LANG_B);
+    this.el.qkLangSel.addEventListener("change", async () => {
+      const v = this.el.qkLangSel.value;
+      this.el.langB.value = v; localStorage.setItem("langB", v);
+      if (this.running) {
+        this._setStatus("connecting", t("st.langSwitch"));
+        await this.stop();
+        this.start();
+      }
+    });
     // Language the AI-assist cards (answer/clarify/risk) are written in —
     // the language the USER reads, independent of the app UI language.
     fillB(this.el.assistLang, localStorage.getItem("assistLang") || UI_LANG);
