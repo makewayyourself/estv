@@ -51,7 +51,7 @@ const I18N = {
     "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
     "mode.prec": "🎯 고정밀", "tr.inLang": "🎙️ 입력",
-    "st.precLive": "🎯 고정밀 자막 — 문장을 마치면 자막이 표시됩니다",
+    "st.precLive": "🎯 고정밀 자막 — 문장을 마치면 자막이 표시됩니다", "tr.tts": "읽어주기",
     "tr.duo": "🪟 대면 자막", "duo.intro": "투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.",
     "duo.top": "위쪽(내 앞) 언어", "duo.bottom": "아래쪽(맞은편) 언어", "duo.flip": "아래쪽 표시 방향 (프로젝터 설치에 맞게)",
     "duo.flipMirror": "좌우 반전 (거울)", "duo.flipRotate": "180° 회전", "duo.flipNone": "그대로",
@@ -117,7 +117,7 @@ const I18N = {
     "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
     "mode.prec": "🎯 Precision", "tr.inLang": "🎙️ Input",
-    "st.precLive": "🎯 Precision captions — text appears when you finish a sentence",
+    "st.precLive": "🎯 Precision captions — text appears when you finish a sentence", "tr.tts": "Read aloud",
     "tr.duo": "🪟 Glass captions", "duo.intro": "Face-to-face captions for a beam projector on transparent glass: top and bottom show different languages; the bottom is flipped so it reads correctly through the glass.",
     "duo.top": "Top (my side) language", "duo.bottom": "Bottom (far side) language", "duo.flip": "Bottom orientation (match your projector)",
     "duo.flipMirror": "Mirrored", "duo.flipRotate": "Rotated 180°", "duo.flipNone": "As-is",
@@ -216,7 +216,7 @@ class App {
     this.el = {};
     ["backBtn","viewTitle","statusDot","statusText","controlBar","newNoteBtn",
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
-     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn","modePrecBtn",
+     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn","modePrecBtn","precTtsWrap","precTtsToggle",
      "qkTranscript","noteTranscript","assistCards",
      "focusBtn","focusOverlay","focusCaption",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
@@ -365,6 +365,8 @@ class App {
     this.el.earphoneToggle.checked = localStorage.getItem("earphoneMode") === "1";
     this.el.noiseGateToggle.checked = localStorage.getItem("noiseGate") !== "0";
     this.el.noiseGateToggle.addEventListener("change", () => localStorage.setItem("noiseGate", this.el.noiseGateToggle.checked ? "1" : "0"));
+    this.el.precTtsToggle.checked = localStorage.getItem("precTts") === "1";
+    this.el.precTtsToggle.addEventListener("change", () => { localStorage.setItem("precTts", this.el.precTtsToggle.checked ? "1" : "0"); if (!this.el.precTtsToggle.checked && window.speechSynthesis) speechSynthesis.cancel(); });
     this.el.glossaryInput.value = localStorage.getItem("glossary") || "";
     this.el.glossaryInput.addEventListener("change", () => localStorage.setItem("glossary", this.el.glossaryInput.value.trim()));
     this.el.riskContext.value = localStorage.getItem("riskContext") || "";
@@ -435,7 +437,7 @@ class App {
     this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
     this.el.viewMode.value = this.viewMode;
     this._setMode(this.audioOutput, true);
-    this._setPrec(localStorage.getItem("precision") === "1", true);
+    this._setPrec(localStorage.getItem("precision") !== "0", true); // precision is the default: validated as the accurate engine
   }
   _applyTheme(theme) { document.body.classList.toggle("light", theme === "light"); localStorage.setItem("theme", theme); this.el.themeSel.value = theme; }
   _applyFont(size) { ["sm","md","lg","xl"].forEach((s) => { this.el.qkTranscript.classList.toggle("fs-" + s, s === size); this.el.noteTranscript.classList.toggle("fs-" + s, s === size); }); localStorage.setItem("fontSize", size); this.el.fontSel.value = size; }
@@ -452,6 +454,7 @@ class App {
     this.precision = !!on;
     if (!silent) localStorage.setItem("precision", on ? "1" : "0");
     if (on) this.audioOutput = false;
+    this.el.precTtsWrap.hidden = !on; // device-TTS read-aloud is a precision-mode option
     this._paintModes();
     if (this.running && !silent) { // switch engines live
       this._setStatus("connecting", t("st.langSwitch"));
@@ -1069,6 +1072,7 @@ class App {
     if (this._turnTimer) this._finalizeTurn();
     this._audioSink = null;
     this._keepAlive(false);
+    if (window.speechSynthesis) speechSynthesis.cancel();
     if (this.recorder) {
       const rec = this.recorder; this.recorder = null;
       await new Promise((res) => { rec.onstop = res; try { rec.stop(); } catch (_) { res(); } });
@@ -1578,10 +1582,13 @@ class App {
         const d = await r.json();
         if (!this.running || !this.precision) return;
         if (d.source || d.translation) {
+          // Drop our own read-aloud audio if the mic re-captured it.
+          if (d.source && this._isSelfEcho(d.source)) return;
           // Reuse the normal turn pipeline: bubbles, log, assist, multi-lang, duo.
           if (d.source) this._appendTranscript("source", d.source);
           if (d.translation) this._appendTranscript("translation", d.translation);
           this._finalizeTurn();
+          if (d.translation && this.el.precTtsToggle.checked) this._speakTts(d.translation);
         }
       } catch (e) { this._setStatus("live", (UI_LANG === "ko" ? "전사 실패: " : "Transcribe failed: ") + e.message); }
     });
@@ -1624,7 +1631,21 @@ class App {
       else if (now < this._meetTailUntil) ws.send(new ArrayBuffer(buf.byteLength));
     };
   }
+  _speakTts(text) {
+    // Read the translation aloud with the DEVICE TTS (no cloud audio, no S2S):
+    // gives precision mode a voice for the other party while keeping the
+    // accurate cascade engine. Played text joins the self-echo guard.
+    if (!window.speechSynthesis || !text) return;
+    const LOCALES = { ko: "ko-KR", en: "en-US", ja: "ja-JP", zh: "zh-CN", fr: "fr-FR", es: "es-ES", ar: "ar-SA", ru: "ru-RU" };
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LOCALES[this.el.langB.value] || this.el.langB.value;
+    u.rate = this.playbackRate || 1.0;
+    this._rememberPlayed(text);
+    speechSynthesis.speak(u);
+  }
   _playbackBusy() {
+    // TTS read-aloud counts as "our own audio playing" for the echo gates.
+    if (window.speechSynthesis && speechSynthesis.speaking) return true;
     // True while queued translated audio is still playing (+300ms tail for
     // room reverb), and only in a mode that actually emits audio.
     if (!this.audioOutput || !this.playbackContext || this.playbackContext.state === "closed") return false;

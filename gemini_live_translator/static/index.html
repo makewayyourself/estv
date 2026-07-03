@@ -116,6 +116,9 @@
           <div class="mb-2 flex items-center gap-2">
             <span class="shrink-0 text-xs font-medium text-slate-400" data-i18n="tr.outLang">🔊 출력 언어</span>
             <select id="qkLangSel" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 focus:outline-none"></select>
+            <label id="precTtsWrap" hidden class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-2 text-xs font-medium text-slate-300">
+              <input id="precTtsToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /><span data-i18n="tr.tts">읽어주기</span>
+            </label>
           </div>
           <div class="mb-3 flex gap-2">
             <button id="qkRoomBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
