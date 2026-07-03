@@ -50,6 +50,8 @@ const I18N = {
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
+    "mode.prec": "🎯 고정밀", "tr.inLang": "🎙️ 입력",
+    "st.precLive": "🎯 고정밀 자막 — 문장을 마치면 자막이 표시됩니다",
     "tr.duo": "🪟 대면 자막", "duo.intro": "투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.",
     "duo.top": "위쪽(내 앞) 언어", "duo.bottom": "아래쪽(맞은편) 언어", "duo.flip": "아래쪽 표시 방향 (프로젝터 설치에 맞게)",
     "duo.flipMirror": "좌우 반전 (거울)", "duo.flipRotate": "180° 회전", "duo.flipNone": "그대로",
@@ -114,6 +116,8 @@ const I18N = {
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
+    "mode.prec": "🎯 Precision", "tr.inLang": "🎙️ Input",
+    "st.precLive": "🎯 Precision captions — text appears when you finish a sentence",
     "tr.duo": "🪟 Glass captions", "duo.intro": "Face-to-face captions for a beam projector on transparent glass: top and bottom show different languages; the bottom is flipped so it reads correctly through the glass.",
     "duo.top": "Top (my side) language", "duo.bottom": "Bottom (far side) language", "duo.flip": "Bottom orientation (match your projector)",
     "duo.flipMirror": "Mirrored", "duo.flipRotate": "Rotated 180°", "duo.flipNone": "As-is",
@@ -212,7 +216,7 @@ class App {
     this.el = {};
     ["backBtn","viewTitle","statusDot","statusText","controlBar","newNoteBtn",
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
-     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn",
+     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn","modePrecBtn","precSrcSel","precSrcLabel",
      "qkTranscript","noteTranscript","assistCards",
      "focusBtn","focusOverlay","focusCaption",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
@@ -316,6 +320,7 @@ class App {
     this.el.scriptSelect.addEventListener("change", () => this._lastTranslationText && this._pronounce());
     this.el.modeAudioBtn.addEventListener("click", () => this._setMode(true));
     this.el.modeTextBtn.addEventListener("click", () => this._setMode(false));
+    this.el.modePrecBtn.addEventListener("click", () => this._setPrec(!this.precision));
     this.el.focusBtn.addEventListener("click", () => this._enterFocus());
     this.el.focusOverlay.addEventListener("click", () => this._exitFocus());
 
@@ -430,15 +435,36 @@ class App {
     this.el.speedValue.textContent = `${this.playbackRate.toFixed(2)}×`;
     this.el.viewMode.value = this.viewMode;
     this._setMode(this.audioOutput, true);
+    this._setPrec(localStorage.getItem("precision") === "1", true);
   }
   _applyTheme(theme) { document.body.classList.toggle("light", theme === "light"); localStorage.setItem("theme", theme); this.el.themeSel.value = theme; }
   _applyFont(size) { ["sm","md","lg","xl"].forEach((s) => { this.el.qkTranscript.classList.toggle("fs-" + s, s === size); this.el.noteTranscript.classList.toggle("fs-" + s, s === size); }); localStorage.setItem("fontSize", size); this.el.fontSel.value = size; }
   _setMode(audio, silent) {
     this.audioOutput = audio; if (!silent) localStorage.setItem("audioOutput", audio ? "1" : "0");
-    const on = "border-indigo-500 bg-indigo-600 text-white", off = "border-slate-700 bg-slate-800 text-slate-300";
-    this.el.modeAudioBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${audio ? on : off}`;
-    this.el.modeTextBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${audio ? off : on}`;
+    if (!silent && this.precision) this._setPrec(false, true); // audio/text picks leave precision
+    this._paintModes();
     if (!audio) this._flushPlayback();
+  }
+  _setPrec(on, silent) {
+    // Precision-caption cascade (accuracy-first, Chattr-style): per-utterance
+    // transcription+translation on the stable model, language pinned, glossary
+    // injected into recognition, no audio playback (no echo by construction).
+    this.precision = !!on;
+    if (!silent) localStorage.setItem("precision", on ? "1" : "0");
+    if (on) this.audioOutput = false;
+    this.el.precSrcSel.hidden = this.el.precSrcLabel.hidden = !on;
+    this._paintModes();
+    if (this.running && !silent) { // switch engines live
+      this._setStatus("connecting", t("st.langSwitch"));
+      this.stop().then(() => this.start());
+    }
+  }
+  _paintModes() {
+    const on = "border-indigo-500 bg-indigo-600 text-white", off = "border-slate-700 bg-slate-800 text-slate-300";
+    const prec = this.precision, audio = this.audioOutput;
+    this.el.modeAudioBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${!prec && audio ? on : off}`;
+    this.el.modeTextBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${!prec && !audio ? on : off}`;
+    this.el.modePrecBtn.className = `rounded-lg border px-3 py-1.5 text-xs font-medium transition ${prec ? "border-emerald-500 bg-emerald-600 text-white" : off}`;
   }
 
   // ---- languages ----------------------------------------------------------
@@ -451,6 +477,13 @@ class App {
     // live — transparently reconnect with the new target language (the Gemini
     // config is fixed per connection).
     fillB(this.el.qkLangSel, localStorage.getItem("langB") || DEFAULT_LANG_B);
+    // Precision-mode input language: pinning it is a main accuracy lever.
+    const savedSrc = localStorage.getItem("precSrc") || "auto";
+    this.el.precSrcSel.innerHTML = "";
+    for (const [c, l] of [["auto", t("set.auto")], ...Object.entries(LANGUAGES)]) {
+      const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === savedSrc) o.selected = true; this.el.precSrcSel.appendChild(o);
+    }
+    this.el.precSrcSel.addEventListener("change", () => localStorage.setItem("precSrc", this.el.precSrcSel.value));
     fillB(this.el.duoTopLang, localStorage.getItem("duoTop") || "en");
     fillB(this.el.duoBottomLang, localStorage.getItem("duoBottom") || (UI_LANG === "ko" ? "ko" : DEFAULT_LANG_B));
     this.el.duoFlipSel.value = localStorage.getItem("duoFlip") || "mirror";
@@ -930,6 +963,16 @@ class App {
   async start() {
     try {
       this._lastError = ""; this._setStatus("connecting", t("st.connecting")); this.el.toggleBtn.disabled = true;
+      if (this.precision) {
+        // Precision-caption cascade: no live socket, no playback — utterances
+        // are VAD-segmented locally and sent to /api/transcribe one by one.
+        this._audioSink = this._precSink();
+        await this._startCapture();
+        this.running = true; this.paused = false;
+        this.el.toggleBtn.disabled = false; this.el.pauseBtn.disabled = false;
+        this._refreshToggle(); this._setStatus("live", t("st.precLive"));
+        return;
+      }
       await this._openSocket(); await this._startCapture(); this._initPlayback();
       this.running = true; this.paused = false;
       this.el.toggleBtn.disabled = false; this.el.pauseBtn.disabled = false;
@@ -1405,6 +1448,66 @@ class App {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false;
     if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+  // ---- precision-caption cascade -------------------------------------------
+  _precSink() {
+    // Segment utterances locally: buffer while the VAD is open, finalize after
+    // 700ms of closed gate, force-flush at 30s so nothing grows unbounded.
+    this._vadUntil = 0;
+    let buf = [], bytes = 0, sawSpeech = false, quietSince = 0;
+    const flush = () => {
+      if (sawSpeech && bytes >= 12800) { // ≥0.4s of speech
+        const all = new Uint8Array(bytes); let o = 0;
+        for (const c of buf) { all.set(c, o); o += c.length; }
+        this._precSend(all);
+      }
+      buf = []; bytes = 0; sawSpeech = false; quietSince = 0;
+    };
+    return (chunk) => {
+      const speaking = this._vadGate(chunk);
+      const now = (window.performance && performance.now) ? performance.now() : Date.now();
+      if (speaking) {
+        sawSpeech = true; quietSince = 0;
+        buf.push(new Uint8Array(chunk.slice(0))); bytes += chunk.byteLength;
+        if (bytes >= 960000) flush(); // 30s cap
+      } else if (sawSpeech) {
+        buf.push(new Uint8Array(chunk.slice(0))); bytes += chunk.byteLength; // short tail
+        if (!quietSince) quietSince = now;
+        else if (now - quietSince > 700) flush();
+      }
+    };
+  }
+  _b64(bytes) {
+    let s = ""; const CH = 0x8000;
+    for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    return btoa(s);
+  }
+  _precSend(pcmBytes) {
+    const base = this._serverBase(); if (!base) return;
+    const body = JSON.stringify({
+      audio_b64: this._b64(pcmBytes),
+      source_lang: this.el.precSrcSel.value || "auto",
+      target_lang: this.el.langB.value,
+      glossary: (localStorage.getItem("glossary") || "").trim(),
+      history: this._currentLog().slice(-4).map((e) => `${e.source} → ${e.translation}`).join("\n"),
+      token: this._token() || undefined,
+    });
+    // Sequential queue: keep utterances in spoken order even if the network
+    // returns them out of order.
+    this._precQueue = (this._precQueue || Promise.resolve()).then(async () => {
+      try {
+        const r = await fetch(`${base}/api/transcribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+        const d = await r.json();
+        if (!this.running || !this.precision) return;
+        if (d.source || d.translation) {
+          // Reuse the normal turn pipeline: bubbles, log, assist, multi-lang, duo.
+          if (d.source) this._appendTranscript("source", d.source);
+          if (d.translation) this._appendTranscript("translation", d.translation);
+          this._finalizeTurn();
+        }
+      } catch (e) { this._setStatus("live", (UI_LANG === "ko" ? "전사 실패: " : "Transcribe failed: ") + e.message); }
+    });
   }
   _normEcho(s) { return (s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""); }
   _rememberPlayed(text) {

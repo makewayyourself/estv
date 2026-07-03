@@ -114,6 +114,8 @@
         <!-- ============ TRANSLATE (quick) ============ -->
         <section data-view="translate" hidden>
           <div class="mb-2 flex items-center gap-2">
+            <span id="precSrcLabel" hidden class="shrink-0 text-xs font-medium text-slate-400" data-i18n="tr.inLang">🎙️ 입력</span>
+            <select id="precSrcSel" hidden class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 focus:outline-none"></select>
             <span class="shrink-0 text-xs font-medium text-slate-400" data-i18n="tr.outLang">🔊 출력 언어</span>
             <select id="qkLangSel" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 focus:outline-none"></select>
           </div>
@@ -441,6 +443,7 @@
         <div class="mb-2 flex items-center justify-center gap-2">
           <button id="modeAudioBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.audio">🔊 음성+자막</button>
           <button id="modeTextBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.text">📝 자막만</button>
+          <button id="modePrecBtn" class="rounded-lg border px-3 py-1.5 text-xs font-medium transition" data-i18n="mode.prec">🎯 고정밀</button>
           <button id="focusBtn" class="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-800" data-i18n="mode.focus">🌙 집중</button>
         </div>
         <div class="flex items-center gap-2">

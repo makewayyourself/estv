@@ -44,11 +44,13 @@ from services.gemini_live import (
     INPUT_MIME_TYPE,
     INPUT_SAMPLE_RATE,
     ANALYSIS_THINKING_BUDGET,
+    CAPTION_MODEL,
     CLARIFY_MODEL,
     OUTPUT_SAMPLE_RATE,
     RISK_MODEL,
     SUMMARY_MODEL,
     SUPPORTED_LANGUAGES,
+    build_caption_prompt,
     build_config,
     build_feedback_prompt,
     build_multitranslate_prompt,
@@ -66,7 +68,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-m"
+APP_VERSION = "2026.06.19-n"
 
 load_dotenv()
 
@@ -483,6 +485,83 @@ async def translate(req: TranslateRequest) -> dict:
         logger.warning("Multi-translate failed: %s", exc)
         translations = {}
     return {"translations": translations}
+
+
+class TranscribeRequest(BaseModel):
+    """One utterance of raw PCM16 mono 16kHz audio, base64-encoded."""
+
+    audio_b64: str
+    source_lang: str = "auto"
+    target_lang: str = DEFAULT_LANG_B
+    glossary: str = ""
+    history: str = ""
+    token: str | None = None
+
+
+class CaptionResult(BaseModel):
+    source_text: str
+    translation: str
+
+
+def _wav_from_pcm(pcm: bytes, rate: int = INPUT_SAMPLE_RATE) -> bytes:
+    """Wrap raw PCM16 mono in a minimal WAV header (generate_content wants a
+    real container, not raw PCM)."""
+    import struct
+
+    return (
+        b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+        + b"data" + struct.pack("<I", len(pcm)) + pcm
+    )
+
+
+@app.post("/api/transcribe")
+async def transcribe(req: TranscribeRequest) -> dict:
+    """Precision-caption cascade: verbatim transcription + translation of one
+    utterance on the stable GA model, with the language pinned and the user's
+    glossary/context injected into recognition itself (accuracy-first mode —
+    bypasses the S2S preview path entirely)."""
+    _check_token(req.token)
+    try:
+        pcm = base64.b64decode(req.audio_b64 or "")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Bad audio encoding")
+    # 0.3s minimum (noise clicks), ~60s / ~2MB maximum per utterance.
+    if len(pcm) < 9600:
+        return {"source": "", "translation": ""}
+    if len(pcm) > 2_000_000:
+        raise HTTPException(status_code=413, detail="Utterance too long")
+
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    source_lang = normalize_lang(req.source_lang, "auto", allow_auto=True)
+    target_lang = normalize_lang(req.target_lang, DEFAULT_LANG_B)
+    prompt = build_caption_prompt(
+        source_lang, target_lang, req.glossary[:500], req.history[:2000]
+    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=CAPTION_MODEL,
+            contents=[
+                types.Part.from_bytes(data=_wav_from_pcm(pcm), mime_type="audio/wav"),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=CaptionResult,
+            ),
+        )
+        data = json.loads(response.text or "{}")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Transcribe failed")
+        raise HTTPException(status_code=502, detail=f"Transcribe failed: {exc}")
+    return {
+        "source": str(data.get("source_text", "")).strip(),
+        "translation": str(data.get("translation", "")).strip(),
+    }
 
 
 class PronounceRequest(BaseModel):

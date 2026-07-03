@@ -54,6 +54,10 @@ DEFAULT_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 RISK_MODEL = os.getenv("RISK_MODEL", "gemini-3.1-flash-lite")
 CLARIFY_MODEL = os.getenv("CLARIFY_MODEL", "gemini-3.5-flash")
 SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-3.5-flash")
+# Precision-caption cascade: per-utterance audio → verbatim transcription +
+# text translation on a stable GA model (accuracy-first, Chattr-style),
+# bypassing the S2S preview model whose transcripts are a byproduct.
+CAPTION_MODEL = os.getenv("CAPTION_MODEL", "gemini-3.5-flash")
 
 # Extra "thinking" budget (tokens) for the deeper analysis path. 0 disables it.
 # Boosts reasoning quality for clarification at some extra cost/latency (off the
@@ -139,6 +143,47 @@ def build_system_instruction(lang_a: str, lang_b: str) -> str:
         "for word. Output ONLY the spoken translation itself. Never add "
         "conversational filler such as 'Sure', 'Okay', or 'Here is the "
         "translation', and never explain what you are doing."
+    )
+
+
+def build_caption_prompt(
+    source_lang: str, target_lang: str, glossary: str = "", history: str = ""
+) -> str:
+    """Precision transcription + translation of ONE utterance (audio attached).
+
+    The language pin, glossary and conversation context are injected directly
+    into the recognition step — the main accuracy levers the live S2S path
+    cannot offer.
+    """
+    tgt = SUPPORTED_LANGUAGES.get(target_lang, "English")
+    if source_lang and source_lang != AUTO_DETECT:
+        src_line = (
+            f"The speaker is speaking {SUPPORTED_LANGUAGES.get(source_lang, source_lang)}. "
+            "Transcribe in that language only — do not switch languages."
+        )
+    else:
+        src_line = "Detect the spoken language and transcribe in it."
+    glossary_line = (
+        f"\nGlossary — these are the CORRECT spellings of names/terms that may "
+        f"occur; prefer them over phonetically similar words: {glossary.strip()}\n"
+        if glossary.strip() else ""
+    )
+    history_line = (
+        f"\nRecent conversation (context for ambiguous words):\n{history.strip()}\n"
+        if history.strip() else ""
+    )
+    return (
+        "You are a professional transcriber and translator for a live business "
+        "conversation. For the attached audio of ONE utterance:\n"
+        f"1. Transcribe it VERBATIM. {src_line} Fix nothing except obvious "
+        "disfluencies (um/uh). Use the glossary and context to resolve unclear "
+        "words — a proper noun misheard as a common word should be written as "
+        "the glossary/context indicates.\n"
+        f"2. Translate the transcription into natural, fluent {tgt}, preserving "
+        "tone and business register.\n"
+        f"{glossary_line}{history_line}"
+        "If the audio contains no intelligible speech (noise/music/silence), "
+        "return empty strings for both fields."
     )
 
 
