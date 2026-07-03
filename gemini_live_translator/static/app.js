@@ -625,7 +625,9 @@ class App {
     this._persist();
     // Notes always get the context/meaning analysis (warnings in 참고);
     // Quick Translate only when the toggles are on.
-    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry);
+    // Pass the live translation element so a context correction can rewrite
+    // the caption in place (it is nulled right after commit returns).
+    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
   }
 
@@ -644,7 +646,7 @@ class App {
     } catch {}
   }
 
-  async _analyzeTurn(entry) {
+  async _analyzeTurn(entry, trEl) {
     const base = this._serverBase(); if (!base || !entry.source) return;
     const isNote = this.context === "note";
     const wantRisk = isNote || this.el.riskToggle.checked;
@@ -662,7 +664,21 @@ class App {
       const d = await r.json(); if (!d) return;
       let warned = false;
       if (wantRisk && d.risk_level && d.risk_level !== "none") { entry.risk = d; warned = true; this._renderRisk(d); }
-      if (wantClarify && d.clarify_suspected) { entry.clarify = d; warned = true; this._renderClarify(d); }
+      if (wantClarify && d.clarify_suspected) {
+        entry.clarify = d; warned = true; this._renderClarify(d);
+        // Self-heal: don't just suggest — rewrite the on-screen caption and the
+        // saved log with the contextually corrected translation. The spoken
+        // audio has already played (can't be unsaid), but everything the user
+        // reads/exports from here on is the corrected text.
+        const fixed = (d.clarify_corrected_translation || "").trim();
+        if (fixed && fixed !== entry.translation) {
+          entry.translation_raw = entry.translation;
+          entry.translation = fixed;
+          this._lastTranslationText = fixed;
+          if (trEl && trEl.isConnected) trEl.innerHTML = esc(fixed) + ` <span class="ml-1 text-[10px] font-semibold text-emerald-400">✓${UI_LANG === "ko" ? "교정" : "fixed"}</span>`;
+          if (this._focusOn) this.el.focusCaption.textContent = fixed;
+        }
+      }
       if (wantAnswer && d.should_answer && (d.answer_native || d.answer_local)) this._renderAnswer(d);
       if (wantUpgrade && d.upgrade && d.upgrade.trim()) this._renderUpgrade(d.upgrade.trim());
       if (warned) { this._persist(); if (isNote) this._appendWarn(entry); }
