@@ -905,7 +905,7 @@ class App {
          <span class="text-xs font-bold">${theme[1]} ${esc(headline)}</span>
          <button class="shrink-0 text-xs opacity-60 hover:opacity-100" data-x>✕</button>
        </div>${bodyHtml}`;
-    card.querySelector("[data-x]").addEventListener("click", () => card.remove());
+    card.querySelector("[data-x]").addEventListener("click", () => this._dropAssist(card));
     if (actions) {
       const row = document.createElement("div");
       row.className = "mt-2 flex flex-wrap gap-2";
@@ -913,15 +913,52 @@ class App {
         const b = document.createElement("button");
         b.className = "rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10";
         b.textContent = a.label;
-        b.addEventListener("click", () => { a.onClick(); if (a.dismiss) card.remove(); });
+        b.addEventListener("click", () => { a.onClick(); if (a.dismiss) this._dropAssist(card); });
         row.appendChild(b);
       }
       card.appendChild(row);
     }
-    this.el.assistCards.prepend(card);
-    while (this.el.assistCards.children.length > 3) this.el.assistCards.lastChild.remove();
+    this._addAssistCard(card);
   }
-  _clearAssist() { if (this.el.assistCards) this.el.assistCards.innerHTML = ""; }
+  // The transcript has priority: only the NEWEST card is visible; older ones
+  // queue behind a "+N" toggle that expands them all in a scrollable stack.
+  _addAssistCard(card) {
+    this._assistList = this._assistList || [];
+    this._assistList.unshift(card);
+    while (this._assistList.length > 8) this._assistList.pop().remove();
+    this._renderAssistStack();
+  }
+  _dropAssist(card) {
+    card.remove();
+    this._assistList = (this._assistList || []).filter((c) => c !== card);
+    this._renderAssistStack();
+  }
+  _renderAssistStack() {
+    const box = this.el.assistCards; if (!box) return;
+    const cards = this._assistList || [];
+    if (!this._assistToggle) {
+      const tg = document.createElement("button");
+      tg.className = "w-full rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700";
+      tg.addEventListener("click", () => { this._assistOpen = !this._assistOpen; this._renderAssistStack(); });
+      this._assistToggle = tg;
+    }
+    box.textContent = "";
+    if (!cards.length) { this._assistOpen = false; box.className = "mb-2 space-y-2"; return; }
+    if (cards.length === 1) this._assistOpen = false;
+    const open = this._assistOpen;
+    box.className = "mb-2 space-y-2" + (open ? " max-h-[45vh] overflow-y-auto scroll-thin" : "");
+    for (const c of (open ? cards : [cards[0]])) box.appendChild(c);
+    if (cards.length > 1) {
+      this._assistToggle.textContent = open
+        ? (UI_LANG === "ko" ? "▼ 접기 (최신 1장만 보기)" : "▼ Collapse")
+        : (UI_LANG === "ko" ? `▲ 밀린 카드 ${cards.length - 1}장 모두 보기` : `▲ Show ${cards.length - 1} more`);
+      box.appendChild(this._assistToggle);
+    }
+  }
+  _clearAssist() {
+    this._assistList = []; this._assistOpen = false;
+    if (this.el.assistCards) { this.el.assistCards.textContent = ""; this.el.assistCards.className = "mb-2 space-y-2"; }
+  }
 
   _renderClarify(d, entry, trEl, srcEl) {
     const head = UI_LANG === "ko" ? "혹시 이런 뜻? (자막에 적용됨)" : "Did you mean…? (applied to captions)";
@@ -952,15 +989,14 @@ class App {
          <button data-save class="rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10">💾 ${ko ? "저장 (자동 재번역)" : "Save (retranslate)"}</button>
        </div>`;
     card.querySelector("[data-fix]").value = entry.source || "";
-    card.querySelector("[data-x]").addEventListener("click", () => card.remove());
+    card.querySelector("[data-x]").addEventListener("click", () => this._dropAssist(card));
     card.querySelector("[data-save]").addEventListener("click", () => {
       const v = card.querySelector("[data-fix]").value.trim();
       if (!v) return;
-      card.remove();
+      this._dropAssist(card);
       this._applyUserFix(entry, v, trEl, srcEl);
     });
-    this.el.assistCards.prepend(card);
-    while (this.el.assistCards.children.length > 3) this.el.assistCards.lastChild.remove();
+    this._addAssistCard(card);
   }
   async _applyUserFix(entry, text, trEl, srcEl) {
     const mark = ` <span class="ml-1 text-[10px] font-semibold text-amber-300">✎${UI_LANG === "ko" ? "수정" : "edited"}</span>`;
