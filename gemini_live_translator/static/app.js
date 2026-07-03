@@ -717,7 +717,17 @@ class App {
     const source = this._curSource.trim(), translation = this._curTranslation.trim();
     this._curSource = ""; this._curTranslation = "";
     this._finalizeAudio();
-    if (translation) { this._lastTranslationText = translation; this.el.pronounceBtn.disabled = false; }
+    // Self-echo guard: we know exactly what we just played — if the "heard"
+    // source is (nearly) identical to a recently played translation, the mic
+    // re-captured our own speaker output. Discard the turn (remove its
+    // bubbles, keep it out of the log) instead of translating our own voice.
+    if (source && this._isSelfEcho(source)) {
+      for (const el of [this._srcLine, this._trLine]) {
+        const w = el && el.closest && el.closest("[data-row]"); if (w) w.remove();
+      }
+      return;
+    }
+    if (translation) { this._lastTranslationText = translation; this.el.pronounceBtn.disabled = false; this._rememberPlayed(translation); }
     if (!source && !translation) return;
     const entry = { t: Date.now(), source, translation };
     this._currentLog().push(entry);
@@ -1023,13 +1033,12 @@ class App {
       // Gates replace frames with SILENCE rather than dropping them: Gemini
       // detects end-of-turn from silence in the stream, so dropped frames
       // starve turn detection (very late, garbled translations).
-      //  - half-duplex: only in earphone mode (AEC off) — normal mode's AEC
-      //    already cancels our own playback from the mic.
-      //  - noise gate: quiet background sound becomes silence, so ambient
-      //    chatter can't trigger wrong-language detections.
+      // While our own translated audio is playing we do NOT mute the mic (the
+      // other party may keep talking); instead _vadGate raises its threshold —
+      // speaker echo arrives quieter than direct speech, so echo is gated
+      // while a real nearby voice still passes.
       const gated =
-        (localStorage.getItem("earphoneMode") === "1" && this._playbackBusy()) ||
-        (this._noiseGateOn() && !this._vadGate(e.data));
+        (this._noiseGateOn() || this._playbackBusy()) && !this._vadGate(e.data);
       this.ws.send(gated ? new ArrayBuffer(e.data.byteLength) : e.data);
     };
     this.micSource.connect(this.workletNode);
@@ -1382,6 +1391,18 @@ class App {
     this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false;
     if (!silent) this._setStatus("idle", t("st.idle"));
   }
+  _normEcho(s) { return (s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""); }
+  _rememberPlayed(text) {
+    this._playedTr = (this._playedTr || []).filter((x) => Date.now() - x.t < 20000);
+    const n = this._normEcho(text);
+    if (n.length >= 8) this._playedTr.push({ t: Date.now(), n });
+  }
+  _isSelfEcho(source) {
+    const ns = this._normEcho(source);
+    if (ns.length < 8) return false; // too short to judge — let it through
+    return (this._playedTr || []).some((x) =>
+      Date.now() - x.t < 20000 && (x.n.includes(ns) || ns.includes(x.n)));
+  }
   _meetSink(getWs) {
     // VAD-gated meeting mic: stream only while speaking (idle costs nothing),
     // but after speech ends send a short silence tail so Gemini's turn
@@ -1412,7 +1433,11 @@ class App {
     const now = (window.performance && performance.now) ? performance.now() : Date.now();
     // 0.010: low enough for normal-volume speech (0.018 missed quiet voices);
     // 1s hangover so soft syllables mid-sentence don't chop the utterance.
-    if (rms > 0.010) this._vadUntil = now + 1000;
+    // While our own playback is audible the threshold rises to 0.04: speaker
+    // echo reaching the mic is much quieter than direct speech, so this drops
+    // the echo without deafening the app to a real speaker (full duplex).
+    const thr = this._playbackBusy() ? 0.04 : 0.010;
+    if (rms > thr) this._vadUntil = now + 1000;
     const active = now < (this._vadUntil || 0);
     if (this.el.mjoinSpeak) this.el.mjoinSpeak.style.opacity = active ? "1" : "0.2";
     return active;
