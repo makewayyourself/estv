@@ -928,12 +928,60 @@ class App {
     const actions = entry ? [
       { label: UI_LANG === "ko" ? "✔ 맞아요" : "✔ Correct", dismiss: true,
         onClick: () => { if (entry.clarify) entry.clarify.confirmed = true; this._persist(); } },
-      { label: UI_LANG === "ko" ? "✖ 아니에요 (원래대로)" : "✖ No (revert)", dismiss: true,
-        onClick: () => this._revertClarify(entry, trEl, srcEl) },
+      { label: UI_LANG === "ko" ? "✖ 아니에요" : "✖ No", dismiss: true,
+        onClick: () => { this._revertClarify(entry, trEl, srcEl); this._pushClarifyEdit(entry, trEl, srcEl); } },
     ] : null;
     this._pushAssist("clarify", head,
       `<div class="font-medium">${esc(d.clarify_did_you_mean)}</div>
        <div class="mt-1 rounded bg-black/20 p-2">${esc(d.clarify_corrected_translation)}</div>`, actions);
+  }
+  _pushClarifyEdit(entry, trEl, srcEl) {
+    // "Neither the correction nor the raw text is right" — let the user type
+    // the exact intended sentence; the translation is redone automatically so
+    // captions, log, notes and summaries all carry the user's authoritative fix.
+    const ko = UI_LANG === "ko";
+    const card = document.createElement("div");
+    card.className = "slide-up rounded-xl border border-amber-500/60 bg-amber-950/40 p-3 text-sm text-amber-100";
+    card.innerHTML =
+      `<div class="mb-1 flex items-start justify-between gap-2">
+         <span class="text-xs font-bold">✍️ ${ko ? "정확한 뜻을 직접 입력 (원문도 틀렸다면 고쳐 쓰세요)" : "Type what was actually meant"}</span>
+         <button class="shrink-0 text-xs opacity-60 hover:opacity-100" data-x>✕</button>
+       </div>
+       <input data-fix class="w-full rounded-lg border border-white/20 bg-black/20 px-2 py-1.5 text-sm text-amber-50 focus:outline-none" />
+       <div class="mt-2 flex gap-2">
+         <button data-save class="rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10">💾 ${ko ? "저장 (자동 재번역)" : "Save (retranslate)"}</button>
+       </div>`;
+    card.querySelector("[data-fix]").value = entry.source || "";
+    card.querySelector("[data-x]").addEventListener("click", () => card.remove());
+    card.querySelector("[data-save]").addEventListener("click", () => {
+      const v = card.querySelector("[data-fix]").value.trim();
+      if (!v) return;
+      card.remove();
+      this._applyUserFix(entry, v, trEl, srcEl);
+    });
+    this.el.assistCards.prepend(card);
+    while (this.el.assistCards.children.length > 3) this.el.assistCards.lastChild.remove();
+  }
+  async _applyUserFix(entry, text, trEl, srcEl) {
+    const mark = ` <span class="ml-1 text-[10px] font-semibold text-amber-300">✎${UI_LANG === "ko" ? "수정" : "edited"}</span>`;
+    entry.source = text; entry.user_fixed = true;
+    if (entry.clarify) entry.clarify.rejected = true;
+    if (srcEl && srcEl.isConnected) srcEl.innerHTML = esc(text) + mark;
+    this._persist();
+    // Redo the translation from the user's authoritative sentence.
+    const base = this._serverBase(); if (!base) return;
+    try {
+      const r = await fetch(`${base}/api/translate`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, targets: [this.el.langB.value], token: this._token() || undefined }) });
+      if (!r.ok) return;
+      const tr = ((await r.json()).translations || {})[this.el.langB.value];
+      if (tr) {
+        entry.translation = tr; this._lastTranslationText = tr;
+        if (trEl && trEl.isConnected) trEl.innerHTML = esc(tr) + mark;
+        if (this._focusOn) this.el.focusCaption.textContent = tr;
+        this._persist();
+      }
+    } catch {}
   }
   _revertClarify(entry, trEl, srcEl) {
     // User says the correction was wrong: restore the raw recognition in the
