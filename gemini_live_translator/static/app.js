@@ -895,9 +895,16 @@ class App {
     this.running = false; this.paused = false; this._sendCtrl({ action: "end" }); await this._teardown();
     this.el.pauseBtn.disabled = true; this._refreshToggle();
   }
+  _keepAlive(on) {
+    try {
+      const p = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KeepAlive;
+      if (p) (on ? p.start() : p.stop());
+    } catch (_) { /* web / plugin missing — fine */ }
+  }
   async _teardown() {
     if (this._turnTimer) this._finalizeTurn();
     this._audioSink = null;
+    this._keepAlive(false);
     if (this.recorder) {
       const rec = this.recorder; this.recorder = null;
       await new Promise((res) => { rec.onstop = res; try { rec.stop(); } catch (_) { res(); } });
@@ -993,6 +1000,9 @@ class App {
     this.micSource.connect(this.workletNode);
     const sink = this.captureContext.createGain(); sink.gain.value = 0;
     this.workletNode.connect(sink); sink.connect(this.captureContext.destination);
+    // Keep capturing when the screen locks or another app takes the front:
+    // start the native microphone foreground service (no-op on plain web).
+    this._keepAlive(true);
     // Record the raw meeting audio in parallel (opus ≈ 15MB/h) so dubious
     // passages can be re-listened and the transcript corrected afterwards.
     this._recChunks = [];
