@@ -1060,7 +1060,22 @@ class App {
   }
 
   // ---- playback -----------------------------------------------------------
-  _initPlayback() { this.playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE }); this.nextPlayTime = 0; }
+  _initPlayback() {
+    this.playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE });
+    this.nextPlayTime = 0;
+    // Root cause of the speaker→mic repeat loop: Android WebView's echo
+    // canceller only references media-element/WebRTC output — raw WebAudio
+    // playback is invisible to it, so AEC never cancelled our own translation
+    // audio from the mic. Routing playback through an <audio srcObject> sink
+    // puts it on the media path where AEC can subtract it.
+    try {
+      this._playbackDest = this.playbackContext.createMediaStreamDestination();
+      if (!this._playbackEl) { this._playbackEl = new Audio(); this._playbackEl.autoplay = true; }
+      this._playbackEl.srcObject = this._playbackDest.stream;
+      this._playbackEl.play().catch(() => {});
+    } catch (_) { this._playbackDest = null; }
+  }
+  _playbackSink(ctx) { return (ctx === this.playbackContext && this._playbackDest) ? this._playbackDest : ctx.destination; }
   _enqueueAudio(buf) {
     if (!this.playbackContext) return;
     const pcm = new Int16Array(buf), f32 = new Float32Array(pcm.length);
@@ -1068,7 +1083,7 @@ class App {
     this._curAudioChunks.push(f32);
     if (!this.audioOutput) return;
     const b = this.playbackContext.createBuffer(1, f32.length, OUTPUT_SAMPLE_RATE); b.copyToChannel(f32, 0);
-    const s = this.playbackContext.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(this.playbackContext.destination);
+    const s = this.playbackContext.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(this._playbackSink(this.playbackContext));
     const now = this.playbackContext.currentTime; if (this.nextPlayTime < now) this.nextPlayTime = now + 0.05;
     s.start(this.nextPlayTime); this.nextPlayTime += b.duration / this.playbackRate;
     // Remember when playback (incl. queue) ends + a 300ms reverb tail, so the
@@ -1086,7 +1101,7 @@ class App {
     if (!f32 || !f32.length) return;
     let ctx = this.playbackContext; if (!ctx || ctx.state === "closed") ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE });
     const b = ctx.createBuffer(1, f32.length, OUTPUT_SAMPLE_RATE); b.copyToChannel(f32, 0);
-    const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(ctx.destination); s.start();
+    const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = this.playbackRate; s.connect(this._playbackSink(ctx)); s.start();
   }
   _flushPlayback() { if (this.playbackContext) this.playbackContext.close().catch(() => {}); this._initPlayback(); }
   _replayLast() { if (this._lastAudio) this._playBuffer(this._lastAudio); }
@@ -1400,8 +1415,19 @@ class App {
   _isSelfEcho(source) {
     const ns = this._normEcho(source);
     if (ns.length < 8) return false; // too short to judge — let it through
-    return (this._playedTr || []).some((x) =>
-      Date.now() - x.t < 20000 && (x.n.includes(ns) || ns.includes(x.n)));
+    const grams = (s) => { const g = new Set(); for (let i = 0; i + 3 <= s.length; i++) g.add(s.slice(i, i + 3)); return g; };
+    const a = grams(ns);
+    return (this._playedTr || []).some((x) => {
+      if (Date.now() - x.t > 20000) return false;
+      if (x.n.includes(ns) || ns.includes(x.n)) return true;
+      // Echo transcripts come back partially garbled, so exact containment
+      // misses them — fall back to trigram overlap (≥55% of the heard text's
+      // trigrams appearing in what we played ⇒ it's our own audio).
+      const b = grams(x.n);
+      if (!a.size || !b.size) return false;
+      let hit = 0; for (const g of a) if (b.has(g)) hit++;
+      return hit / a.size >= 0.55;
+    });
   }
   _meetSink(getWs) {
     // VAD-gated meeting mic: stream only while speaking (idle costs nothing),
