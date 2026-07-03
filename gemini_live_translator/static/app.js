@@ -771,7 +771,7 @@ class App {
       let warned = false;
       if (wantRisk && d.risk_level && d.risk_level !== "none") { entry.risk = d; warned = true; this._renderRisk(d); }
       if (wantClarify && d.clarify_suspected) {
-        entry.clarify = d; warned = true; this._renderClarify(d);
+        entry.clarify = d; warned = true;
         // Self-heal: don't just suggest — rewrite the on-screen caption and the
         // saved log with the contextually corrected translation. The spoken
         // audio has already played (can't be unsaid), but everything the user
@@ -793,6 +793,9 @@ class App {
           entry.source = fixedSrc;
           if (srcEl && srcEl.isConnected) srcEl.innerHTML = esc(fixedSrc) + mark;
         }
+        // Card rendered AFTER healing so its 맞아요/아니에요 buttons can either
+        // confirm the applied correction or revert to the raw text.
+        this._renderClarify(d, entry, trEl, srcEl);
       }
       if (wantAnswer && d.should_answer && (d.answer_native || d.answer_local)) this._renderAnswer(d);
       if (wantUpgrade && d.upgrade && d.upgrade.trim()) this._renderUpgrade(d.upgrade.trim());
@@ -827,7 +830,7 @@ class App {
       const col = entry.risk.risk_level === "high" ? "text-rose-300" : entry.risk.risk_level === "medium" ? "text-amber-300" : "text-slate-400";
       h += `<div class="${col}">⚠️ ${UI_LANG === "ko" ? "참고" : "Note"}: ${esc(entry.risk.subtitle_alert || "")}</div>`;
     }
-    if (entry.clarify && entry.clarify.clarify_suspected) {
+    if (entry.clarify && entry.clarify.clarify_suspected && !entry.clarify.rejected) {
       h += `<div class="text-sky-300">🔎 ${esc(entry.clarify.clarify_did_you_mean || "")}</div>`;
     }
     return h;
@@ -867,7 +870,7 @@ class App {
         const b = document.createElement("button");
         b.className = "rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10";
         b.textContent = a.label;
-        b.addEventListener("click", a.onClick);
+        b.addEventListener("click", () => { a.onClick(); if (a.dismiss) card.remove(); });
         row.appendChild(b);
       }
       card.appendChild(row);
@@ -877,11 +880,34 @@ class App {
   }
   _clearAssist() { if (this.el.assistCards) this.el.assistCards.innerHTML = ""; }
 
-  _renderClarify(d) {
-    const head = UI_LANG === "ko" ? "혹시 이런 뜻?" : "Did you mean…?";
+  _renderClarify(d, entry, trEl, srcEl) {
+    const head = UI_LANG === "ko" ? "혹시 이런 뜻? (자막에 적용됨)" : "Did you mean…? (applied to captions)";
+    const actions = entry ? [
+      { label: UI_LANG === "ko" ? "✔ 맞아요" : "✔ Correct", dismiss: true,
+        onClick: () => { if (entry.clarify) entry.clarify.confirmed = true; this._persist(); } },
+      { label: UI_LANG === "ko" ? "✖ 아니에요 (원래대로)" : "✖ No (revert)", dismiss: true,
+        onClick: () => this._revertClarify(entry, trEl, srcEl) },
+    ] : null;
     this._pushAssist("clarify", head,
       `<div class="font-medium">${esc(d.clarify_did_you_mean)}</div>
-       <div class="mt-1 rounded bg-black/20 p-2">${esc(d.clarify_corrected_translation)}</div>`);
+       <div class="mt-1 rounded bg-black/20 p-2">${esc(d.clarify_corrected_translation)}</div>`, actions);
+  }
+  _revertClarify(entry, trEl, srcEl) {
+    // User says the correction was wrong: restore the raw recognition in the
+    // captions and the log, and mark it rejected so notes/summaries/exports
+    // use the original and drop the (?) warning.
+    if (entry.translation_raw != null) {
+      entry.translation = entry.translation_raw; delete entry.translation_raw;
+      this._lastTranslationText = entry.translation;
+      if (trEl && trEl.isConnected) trEl.textContent = entry.translation;
+      if (this._focusOn) this.el.focusCaption.textContent = entry.translation;
+    }
+    if (entry.source_raw != null) {
+      entry.source = entry.source_raw; delete entry.source_raw;
+      if (srcEl && srcEl.isConnected) srcEl.textContent = entry.source;
+    }
+    if (entry.clarify) entry.clarify.rejected = true;
+    this._persist();
   }
   _renderRisk(d) {
     const head = UI_LANG === "ko" ? "참고" : "Note";
@@ -1126,7 +1152,7 @@ class App {
       if (e.multi) tr += "  " + Object.entries(e.multi).map(([c, x]) => `[${c}] ${x}`).join("  ");
       const warn = [];
       if (e.risk && e.risk.risk_level && e.risk.risk_level !== "none") warn.push(`[${e.risk.risk_level}] ${e.risk.subtitle_alert || ""}`);
-      if (e.clarify && e.clarify.clarify_suspected) warn.push(`(?) ${e.clarify.clarify_did_you_mean || ""}`);
+      if (e.clarify && e.clarify.clarify_suspected && !e.clarify.rejected) warn.push(`(?) ${e.clarify.clarify_did_you_mean || ""}`);
       return { time: new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), source: e.source || "", translation: tr.trim(),
         risk: warn.join(" · ") };
     });
