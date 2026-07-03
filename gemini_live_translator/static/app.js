@@ -50,6 +50,10 @@ const I18N = {
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
+    "tr.duo": "🪟 대면 자막", "duo.intro": "투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.",
+    "duo.top": "위쪽(내 앞) 언어", "duo.bottom": "아래쪽(맞은편) 언어", "duo.flip": "아래쪽 표시 방향 (프로젝터 설치에 맞게)",
+    "duo.flipMirror": "좌우 반전 (거울)", "duo.flipRotate": "180° 회전", "duo.flipNone": "그대로",
+    "duo.start": "🪟 대면 자막 시작", "duo.exitHint": "화면을 탭하면 종료",
     "tr.room": "🔗 방 만들기 (QR)", "tr.save": "💾 노트로 저장", "st.savedNote": "노트로 저장됨", "msg.nothingSave": "저장할 내용이 없습니다",
     "set.aiAssist": "AI 보조 (실시간)", "set.answer": "💬 답변 제안", "set.upgrade": "✨ 표현 업그레이드",
     "note.tabFeedback": "피드백", "note.feedbackBtn": "📊 피드백 생성 / 갱신",
@@ -110,6 +114,10 @@ const I18N = {
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
+    "tr.duo": "🪟 Glass captions", "duo.intro": "Face-to-face captions for a beam projector on transparent glass: top and bottom show different languages; the bottom is flipped so it reads correctly through the glass.",
+    "duo.top": "Top (my side) language", "duo.bottom": "Bottom (far side) language", "duo.flip": "Bottom orientation (match your projector)",
+    "duo.flipMirror": "Mirrored", "duo.flipRotate": "Rotated 180°", "duo.flipNone": "As-is",
+    "duo.start": "🪟 Start glass captions", "duo.exitHint": "Tap to exit",
     "tr.room": "🔗 Create room (QR)", "tr.save": "💾 Save as note", "st.savedNote": "Saved as a note", "msg.nothingSave": "Nothing to save",
     "set.aiAssist": "AI assist (live)", "set.answer": "💬 Answer suggestion", "set.upgrade": "✨ Expression upgrade",
     "note.tabFeedback": "Feedback", "note.feedbackBtn": "📊 Generate / refresh feedback",
@@ -216,6 +224,7 @@ class App {
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
      "apkDownloadBtn","apkCopyBtn",
      "qkRoomBtn","qkSaveBtn","qkLangSel",
+     "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
      "notesList","notesEmpty","noteSearch",
@@ -291,6 +300,10 @@ class App {
     this.el.meetSaveBtn.addEventListener("click", () => this._meetSaveNote());
     this.el.mjoinBtn.addEventListener("click", () => this._mjoinStart());
     this.el.mjoinLeaveBtn.addEventListener("click", () => this._mjoinLeave(false));
+    // transparent-screen counter display (duo captions)
+    this.el.qkDuoBtn.addEventListener("click", () => { this.el.duoConfig.hidden = !this.el.duoConfig.hidden; });
+    this.el.duoStartBtn.addEventListener("click", () => this._duoStart());
+    this.el.duoOverlay.addEventListener("click", () => this._duoExit());
     this.el.apkCopyBtn.addEventListener("click", () => {
       const url = this.el.apkDownloadBtn.getAttribute("href");
       if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { const b = this.el.apkCopyBtn, p = b.textContent; b.textContent = t("set.apkCopied"); setTimeout(() => { b.textContent = p; }, 1500); }).catch(() => {});
@@ -438,6 +451,12 @@ class App {
     // live — transparently reconnect with the new target language (the Gemini
     // config is fixed per connection).
     fillB(this.el.qkLangSel, localStorage.getItem("langB") || DEFAULT_LANG_B);
+    fillB(this.el.duoTopLang, localStorage.getItem("duoTop") || "en");
+    fillB(this.el.duoBottomLang, localStorage.getItem("duoBottom") || (UI_LANG === "ko" ? "ko" : DEFAULT_LANG_B));
+    this.el.duoFlipSel.value = localStorage.getItem("duoFlip") || "mirror";
+    this.el.duoTopLang.addEventListener("change", () => localStorage.setItem("duoTop", this.el.duoTopLang.value));
+    this.el.duoBottomLang.addEventListener("change", () => localStorage.setItem("duoBottom", this.el.duoBottomLang.value));
+    this.el.duoFlipSel.addEventListener("change", () => localStorage.setItem("duoFlip", this.el.duoFlipSel.value));
     this.el.qkLangSel.addEventListener("change", async () => {
       const v = this.el.qkLangSel.value;
       this.el.langB.value = v; localStorage.setItem("langB", v);
@@ -660,6 +679,38 @@ class App {
     if (this._wakeLock) { try { this._wakeLock.release(); } catch (_) {} this._wakeLock = null; }
   }
 
+  // ---- duo / transparent-screen counter display ---------------------------
+  // Beam-projected glass between two people: top half in one language, bottom
+  // half in the other, flipped so the far side reads it through the glass.
+  async _duoStart() {
+    this.el.duoConfig.hidden = true;
+    this._duoOn = true;
+    const flip = this.el.duoFlipSel.value;
+    this.el.duoBottom.className = (flip === "mirror" ? "duo-mirror " : flip === "rotate" ? "duo-rotate " : "") + "text-3xl font-bold leading-relaxed text-emerald-100";
+    this.el.duoTop.textContent = ""; this.el.duoBottom.textContent = "";
+    this.el.duoOverlay.hidden = false;
+    try { if ("wakeLock" in navigator && !this._wakeLock) this._wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {}
+    if (!this.running) this.start(); // reuse the quick-translate session
+  }
+  _duoExit() {
+    this._duoOn = false;
+    this.el.duoOverlay.hidden = true;
+    if (this._wakeLock && !this._focusOn) { try { this._wakeLock.release(); } catch (_) {} this._wakeLock = null; }
+  }
+  async _duoRender(entry) {
+    const base = this._serverBase(); if (!base || !entry.source) return;
+    const top = this.el.duoTopLang.value, bottom = this.el.duoBottomLang.value;
+    try {
+      const r = await fetch(`${base}/api/translate`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: entry.source, targets: [...new Set([top, bottom])], token: this._token() || undefined }) });
+      if (!r.ok) return;
+      const tr = (await r.json()).translations || {};
+      if (!this._duoOn) return; // exited while translating
+      this.el.duoTop.textContent = tr[top] || entry.source;
+      this.el.duoBottom.textContent = tr[bottom] || "";
+    } catch {}
+  }
+
   _finalizeTurn() { clearTimeout(this._turnTimer); this._turnTimer = null; this._commitTurn(); this._srcLine = null; this._trLine = null; }
 
   _commitTurn() {
@@ -683,6 +734,7 @@ class App {
     // the caption in place (it is nulled right after commit returns).
     if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
+    if (this._duoOn && source) this._duoRender(entry);
   }
 
   async _multiTranslate(entry) {

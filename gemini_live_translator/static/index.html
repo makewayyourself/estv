@@ -25,6 +25,9 @@
       /* `hidden` must win over Tailwind display utilities (e.g. .flex) on overlays.
          The id selector outranks the class so the attribute stays authoritative. */
       #focusOverlay[hidden] { display: none; }
+      #duoOverlay[hidden] { display: none; }
+      .duo-mirror { transform: scaleX(-1); }
+      .duo-rotate { transform: rotate(180deg); }
       .fs-sm { font-size: 0.9rem; } .fs-md { font-size: 1rem; } .fs-lg { font-size: 1.15rem; } .fs-xl { font-size: 1.3rem; }
       /* Brand gradient + primary button */
       .grad-text { background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc); -webkit-background-clip:text; background-clip:text; color:transparent; }
@@ -116,7 +119,23 @@
           </div>
           <div class="mb-3 flex gap-2">
             <button id="qkRoomBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
-            <button id="qkSaveBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.save">💾 노트로 저장</button>
+            <button id="qkDuoBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.duo">🪟 대면 자막</button>
+            <button id="qkSaveBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.save">💾 저장</button>
+          </div>
+          <!-- Transparent-screen (counter display) config: shown by 🪟 대면 자막 -->
+          <div id="duoConfig" hidden class="mb-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-sm">
+            <p class="mb-2 text-xs text-slate-400" data-i18n="duo.intro">투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="mb-1 block text-xs text-slate-400" data-i18n="duo.top">위쪽(내 앞) 언어</label><select id="duoTopLang" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"></select></div>
+              <div><label class="mb-1 block text-xs text-slate-400" data-i18n="duo.bottom">아래쪽(맞은편) 언어</label><select id="duoBottomLang" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"></select></div>
+            </div>
+            <label class="mb-1 mt-2 block text-xs text-slate-400" data-i18n="duo.flip">아래쪽 표시 방향 (프로젝터 설치에 맞게)</label>
+            <select id="duoFlipSel" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 focus:outline-none">
+              <option value="mirror" data-i18n="duo.flipMirror">좌우 반전 (거울)</option>
+              <option value="rotate" data-i18n="duo.flipRotate">180° 회전</option>
+              <option value="none" data-i18n="duo.flipNone">그대로</option>
+            </select>
+            <button id="duoStartBtn" class="mt-2 w-full rounded-xl bg-sky-600 px-4 py-2.5 font-semibold text-white hover:bg-sky-500" data-i18n="duo.start">🪟 대면 자막 시작</button>
           </div>
           <div id="qkTranscript" class="scroll-thin fs-md min-h-[50vh] space-y-3">
             <p class="qk-ph mt-10 text-center text-sm text-slate-600" data-i18n="tr.ph">
@@ -445,6 +464,22 @@
 
       <!-- New-note FAB (notes list) -->
       <button id="newNoteBtn" hidden class="sticky bottom-4 z-20 mx-4 mb-4 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow-lg hover:bg-indigo-500" data-i18n="notes.new">＋ 새 노트</button>
+    </div>
+
+    <!-- ============ DUO / TRANSPARENT-SCREEN OVERLAY ============ -->
+    <!-- Counter display for a beam projector on transparent glass: two people
+         face each other across the glass. Top half shows one language; the
+         bottom half shows the other, mirrored/rotated so the person on the FAR
+         side reads it correctly through the glass. Tap to exit. -->
+    <div id="duoOverlay" hidden class="fixed inset-0 z-50 flex flex-col bg-black">
+      <div class="flex flex-1 items-center justify-center px-6 text-center">
+        <div id="duoTop" class="text-3xl font-bold leading-relaxed text-sky-100"></div>
+      </div>
+      <div class="mx-10 h-px shrink-0 bg-slate-800"></div>
+      <div class="flex flex-1 items-center justify-center px-6 text-center">
+        <div id="duoBottom" class="duo-mirror text-3xl font-bold leading-relaxed text-emerald-100"></div>
+      </div>
+      <div class="absolute right-3 top-2 text-[10px] text-slate-700" data-i18n="duo.exitHint">화면을 탭하면 종료</div>
     </div>
 
     <!-- ============ FOCUS / SCREEN-OFF OVERLAY ============ -->
