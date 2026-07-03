@@ -1195,12 +1195,32 @@ class App {
       if (window.QRCode) window.QRCode.toCanvas(this.el.meetQr, link, { width: 200, margin: 1 }, () => {});
       this.el.meetRoster.innerHTML = "";
       this.el.meetIdle.hidden = true; this.el.meetLive.hidden = false;
+      // The host socket is display-only, but the host is usually a speaker too
+      // — open a participant channel for this phone's mic so the convener's
+      // own speech is transcribed. Non-fatal: the meeting still works as a
+      // display board if the mic/channel fails.
+      try {
+        const hostName = (localStorage.getItem("mjoinName") || "").trim() || (UI_LANG === "ko" ? "호스트" : "Host");
+        await new Promise((res, rej) => {
+          const ws2 = new WebSocket(`${this._wsBase()}/api/meeting/join?room=${id}&name=${encodeURIComponent(hostName)}`);
+          ws2.onopen = () => res();
+          ws2.onerror = () => rej(new Error("host mic channel failed"));
+          ws2.onmessage = () => {}; // transcripts already arrive on the host socket
+          ws2.onclose = () => { this.meetSpeakWs = null; };
+          this.meetSpeakWs = ws2;
+        });
+        this._audioSink = this._meetSink(() => this.meetSpeakWs);
+        await this._startCapture();
+      } catch (_) { /* display-only fallback */ }
       this._setStatus("live", t("st.hosting"));
     } catch (e) { this._setStatus("error", e.message); }
     finally { this.el.meetStartBtn.disabled = false; }
   }
   _meetStop(silent) {
     const ws = this.meetHostWs; this.meetHostWs = null;
+    const ws2 = this.meetSpeakWs; this.meetSpeakWs = null;
+    this._teardown(); // stops the host mic capture (and clears _audioSink)
+    if (ws2 && ws2.readyState === WebSocket.OPEN) ws2.close();
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     this.el.meetLive.hidden = true; this.el.meetIdle.hidden = false;
     if (!silent) this._setStatus("idle", t("st.idle"));
@@ -1242,18 +1262,7 @@ class App {
         this.meetWs = ws;
       });
       this._diarTranscript = this.el.mjoinTranscript; this.el.mjoinTranscript.innerHTML = "";
-      // VAD-gated mic: stream only while speaking (idle costs nothing), but
-      // after speech ends send a short silence tail so Gemini's turn detection
-      // can finalize the utterance — dropping to nothing mid-stream leaves
-      // turns hanging (late/garbled results).
-      this._vadUntil = 0; this._meetTailUntil = 0;
-      this._audioSink = (buf) => {
-        if (!this.meetWs || this.meetWs.readyState !== WebSocket.OPEN) return;
-        const now = (window.performance && performance.now) ? performance.now() : Date.now();
-        if (this._vadGate(buf)) { this._meetTailUntil = 0; this.meetWs.send(buf); }
-        else if (!this._meetTailUntil) { this._meetTailUntil = now + 1200; this.meetWs.send(new ArrayBuffer(buf.byteLength)); }
-        else if (now < this._meetTailUntil) this.meetWs.send(new ArrayBuffer(buf.byteLength));
-      };
+      this._audioSink = this._meetSink(() => this.meetWs);
       await this._startCapture();
       this.el.mjoinForm.hidden = true; this.el.mjoinLive.hidden = false;
       this._setStatus("live", t("st.joined"));
@@ -1275,6 +1284,21 @@ class App {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     this.el.mjoinLive.hidden = true; this.el.mjoinForm.hidden = false;
     if (!silent) this._setStatus("idle", t("st.idle"));
+  }
+  _meetSink(getWs) {
+    // VAD-gated meeting mic: stream only while speaking (idle costs nothing),
+    // but after speech ends send a short silence tail so Gemini's turn
+    // detection can finalize the utterance — dropping to nothing mid-stream
+    // leaves turns hanging (late/garbled results).
+    this._vadUntil = 0; this._meetTailUntil = 0;
+    return (buf) => {
+      const ws = getWs();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const now = (window.performance && performance.now) ? performance.now() : Date.now();
+      if (this._vadGate(buf)) { this._meetTailUntil = 0; ws.send(buf); }
+      else if (!this._meetTailUntil) { this._meetTailUntil = now + 1200; ws.send(new ArrayBuffer(buf.byteLength)); }
+      else if (now < this._meetTailUntil) ws.send(new ArrayBuffer(buf.byteLength));
+    };
   }
   _playbackBusy() {
     // True while queued translated audio is still playing (+300ms tail for
