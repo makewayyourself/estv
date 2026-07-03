@@ -147,7 +147,11 @@ def build_system_instruction(lang_a: str, lang_b: str) -> str:
 
 
 def build_caption_prompt(
-    source_lang: str, target_lang: str, glossary: str = "", history: str = ""
+    source_lang: str,
+    target_lang: str,
+    glossary: str = "",
+    history: str = "",
+    candidates: list[str] | None = None,
 ) -> str:
     """Precision transcription + translation of ONE utterance (audio attached).
 
@@ -156,7 +160,16 @@ def build_caption_prompt(
     cannot offer.
     """
     tgt = SUPPORTED_LANGUAGES.get(target_lang, "English")
-    if source_lang and source_lang != AUTO_DETECT:
+    if candidates:
+        # The meeting's language set (the user's 3 display languages): constrain
+        # recognition to these instead of a 70-language free-for-all.
+        names = ", ".join(SUPPORTED_LANGUAGES.get(c, c) for c in candidates)
+        src_line = (
+            f"The speaker is speaking ONE of these languages: {names}. Identify "
+            "which one and transcribe in that language only — never any other "
+            "language."
+        )
+    elif source_lang and source_lang != AUTO_DETECT:
         src_line = (
             f"The speaker is speaking {SUPPORTED_LANGUAGES.get(source_lang, source_lang)}. "
             "Transcribe in that language only — do not switch languages."

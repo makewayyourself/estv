@@ -69,7 +69,7 @@ const I18N = {
     "set.uiLang": "앱 언어", "set.theme": "테마", "set.dark": "🌙 밤(어둡게)", "set.light": "☀️ 낮(밝게)",
     "set.fontSize": "글자 크기", "set.output": "출력(들리는) 언어", "set.outputHelp": "음성으로 나갈 1개 언어.",
     "set.auto": "자동 감지", "set.source": "말하는(입력) 언어", "set.sourceHelp": "보통 '자동 감지'면 됩니다. 원문 자막이 엉뚱한 언어로 뜨면(예: 아랍어) 여기서 말하는 언어를 직접 지정하세요.",
-    "set.display": "표시(자막) 언어 · 최대 3", "set.displayHelp": "각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기).",
+    "set.display": "표시(자막) 언어 · 최대 3", "set.displayHelp": "각 발화를 이 언어들로 함께 자막 표시(참가자 각자 읽기). 🎯 고정밀 모드에서는 말하는(입력) 언어 후보로도 사용됩니다 — 회의에서 쓰는 언어들을 지정하세요.",
     "set.voice": "음성 (목소리)", "set.speed": "빠르기", "set.risk": "🛡️ 리스크 감지", "set.riskCtx": "분야 (예: oil trading)",
     "set.clarify": "🔎 의미 확인", "set.server": "서버 주소", "set.token": "접속 토큰", "set.tokenPh": "서버 접속 토큰",
     "set.save": "저장", "set.health": "🔄 진단", "set.model": "모델", "set.admin": "🔒 관리자 · 서버 설정",
@@ -135,7 +135,7 @@ const I18N = {
     "set.uiLang": "App language", "set.theme": "Theme", "set.dark": "🌙 Dark", "set.light": "☀️ Light",
     "set.fontSize": "Font size", "set.output": "Output (spoken) language", "set.outputHelp": "One spoken language.",
     "set.auto": "Auto-detect", "set.source": "Spoken (input) language", "set.sourceHelp": "Usually 'Auto-detect' is fine. If the original-text caption shows the wrong language (e.g. Arabic), set the spoken language here.",
-    "set.display": "Caption languages · up to 3", "set.displayHelp": "Show each utterance in these languages (everyone reads their own).",
+    "set.display": "Caption languages · up to 3", "set.displayHelp": "Show each utterance in these languages (everyone reads their own). In 🎯 Precision mode they also serve as the spoken-language candidates — set them to the meeting's languages.",
     "set.voice": "Voice", "set.speed": "Speed", "set.risk": "🛡️ Risk Guard", "set.riskCtx": "Industry (e.g. oil trading)",
     "set.clarify": "🔎 Clarify", "set.server": "Server URL", "set.token": "Access token", "set.tokenPh": "server access token",
     "set.save": "Save", "set.health": "🔄 Check", "set.model": "Model", "set.admin": "🔒 Admin · server settings",
@@ -216,7 +216,7 @@ class App {
     this.el = {};
     ["backBtn","viewTitle","statusDot","statusText","controlBar","newNoteBtn",
      "toggleBtn","toggleIcon","toggleLabel","pauseBtn","replayBtn","pronounceBtn",
-     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn","modePrecBtn","precSrcSel","precSrcLabel",
+     "pronounceBox","pronounceContent","scriptSelect","modeAudioBtn","modeTextBtn","modePrecBtn",
      "qkTranscript","noteTranscript","assistCards",
      "focusBtn","focusOverlay","focusCaption",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
@@ -452,7 +452,6 @@ class App {
     this.precision = !!on;
     if (!silent) localStorage.setItem("precision", on ? "1" : "0");
     if (on) this.audioOutput = false;
-    this.el.precSrcSel.hidden = this.el.precSrcLabel.hidden = !on;
     this._paintModes();
     if (this.running && !silent) { // switch engines live
       this._setStatus("connecting", t("st.langSwitch"));
@@ -477,13 +476,6 @@ class App {
     // live — transparently reconnect with the new target language (the Gemini
     // config is fixed per connection).
     fillB(this.el.qkLangSel, localStorage.getItem("langB") || DEFAULT_LANG_B);
-    // Precision-mode input language: pinning it is a main accuracy lever.
-    const savedSrc = localStorage.getItem("precSrc") || "auto";
-    this.el.precSrcSel.innerHTML = "";
-    for (const [c, l] of [["auto", t("set.auto")], ...Object.entries(LANGUAGES)]) {
-      const o = document.createElement("option"); o.value = c; o.textContent = l; if (c === savedSrc) o.selected = true; this.el.precSrcSel.appendChild(o);
-    }
-    this.el.precSrcSel.addEventListener("change", () => localStorage.setItem("precSrc", this.el.precSrcSel.value));
     fillB(this.el.duoTopLang, localStorage.getItem("duoTop") || "en");
     fillB(this.el.duoBottomLang, localStorage.getItem("duoBottom") || (UI_LANG === "ko" ? "ko" : DEFAULT_LANG_B));
     this.el.duoFlipSel.value = localStorage.getItem("duoFlip") || "mirror";
@@ -1570,7 +1562,8 @@ class App {
     const base = this._serverBase(); if (!base) return;
     const body = JSON.stringify({
       audio_b64: this._b64(pcmBytes),
-      source_lang: this.el.precSrcSel.value || "auto",
+      source_langs: this._displayLangs(), // the meeting language set (Settings → display languages)
+      source_lang: "auto",
       target_lang: this.el.langB.value,
       glossary: (localStorage.getItem("glossary") || "").trim(),
       history: this._currentLog().slice(-4).map((e) => `${e.source} → ${e.translation}`).join("\n"),

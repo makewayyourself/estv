@@ -68,7 +68,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-p"
+APP_VERSION = "2026.06.19-q"
 
 load_dotenv()
 
@@ -492,6 +492,9 @@ class TranscribeRequest(BaseModel):
 
     audio_b64: str
     source_lang: str = "auto"
+    # The meeting's language set (the user's display languages) — recognition
+    # candidates. Takes precedence over source_lang when non-empty.
+    source_langs: List[str] = []
     target_lang: str = DEFAULT_LANG_B
     glossary: str = ""
     history: str = ""
@@ -539,8 +542,11 @@ async def transcribe(req: TranscribeRequest) -> dict:
 
     source_lang = normalize_lang(req.source_lang, "auto", allow_auto=True)
     target_lang = normalize_lang(req.target_lang, DEFAULT_LANG_B)
+    candidates = [c for c in (normalize_lang(x, "") for x in req.source_langs) if c]
+    candidates = list(dict.fromkeys(candidates))[:4]  # dedupe, sane cap
     prompt = build_caption_prompt(
-        source_lang, target_lang, req.glossary[:500], req.history[:2000]
+        source_lang, target_lang, req.glossary[:500], req.history[:2000],
+        candidates=candidates,
     )
     try:
         response = await client.aio.models.generate_content(
