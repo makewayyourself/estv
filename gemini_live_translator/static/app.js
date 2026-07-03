@@ -42,6 +42,8 @@ const I18N = {
     "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
     "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
     "set.glossary": "📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)", "set.glossaryPh": "예: 안현모(내 이름), ABC무역(회사), FOB, 선하증권",
+    "note.audio": "🔊 회의 녹음", "note.audioDl": "다운로드", "note.audioDel": "삭제",
+    "note.audioDelConfirm": "이 노트의 녹음 파일을 삭제할까요? (기록·요약은 유지됩니다)",
     "set.assistLang": "🌐 AI 보조 표시 언어 (내가 읽을 수 있는 언어)",
     "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
     "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
@@ -99,6 +101,8 @@ const I18N = {
     "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
     "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
     "set.glossary": "📖 Glossary — names, companies, terms (used to auto-correct mishearings)", "set.glossaryPh": "e.g. Hyunmo Ahn (my name), ABC Trading (company), FOB, B/L",
+    "note.audio": "🔊 Meeting audio", "note.audioDl": "Download", "note.audioDel": "Delete",
+    "note.audioDelConfirm": "Delete this note's recording? (The transcript and summary are kept.)",
     "set.assistLang": "🌐 AI assist language (the language YOU read)",
     "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
     "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
@@ -144,6 +148,18 @@ function applyI18n() {
 }
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+// --- Meeting-audio store -----------------------------------------------------
+// Recordings stay ON DEVICE (IndexedDB), never uploaded: business conversations
+// are sensitive, and the free-tier server has an ephemeral disk anyway (files
+// would vanish on every deploy). A recording lives and dies with its note —
+// deleting the note deletes the audio. No auto-expiry, no delete-on-download
+// (users re-listen to dubious passages repeatedly); manual delete is provided.
+const AUDIO_DB = { name: "estvAudio", store: "rec" };
+function idbOpen() { return new Promise((res, rej) => { const r = indexedDB.open(AUDIO_DB.name, 1); r.onupgradeneeded = () => r.result.createObjectStore(AUDIO_DB.store); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbPut(key, blob) { const db = await idbOpen(); return new Promise((res, rej) => { const tx = db.transaction(AUDIO_DB.store, "readwrite"); tx.objectStore(AUDIO_DB.store).put(blob, key); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
+async function idbGet(key) { const db = await idbOpen(); return new Promise((res, rej) => { const rq = db.transaction(AUDIO_DB.store).objectStore(AUDIO_DB.store).get(key); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => rej(rq.error); }); }
+async function idbDel(key) { const db = await idbOpen(); return new Promise((res, rej) => { const tx = db.transaction(AUDIO_DB.store, "readwrite"); tx.objectStore(AUDIO_DB.store).delete(key); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------------------
@@ -190,6 +206,7 @@ class App {
      "qkTranscript","noteTranscript","assistCards",
      "focusBtn","focusOverlay","focusCaption",
      "noteTitle","noteDate","noteMenuBtn","noteMenu","noteSummarizeBtn","noteExportMd","noteExportDocx","noteExportPdf","noteDelete",
+     "noteAudioRow","noteAudioInfo","noteAudioDl","noteAudioDel",
      "homeVer","verInfo",
      "roomStartBtn","roomIdle","roomLive","roomQr","roomLink","roomCopyBtn","roomCount","roomStopBtn",
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
@@ -292,6 +309,16 @@ class App {
     this.el.noteSearch.addEventListener("input", () => this._renderNotesList());
     this.el.noteTitle.addEventListener("change", () => this._renameActive());
     this.el.noteDelete.addEventListener("click", () => this._deleteActive());
+    this.el.noteAudioDl.addEventListener("click", async () => {
+      const blob = await idbGet(this.activeNoteId).catch(() => null); if (!blob) return;
+      const url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = `${(this._note(this.activeNoteId)?.title || "meeting").replace(/[\\/:*?"<>|]/g, "_")}.webm`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    });
+    this.el.noteAudioDel.addEventListener("click", async () => {
+      if (!confirm(t("note.audioDelConfirm"))) return;
+      await idbDel(this.activeNoteId).catch(() => {}); this._refreshAudioRow();
+    });
     this.el.noteSummarizeBtn.addEventListener("click", () => this._summarize());
     this.el.noteFeedbackBtn.addEventListener("click", () => this._feedback());
     this.el.askBtn.addEventListener("click", () => this._ask());
@@ -460,12 +487,15 @@ class App {
     if (!this.quickLog.length) { this._setStatus(this.running ? "live" : "idle", t("msg.nothingSave")); return; }
     const log = this.quickLog.map((e) => ({ ...e }));
     const title = log[0] && log[0].source ? log[0].source.slice(0, 24) : t("msg.newNote");
-    this.notes.unshift({ id: "n" + Date.now(), title, createdAt: Date.now(), updatedAt: Date.now(), log, summary: "", topic: "" });
+    const id = "n" + Date.now();
+    this.notes.unshift({ id, title, createdAt: Date.now(), updatedAt: Date.now(), log, summary: "", topic: "" });
     this._saveNotes();
+    if (this._lastRecBlob) { idbPut(id, this._lastRecBlob).catch(() => {}); this._lastRecBlob = null; }
     this._setStatus(this.running ? "live" : "idle", t("st.savedNote"));
   }
   _deleteActive() {
     if (!confirm(t("msg.confirmDelete"))) return;
+    idbDel(this.activeNoteId).catch(() => {}); // recording lives and dies with its note
     this.notes = this.notes.filter((n) => n.id !== this.activeNoteId);
     this._saveNotes(); this.show("notes");
   }
@@ -509,6 +539,14 @@ class App {
     this.el.askAnswer.classList.add("hidden");
     this._tab("log");
     this._renderLog(this.el.noteTranscript, n.log, "note-ph");
+    this._refreshAudioRow();
+  }
+  _refreshAudioRow() {
+    if (!this.el.noteAudioRow) return;
+    idbGet(this.activeNoteId).then((b) => {
+      this.el.noteAudioRow.hidden = !b;
+      this.el.noteAudioInfo.textContent = b ? `(${(b.size / 1048576).toFixed(1)} MB)` : "";
+    }).catch(() => { this.el.noteAudioRow.hidden = true; });
   }
   _tab(which) {
     document.querySelectorAll(".note-tab").forEach((b) => {
@@ -792,6 +830,15 @@ class App {
   async _teardown() {
     if (this._turnTimer) this._finalizeTurn();
     this._audioSink = null;
+    if (this.recorder) {
+      const rec = this.recorder; this.recorder = null;
+      await new Promise((res) => { rec.onstop = res; try { rec.stop(); } catch (_) { res(); } });
+      const blob = new Blob(this._recChunks || [], { type: "audio/webm" }); this._recChunks = [];
+      if (blob.size > 4096) {
+        if (this.context === "note" && this.activeNoteId) { try { await idbPut(this.activeNoteId, blob); this._refreshAudioRow(); } catch (_) {} }
+        else this._lastRecBlob = blob; // attached when the quick session is saved as a note
+      }
+    }
     if (this.workletNode) { this.workletNode.port.onmessage = null; this.workletNode.disconnect(); this.workletNode = null; }
     if (this.micSource) { this.micSource.disconnect(); this.micSource = null; }
     if (this.mediaStream) { this.mediaStream.getTracks().forEach((x) => x.stop()); this.mediaStream = null; }
@@ -878,6 +925,16 @@ class App {
     this.micSource.connect(this.workletNode);
     const sink = this.captureContext.createGain(); sink.gain.value = 0;
     this.workletNode.connect(sink); sink.connect(this.captureContext.destination);
+    // Record the raw meeting audio in parallel (opus ≈ 15MB/h) so dubious
+    // passages can be re-listened and the transcript corrected afterwards.
+    this._recChunks = [];
+    if ((this.context === "note" || this.view === "translate") && window.MediaRecorder) {
+      try {
+        this.recorder = new MediaRecorder(this.mediaStream, { mimeType: "audio/webm;codecs=opus", audioBitsPerSecond: 32000 });
+        this.recorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) this._recChunks.push(ev.data); };
+        this.recorder.start(1000);
+      } catch (_) { this.recorder = null; }
+    }
   }
 
   // ---- playback -----------------------------------------------------------
