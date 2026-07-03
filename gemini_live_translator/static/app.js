@@ -730,9 +730,9 @@ class App {
     this._persist();
     // Notes always get the context/meaning analysis (warnings in 참고);
     // Quick Translate only when the toggles are on.
-    // Pass the live translation element so a context correction can rewrite
-    // the caption in place (it is nulled right after commit returns).
-    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine);
+    // Pass the live caption elements so a context correction can rewrite them
+    // in place (they are nulled right after commit returns).
+    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine, this._srcLine);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
     if (this._duoOn && source) this._duoRender(entry);
   }
@@ -752,7 +752,7 @@ class App {
     } catch {}
   }
 
-  async _analyzeTurn(entry, trEl) {
+  async _analyzeTurn(entry, trEl, srcEl) {
     const base = this._serverBase(); if (!base || !entry.source) return;
     const isNote = this.context === "note";
     const wantRisk = isNote || this.el.riskToggle.checked;
@@ -776,13 +776,22 @@ class App {
         // saved log with the contextually corrected translation. The spoken
         // audio has already played (can't be unsaid), but everything the user
         // reads/exports from here on is the corrected text.
+        const mark = ` <span class="ml-1 text-[10px] font-semibold text-emerald-400">✓${UI_LANG === "ko" ? "교정" : "fixed"}</span>`;
         const fixed = (d.clarify_corrected_translation || "").trim();
         if (fixed && fixed !== entry.translation) {
           entry.translation_raw = entry.translation;
           entry.translation = fixed;
           this._lastTranslationText = fixed;
-          if (trEl && trEl.isConnected) trEl.innerHTML = esc(fixed) + ` <span class="ml-1 text-[10px] font-semibold text-emerald-400">✓${UI_LANG === "ko" ? "교정" : "fixed"}</span>`;
+          if (trEl && trEl.isConnected) trEl.innerHTML = esc(fixed) + mark;
           if (this._focusOn) this.el.focusCaption.textContent = fixed;
+        }
+        // Heal the ORIGINAL caption too (e.g. '7시간' → '실시간'): the source
+        // line is what bilingual users actually read back.
+        const fixedSrc = (d.clarify_corrected_source || "").trim();
+        if (fixedSrc && fixedSrc !== entry.source) {
+          entry.source_raw = entry.source;
+          entry.source = fixedSrc;
+          if (srcEl && srcEl.isConnected) srcEl.innerHTML = esc(fixedSrc) + mark;
         }
       }
       if (wantAnswer && d.should_answer && (d.answer_native || d.answer_local)) this._renderAnswer(d);

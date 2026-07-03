@@ -66,7 +66,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-h"
+APP_VERSION = "2026.06.19-i"
 
 load_dotenv()
 
@@ -209,6 +209,9 @@ class RiskAnalysis(BaseModel):
     clarify_suspected: bool
     clarify_did_you_mean: str
     clarify_corrected_translation: str
+    # The original utterance as it should read (source language) — replaces the
+    # source caption the same way the corrected translation replaces its line.
+    clarify_corrected_source: str
     # Answer suggestion (when the latest utterance is a question to answer).
     should_answer: bool
     answer_local: str
@@ -235,6 +238,7 @@ _EMPTY_ANALYSIS = {
     "risk_level": "none", "risk_types": [], "subtitle_alert": "", "reason": "",
     "suggested_question": "", "clarify_suspected": False,
     "clarify_did_you_mean": "", "clarify_corrected_translation": "",
+    "clarify_corrected_source": "",
     "should_answer": False, "answer_local": "", "answer_native": "", "upgrade": "",
 }
 
