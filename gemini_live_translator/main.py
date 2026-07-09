@@ -52,6 +52,7 @@ from services.gemini_live import (
     SUPPORTED_LANGUAGES,
     build_caption_prompt,
     build_config,
+    build_digest_prompt,
     build_feedback_prompt,
     build_multitranslate_prompt,
     build_pronounce_prompt,
@@ -68,7 +69,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-u"
+APP_VERSION = "2026.06.19-v"
 
 load_dotenv()
 
@@ -568,6 +569,53 @@ async def transcribe(req: TranscribeRequest) -> dict:
         "source": str(data.get("source_text", "")).strip(),
         "translation": str(data.get("translation", "")).strip(),
     }
+
+
+class DigestRequest(BaseModel):
+    transcript: str
+    language: str = DEFAULT_LANG_A
+    token: str | None = None
+
+
+class DigestResult(BaseModel):
+    summary: str
+    questions: List[str]
+
+
+@app.post("/api/digest")
+async def digest(req: DigestRequest) -> dict:
+    """Rolling live summary + suggested next questions (accuracy-cheap Lite
+    model, called periodically off the real-time path)."""
+    _check_token(req.token)
+    transcript = (req.transcript or "").strip()
+    if not transcript:
+        return {"summary": "", "questions": []}
+    if len(transcript) > MAX_SUMMARY_CHARS:
+        transcript = transcript[-MAX_SUMMARY_CHARS:]
+    try:
+        client = get_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    language = normalize_lang(req.language, DEFAULT_LANG_A)
+    prompt = build_digest_prompt(transcript, language)
+    try:
+        response = await client.aio.models.generate_content(
+            model=RISK_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=DigestResult,
+            ),
+        )
+        data = json.loads(response.text or "{}")
+    except Exception as exc:  # noqa: BLE001 — best effort, never break the UI
+        logger.warning("Digest failed: %s", exc)
+        return {"summary": "", "questions": []}
+    qs = data.get("questions") or []
+    if not isinstance(qs, list):
+        qs = []
+    return {"summary": str(data.get("summary", "")).strip(), "questions": [str(q).strip() for q in qs[:3] if str(q).strip()]}
 
 
 class PronounceRequest(BaseModel):

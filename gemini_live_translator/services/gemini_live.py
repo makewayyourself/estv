@@ -200,6 +200,27 @@ def build_caption_prompt(
     )
 
 
+def build_digest_prompt(transcript: str, language: str) -> str:
+    """Rolling live digest: a short running summary of the conversation so far
+    plus a few smart questions the user could ask next to move a business
+    discussion forward. Output is JSON, written in ``language``."""
+    lang_name = SUPPORTED_LANGUAGES.get(language, "English")
+    return (
+        "You are a real-time meeting copilot for a live interpreted business "
+        "conversation. From the running transcript below, produce:\n"
+        "1. summary: 2-4 very short bullet lines capturing where the "
+        "conversation stands right now (decisions, numbers, open points) — not "
+        "a transcript, just the gist. Keep it current; weight recent turns.\n"
+        "2. questions: up to 3 concise, high-value questions the listener could "
+        "ask NEXT — to clarify ambiguity, pin down terms/prices/dates, or move "
+        "the deal forward. Make them specific to what was actually said, not "
+        "generic. Empty list if nothing useful.\n"
+        f"Write everything in {lang_name}. Be brief.\n\n"
+        "=== TRANSCRIPT (most recent last) ===\n"
+        f"{transcript}"
+    )
+
+
 def build_summary_prompt(transcript: str, language: str) -> str:
     """Build a meeting-notes summarization prompt in the requested language."""
     lang_name = SUPPORTED_LANGUAGES.get(language, "English")

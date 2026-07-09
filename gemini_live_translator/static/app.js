@@ -40,7 +40,7 @@ const I18N = {
     "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
     "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
-    "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
+    "set.digest": "🧭 실시간 요약·추천 질문", "digest.title": "🧭 실시간 요약", "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
     "set.glossary": "📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)", "set.glossaryPh": "예: 안현모(내 이름), ABC무역(회사), FOB, 선하증권",
     "note.audio": "🔊 회의 녹음", "note.audioDl": "다운로드", "note.audioDel": "삭제",
     "note.audioDelConfirm": "이 노트의 녹음 파일을 삭제할까요? (기록·요약은 유지됩니다)",
@@ -108,7 +108,7 @@ const I18N = {
     "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
     "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
-    "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
+    "set.digest": "🧭 Live summary & suggested questions", "digest.title": "🧭 Live summary", "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
     "set.glossary": "📖 Glossary — names, companies, terms (used to auto-correct mishearings)", "set.glossaryPh": "e.g. Hyunmo Ahn (my name), ABC Trading (company), FOB, B/L",
     "note.audio": "🔊 Meeting audio", "note.audioDl": "Download", "note.audioDel": "Delete",
     "note.audioDelConfirm": "Delete this note's recording? (The transcript and summary are kept.)",
@@ -234,7 +234,7 @@ class App {
      "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint","levelWrap","levelBar",
      "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
-     "answerToggle","upgradeToggle",
+     "answerToggle","upgradeToggle","digestToggle","digestPanel","digestSummary","digestQs","digestBusy",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
      "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle","noiseGateToggle","glossaryInput","assistLang",
@@ -378,6 +378,8 @@ class App {
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
     this.el.answerToggle.addEventListener("change", () => localStorage.setItem("answer", this.el.answerToggle.checked ? "1" : "0"));
     this.el.upgradeToggle.addEventListener("change", () => localStorage.setItem("upgrade", this.el.upgradeToggle.checked ? "1" : "0"));
+    this.el.digestToggle.checked = localStorage.getItem("digest") === "1";
+    this.el.digestToggle.addEventListener("change", () => { localStorage.setItem("digest", this.el.digestToggle.checked ? "1" : "0"); if (!this.el.digestToggle.checked) this.el.digestPanel.hidden = true; });
     this.el.earphoneToggle.addEventListener("change", () => {
       localStorage.setItem("earphoneMode", this.el.earphoneToggle.checked ? "1" : "0");
       if (this.running || this.meetWs) this._setStatus(this.running ? "live" : "idle", t("set.earphoneApply"));
@@ -788,6 +790,54 @@ class App {
     if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine, this._srcLine);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
     if (this._duoOn && source) this._duoRender(entry);
+    if (this.el.digestToggle.checked && (source || translation)) this._scheduleDigest();
+  }
+  _scheduleDigest() {
+    // Rolling summary + suggested questions, throttled: refresh at most every
+    // 12s and only when there's new content, never overlapping a request.
+    const now = (window.performance && performance.now) ? performance.now() : Date.now();
+    this._digestPending = true;
+    if (this._digestBusy) return;
+    const since = now - (this._digestAt || 0);
+    if (since < 12000) {
+      clearTimeout(this._digestTimer);
+      this._digestTimer = setTimeout(() => this._runDigest(), 12000 - since);
+      return;
+    }
+    this._runDigest();
+  }
+  async _runDigest() {
+    const base = this._serverBase(); if (!base) return;
+    const log = this._currentLog(); if (!log.length) return;
+    this._digestPending = false; this._digestBusy = true;
+    this._digestAt = (window.performance && performance.now) ? performance.now() : Date.now();
+    this.el.digestBusy.textContent = "…";
+    const transcript = log.slice(-40).map((e) => `${e.source || ""}${e.translation ? " → " + e.translation : ""}`).join("\n");
+    try {
+      const r = await fetch(`${base}/api/digest`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript, language: (localStorage.getItem("assistLang") || UI_LANG), token: this._token() || undefined }) });
+      if (r.ok) { const d = await r.json(); this._renderDigest(d); }
+    } catch (_) {}
+    finally {
+      this._digestBusy = false; this.el.digestBusy.textContent = "";
+      if (this._digestPending && this.el.digestToggle.checked) this._scheduleDigest(); // catch up on turns that arrived mid-request
+    }
+  }
+  _renderDigest(d) {
+    if (!this.el.digestToggle.checked) return;
+    const sum = (d.summary || "").trim(), qs = Array.isArray(d.questions) ? d.questions : [];
+    if (!sum && !qs.length) return;
+    this.el.digestPanel.hidden = false;
+    this.el.digestSummary.textContent = sum;
+    this.el.digestQs.innerHTML = "";
+    for (const q of qs) {
+      const b = document.createElement("button");
+      b.className = "rounded-full border border-violet-500/50 bg-violet-900/30 px-2.5 py-1 text-xs text-violet-100 hover:bg-violet-800/40";
+      b.textContent = "❓ " + q;
+      b.title = UI_LANG === "ko" ? "탭하면 복사" : "Tap to copy";
+      b.addEventListener("click", () => { if (navigator.clipboard) navigator.clipboard.writeText(q).catch(() => {}); const p = b.textContent; b.textContent = (UI_LANG === "ko" ? "✓ 복사됨" : "✓ copied"); setTimeout(() => { b.textContent = p; }, 1200); });
+      this.el.digestQs.appendChild(b);
+    }
   }
 
   async _multiTranslate(entry) {
@@ -967,6 +1017,7 @@ class App {
   }
   _clearAssist() {
     this._assistList = []; this._assistOpen = false;
+    if (this.el.digestPanel) { this.el.digestPanel.hidden = true; this._digestAt = 0; this._digestBusy = false; }
     if (this.el.assistCards) { this.el.assistCards.textContent = ""; this.el.assistCards.className = "mb-2 space-y-2"; }
   }
 

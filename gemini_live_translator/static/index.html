@@ -149,6 +149,14 @@
             </select>
             <button id="duoStartBtn" class="mt-2 w-full rounded-xl bg-sky-600 px-4 py-2.5 font-semibold text-white hover:bg-sky-500" data-i18n="duo.start">🪟 대면 자막 시작</button>
           </div>
+          <div id="digestPanel" hidden class="mb-3 rounded-xl border border-violet-800/50 bg-violet-950/20 p-3 text-sm">
+            <div class="mb-1 flex items-center justify-between">
+              <span class="text-xs font-bold text-violet-300" data-i18n="digest.title">🧭 실시간 요약</span>
+              <span id="digestBusy" class="text-[10px] text-violet-400/70"></span>
+            </div>
+            <div id="digestSummary" class="whitespace-pre-line text-slate-200"></div>
+            <div id="digestQs" class="mt-2 flex flex-wrap gap-1.5"></div>
+          </div>
           <div id="qkTranscript" class="scroll-thin fs-md min-h-[50vh] space-y-3">
             <p class="qk-ph mt-10 text-center text-sm text-slate-600" data-i18n="tr.ph">
               아래 시작을 누르고 말하면 통역됩니다.<br />표시 언어는 설정에서 최대 3개까지 고를 수 있어요.
@@ -318,6 +326,7 @@
                 <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-emerald-300" data-i18n="set.upgrade">✨ 표현 업그레이드</span><input id="upgradeToggle" type="checkbox" class="h-4 w-4 accent-emerald-500" /></label>
                 <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-sky-300" data-i18n="set.clarify">🔎 의미 확인</span><input id="clarifyToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /></label>
                 <label class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-amber-300" data-i18n="set.risk">🛡️ 리스크 감지</span><input id="riskToggle" type="checkbox" class="h-4 w-4 accent-amber-500" /></label>
+                <label class="col-span-2 flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2"><span class="text-xs font-medium text-violet-300" data-i18n="set.digest">🧭 실시간 요약·추천 질문</span><input id="digestToggle" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
               </div>
               <input id="riskContext" type="text" data-i18n-ph="set.riskCtx" placeholder="분야 (예: oil trading)" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none" />
               <label class="mb-1 mt-3 block text-xs font-medium text-slate-400" data-i18n="set.glossary">📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)</label>
