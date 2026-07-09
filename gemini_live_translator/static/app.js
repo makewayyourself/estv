@@ -1561,8 +1561,14 @@ class App {
   }
   // ---- precision-caption cascade -------------------------------------------
   _precSink() {
-    // Segment utterances locally: buffer while the VAD is open, finalize after
-    // 700ms of closed gate, force-flush at 30s so nothing grows unbounded.
+    // Segment utterances locally. Latency levers:
+    //  - flush 350ms after the gate closes (was 700) → captions appear sooner
+    //    once you pause. Word tails are still captured (we keep buffering while
+    //    quiet, up to the flush).
+    //  - PROGRESSIVE flush at ~5s of continuous speech, so a long monologue
+    //    (e.g. a Meet speaker who doesn't pause) captions in rolling chunks
+    //    instead of showing nothing until they finally stop.
+    const GAP_MS = 350, PROGRESS_BYTES = 160000; // 160000 ≈ 5s @16kHz·16bit
     this._vadUntil = 0;
     let buf = [], bytes = 0, sawSpeech = false, quietSince = 0;
     const flush = () => {
@@ -1579,11 +1585,11 @@ class App {
       if (speaking) {
         sawSpeech = true; quietSince = 0;
         buf.push(new Uint8Array(chunk.slice(0))); bytes += chunk.byteLength;
-        if (bytes >= 960000) flush(); // 30s cap
+        if (bytes >= PROGRESS_BYTES) flush(); // roll long speech into chunks
       } else if (sawSpeech) {
-        buf.push(new Uint8Array(chunk.slice(0))); bytes += chunk.byteLength; // short tail
+        buf.push(new Uint8Array(chunk.slice(0))); bytes += chunk.byteLength; // tail
         if (!quietSince) quietSince = now;
-        else if (now - quietSince > 700) flush();
+        else if (now - quietSince > GAP_MS) flush();
       }
     };
   }
@@ -1698,7 +1704,10 @@ class App {
     // While our own audio plays the bar rises to reject speaker echo.
     this._noiseFloor = this._noiseFloor == null ? rms : Math.min(rms, this._noiseFloor * 1.03 + 0.0002);
     const thr = this._playbackBusy() ? 0.045 : Math.max(0.006, this._noiseFloor * 3);
-    if (rms > thr) this._vadUntil = now + 1000;
+    // 500ms hangover (was 1000): the gate closes sooner after speech, so the
+    // segmenter flushes faster — word tails are still kept because the sinks
+    // keep buffering through the quiet gap up to the flush.
+    if (rms > thr) this._vadUntil = now + 500;
     const active = now < (this._vadUntil || 0);
     if (this.el.mjoinSpeak) this.el.mjoinSpeak.style.opacity = active ? "1" : "0.2";
     // Live input-level meter so the user can SEE whether audio is arriving
