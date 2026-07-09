@@ -5,6 +5,7 @@
   "main": "main.js",
   "author": "ESTV",
   "license": "UNLICENSED",
+  "repository": { "type": "git", "url": "https://github.com/makewayyourself/estv.git" },
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win --publish never"
@@ -16,7 +17,8 @@
   "build": {
     "appId": "com.estv.desktop",
     "productName": "ESTV Interpreter",
-    "files": ["main.js", "preload.js", "overlay.html", "assets/**"],
+    "files": ["main.js", "preload.js"],
+    "publish": [{ "provider": "github", "owner": "makewayyourself", "repo": "estv" }],
     "win": {
       "target": ["nsis"],
       "artifactName": "ESTV-Interpreter-Setup-${version}.${ext}"
