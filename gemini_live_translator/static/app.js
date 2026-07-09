@@ -52,7 +52,7 @@ const I18N = {
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
     "mode.prec": "🎯 고정밀", "tr.inLang": "🎙️ 입력",
     "st.precLive": "🎯 고정밀 자막 — 문장을 마치면 자막이 표시됩니다", "tr.tts": "읽어주기",
-    "cap.mic": "🎙️ 내 마이크", "cap.system": "🖥️ 화면·탭 소리", "st.noTabAudio": "탭 오디오가 공유되지 않았어요 — 공유 창에서 대상 탭을 고르고 ‘탭 오디오도 공유’를 체크하세요.",
+    "cap.mic": "🎙️ 내 마이크", "cap.system": "🖥️ 화면·탭 소리", "cap.level": "🎚️ 입력", "st.noTabAudio": "탭 오디오가 공유되지 않았어요 — 공유 창에서 대상 탭을 고르고 ‘탭 오디오도 공유’를 체크하세요.",
     "cap.hint": "🖥️ 화면·탭 소리로 통역합니다. 시작을 누르면 크롬이 공유 대상을 묻습니다 — 구글미트 탭을 고르고 ‘탭 오디오도 공유’를 반드시 체크하세요. (PC 크롬 전용)",
     "tr.duo": "🪟 대면 자막", "duo.intro": "투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.",
     "duo.top": "위쪽(내 앞) 언어", "duo.bottom": "아래쪽(맞은편) 언어", "duo.flip": "아래쪽 표시 방향 (프로젝터 설치에 맞게)",
@@ -120,7 +120,7 @@ const I18N = {
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
     "mode.prec": "🎯 Precision", "tr.inLang": "🎙️ Input",
     "st.precLive": "🎯 Precision captions — text appears when you finish a sentence", "tr.tts": "Read aloud",
-    "cap.mic": "🎙️ My mic", "cap.system": "🖥️ Screen/tab audio", "st.noTabAudio": "No tab audio was shared — pick the tab and tick ‘Also share tab audio’.",
+    "cap.mic": "🎙️ My mic", "cap.system": "🖥️ Screen/tab audio", "cap.level": "🎚️ Input", "st.noTabAudio": "No tab audio was shared — pick the tab and tick ‘Also share tab audio’.",
     "cap.hint": "🖥️ Interpreting screen/tab audio. On Start, Chrome asks what to share — pick your Google Meet tab and be sure to tick ‘Also share tab audio’. (Desktop Chrome only)",
     "tr.duo": "🪟 Glass captions", "duo.intro": "Face-to-face captions for a beam projector on transparent glass: top and bottom show different languages; the bottom is flipped so it reads correctly through the glass.",
     "duo.top": "Top (my side) language", "duo.bottom": "Bottom (far side) language", "duo.flip": "Bottom orientation (match your projector)",
@@ -231,7 +231,7 @@ class App {
      "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
      "apkDownloadBtn","apkCopyBtn",
-     "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint",
+     "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint","levelWrap","levelBar",
      "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
@@ -1062,6 +1062,7 @@ class App {
         // are VAD-segmented locally and sent to /api/transcribe one by one.
         this._audioSink = this._precSink();
         await this._startCapture();
+        if (this.el.levelWrap) this.el.levelWrap.hidden = false;
         this.running = true; this.paused = false;
         this.el.toggleBtn.disabled = false; this.el.pauseBtn.disabled = false;
         this._refreshToggle(); this._setStatus("live", t("st.precLive"));
@@ -1087,6 +1088,9 @@ class App {
     if (this._turnTimer) this._finalizeTurn();
     this._audioSink = null;
     this._keepAlive(false);
+    if (this.el.levelWrap) this.el.levelWrap.hidden = true;
+    if (this.el.levelBar) this.el.levelBar.style.width = "0%";
+    this._noiseFloor = null;
     if (window.speechSynthesis) speechSynthesis.cancel();
     if (this.recorder) {
       const rec = this.recorder; this.recorder = null;
@@ -1689,10 +1693,17 @@ class App {
     // While our own playback is audible the threshold rises to 0.04: speaker
     // echo reaching the mic is much quieter than direct speech, so this drops
     // the echo without deafening the app to a real speaker (full duplex).
-    const thr = this._playbackBusy() ? 0.04 : 0.010;
+    // 0.006 absolute floor catches quiet captured tab audio (Google Meet); the
+    // adaptive term (noise floor ×3) keeps steady hiss from opening the gate.
+    // While our own audio plays the bar rises to reject speaker echo.
+    this._noiseFloor = this._noiseFloor == null ? rms : Math.min(rms, this._noiseFloor * 1.03 + 0.0002);
+    const thr = this._playbackBusy() ? 0.045 : Math.max(0.006, this._noiseFloor * 3);
     if (rms > thr) this._vadUntil = now + 1000;
     const active = now < (this._vadUntil || 0);
     if (this.el.mjoinSpeak) this.el.mjoinSpeak.style.opacity = active ? "1" : "0.2";
+    // Live input-level meter so the user can SEE whether audio is arriving
+    // (a flat bar during a Meet = tab audio wasn't shared).
+    if (this.el.levelBar) this.el.levelBar.style.width = Math.min(100, Math.round(rms * 900)) + "%";
     return active;
   }
 

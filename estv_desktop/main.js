@@ -10,7 +10,7 @@
 // Phase 2b (outbound voice → Meet mic) is layered on top via preload once this
 // shell is verified on a real machine.
 
-const { app, BrowserWindow, session, globalShortcut, Menu } = require("electron");
+const { app, BrowserWindow, session, globalShortcut, Menu, desktopCapturer } = require("electron");
 
 // The deployed web UI. Override with ESTV_URL to point at a staging server.
 const APP_URL = process.env.ESTV_URL || "https://interpretation-pbf4.onrender.com/";
@@ -45,6 +45,16 @@ function createWindow() {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
     cb(["media", "display-capture", "audioCapture", "videoCapture"].includes(permission));
   });
+
+  // Electron blocks getDisplayMedia() unless the app answers the request.
+  // Provide the screen + SYSTEM-AUDIO loopback (Windows) so capturing the
+  // other party's voice from Google Meet works inside the desktop app — the
+  // web code drops the video track and keeps the audio.
+  session.defaultSession.setDisplayMediaRequestHandler((_req, callback) => {
+    desktopCapturer.getSources({ types: ["screen"] })
+      .then((sources) => callback({ video: sources[0], audio: "loopback" }))
+      .catch(() => callback({}));
+  }, { useSystemPicker: true });
 
   win.loadURL(APP_URL);
 
