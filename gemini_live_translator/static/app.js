@@ -1619,7 +1619,7 @@ class App {
     //  - PROGRESSIVE flush at ~5s of continuous speech, so a long monologue
     //    (e.g. a Meet speaker who doesn't pause) captions in rolling chunks
     //    instead of showing nothing until they finally stop.
-    const GAP_MS = 350, PROGRESS_BYTES = 160000; // 160000 ≈ 5s @16kHz·16bit
+    const GAP_MS = 350, PROGRESS_BYTES = 96000; // 96000 ≈ 3s @16kHz·16bit — roll captions mid-speech
     this._vadUntil = 0;
     let buf = [], bytes = 0, sawSpeech = false, quietSince = 0;
     const flush = () => {
