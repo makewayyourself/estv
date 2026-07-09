@@ -50,11 +50,14 @@ function createWindow() {
   // Provide the screen + SYSTEM-AUDIO loopback (Windows) so capturing the
   // other party's voice from Google Meet works inside the desktop app — the
   // web code drops the video track and keeps the audio.
+  // Auto-grant the primary screen + system-audio loopback — no picker dialog.
+  // (useSystemPicker was unreliable on some Windows builds and could leave
+  // getDisplayMedia hanging, so we resolve it deterministically here.)
   session.defaultSession.setDisplayMediaRequestHandler((_req, callback) => {
     desktopCapturer.getSources({ types: ["screen"] })
       .then((sources) => callback({ video: sources[0], audio: "loopback" }))
       .catch(() => callback({}));
-  }, { useSystemPicker: true });
+  });
 
   win.loadURL(APP_URL);
 
