@@ -69,7 +69,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-w"
+APP_VERSION = "2026.06.19-x"
 
 load_dotenv()
 

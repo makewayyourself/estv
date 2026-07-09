@@ -1,6 +1,6 @@
 {
   "name": "estv-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "ESTV desktop interpreter — invisible captions + Google Meet voice interpreting",
   "main": "main.js",
   "author": "ESTV",
@@ -21,7 +21,7 @@
     "publish": [{ "provider": "github", "owner": "makewayyourself", "repo": "estv" }],
     "win": {
       "target": ["nsis"],
-      "artifactName": "ESTV-Interpreter-Setup-${version}.${ext}"
+      "artifactName": "ESTV-Interpreter-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,

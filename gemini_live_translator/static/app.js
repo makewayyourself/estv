@@ -45,8 +45,8 @@ const I18N = {
     "note.audio": "🔊 회의 녹음", "note.audioDl": "다운로드", "note.audioDel": "삭제",
     "note.audioDelConfirm": "이 노트의 녹음 파일을 삭제할까요? (기록·요약은 유지됩니다)",
     "set.assistLang": "🌐 AI 보조 표시 언어 (내가 읽을 수 있는 언어)",
-    "set.install": "앱 설치 (Android)", "set.installHelp": "최신 APK를 받아 폰에 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
-    "set.apkBtn": "📥 APK 다운로드", "set.apkCopy": "🔗 다운로드 링크 복사", "set.apkCopied": "✓ 복사됨",
+    "set.install": "앱 설치", "set.installHelp": "최신 앱을 받아 설치하세요. 참가자에게 이 버튼/링크를 공유해도 됩니다.",
+    "set.apkBtn": "📥 Android APK", "set.winBtn": "🖥️ Windows 데스크톱", "set.apkCopy": "🔗 Android 링크 복사", "set.winCopy": "🔗 Windows 링크 복사", "set.apkCopied": "✓ 복사됨",
     "st.hosting": "방송 중 — 말하세요", "st.joined": "연결됨 — 듣는 중", "st.roomEnded": "방이 종료/없음",
     "st.waking": "서버 연결 중… (무료 서버는 처음 30~60초 걸릴 수 있어요)", "st.timeout": "연결 시간 초과 — 서버가 깨어나는 중일 수 있어요. 잠시 후 다시 시도하세요.",
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
@@ -113,8 +113,8 @@ const I18N = {
     "note.audio": "🔊 Meeting audio", "note.audioDl": "Download", "note.audioDel": "Delete",
     "note.audioDelConfirm": "Delete this note's recording? (The transcript and summary are kept.)",
     "set.assistLang": "🌐 AI assist language (the language YOU read)",
-    "set.install": "Install app (Android)", "set.installHelp": "Download the latest APK and install it on your phone. Share this button/link with participants too.",
-    "set.apkBtn": "📥 Download APK", "set.apkCopy": "🔗 Copy download link", "set.apkCopied": "✓ Copied",
+    "set.install": "Install app", "set.installHelp": "Download the latest app and install it. Share these buttons/links with participants too.",
+    "set.apkBtn": "📥 Android APK", "set.winBtn": "🖥️ Windows desktop", "set.apkCopy": "🔗 Copy Android link", "set.winCopy": "🔗 Copy Windows link", "set.apkCopied": "✓ Copied",
     "st.hosting": "Broadcasting — speak now", "st.joined": "Connected — listening", "st.roomEnded": "Room ended / not found",
     "st.waking": "Connecting… (a free server can take 30–60s the first time)", "st.timeout": "Connection timed out — the server may be waking up. Try again shortly.",
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
@@ -230,7 +230,7 @@ class App {
      "joinForm","joinLang","joinBtn","joinLive","joinTranscript","joinLangLabel","joinLeaveBtn",
      "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
-     "apkDownloadBtn","apkCopyBtn",
+     "apkDownloadBtn","apkCopyBtn","winDownloadBtn","winCopyBtn",
      "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint","levelWrap","levelBar",
      "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
@@ -315,6 +315,10 @@ class App {
     this.el.apkCopyBtn.addEventListener("click", () => {
       const url = this.el.apkDownloadBtn.getAttribute("href");
       if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { const b = this.el.apkCopyBtn, p = b.textContent; b.textContent = t("set.apkCopied"); setTimeout(() => { b.textContent = p; }, 1500); }).catch(() => {});
+    });
+    this.el.winCopyBtn.addEventListener("click", () => {
+      const url = this.el.winDownloadBtn.getAttribute("href");
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { const b = this.el.winCopyBtn, p = b.textContent; b.textContent = t("set.apkCopied"); setTimeout(() => { b.textContent = p; }, 1500); }).catch(() => {});
     });
 
     this.el.toggleBtn.addEventListener("click", () => (this.running ? this.stop() : this.start()));
