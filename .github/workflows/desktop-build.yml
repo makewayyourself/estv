@@ -1,0 +1,55 @@
+name: Build Desktop App (Windows)
+
+# Builds the ESTV Interpreter Windows installer (Electron). Run from the
+# Actions tab, or on pushes that touch the desktop app.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "estv_desktop/**"
+      - ".github/workflows/desktop-build.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write # publish the installer as a Release asset
+    defaults:
+      run:
+        working-directory: estv_desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: estv-interpreter-windows
+          path: estv_desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Publish installer to Releases (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: ESTV Interpreter — latest (Windows)
+          body: |
+            최신 Windows 데스크톱 앱입니다. 아래 **Assets**의 `ESTV-Interpreter-Setup-*.exe` 를 받아 설치하세요.
+          files: estv_desktop/dist/*.exe
+          make_latest: false

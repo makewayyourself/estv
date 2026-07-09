@@ -1,0 +1,30 @@
+{
+  "name": "estv-desktop",
+  "version": "0.1.0",
+  "description": "ESTV desktop interpreter — invisible captions + Google Meet voice interpreting",
+  "main": "main.js",
+  "author": "ESTV",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.estv.desktop",
+    "productName": "ESTV Interpreter",
+    "files": ["main.js", "preload.js", "overlay.html", "assets/**"],
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "ESTV-Interpreter-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}
