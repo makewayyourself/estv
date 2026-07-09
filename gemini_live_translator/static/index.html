@@ -114,12 +114,17 @@
         <!-- ============ TRANSLATE (quick) ============ -->
         <section data-view="translate" hidden>
           <div class="mb-2 flex items-center gap-2">
+            <select id="capSrcSel" hidden class="shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-2 text-xs font-medium text-slate-200 focus:outline-none">
+              <option value="mic" data-i18n="cap.mic">🎙️ 내 마이크</option>
+              <option value="system" data-i18n="cap.system">🖥️ 화면·탭 소리</option>
+            </select>
             <span class="shrink-0 text-xs font-medium text-slate-400" data-i18n="tr.outLang">🔊 출력 언어</span>
             <select id="qkLangSel" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 focus:outline-none"></select>
             <label id="precTtsWrap" hidden class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-2 text-xs font-medium text-slate-300">
               <input id="precTtsToggle" type="checkbox" class="h-4 w-4 accent-sky-500" /><span data-i18n="tr.tts">읽어주기</span>
             </label>
           </div>
+          <p id="capSysHint" hidden class="mb-2 rounded-lg border border-sky-900/40 bg-sky-950/20 px-2.5 py-1.5 text-[11px] text-sky-200/80" data-i18n="cap.hint">🖥️ 화면·탭 소리로 통역합니다. 시작을 누르면 크롬이 공유 대상을 묻습니다 — 구글미트 탭을 고르고 <b>‘탭 오디오도 공유’를 반드시 체크</b>하세요. (PC 크롬 전용)</p>
           <div class="mb-3 flex gap-2">
             <button id="qkRoomBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.room">🔗 방 만들기 (QR)</button>
             <button id="qkDuoBtn" class="card flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700" data-i18n="tr.duo">🪟 대면 자막</button>

@@ -52,6 +52,8 @@ const I18N = {
     "st.langSwitch": "출력 언어 변경 중…", "tr.outLang": "🔊 출력 언어",
     "mode.prec": "🎯 고정밀", "tr.inLang": "🎙️ 입력",
     "st.precLive": "🎯 고정밀 자막 — 문장을 마치면 자막이 표시됩니다", "tr.tts": "읽어주기",
+    "cap.mic": "🎙️ 내 마이크", "cap.system": "🖥️ 화면·탭 소리", "st.noTabAudio": "탭 오디오가 공유되지 않았어요 — 공유 창에서 대상 탭을 고르고 ‘탭 오디오도 공유’를 체크하세요.",
+    "cap.hint": "🖥️ 화면·탭 소리로 통역합니다. 시작을 누르면 크롬이 공유 대상을 묻습니다 — 구글미트 탭을 고르고 ‘탭 오디오도 공유’를 반드시 체크하세요. (PC 크롬 전용)",
     "tr.duo": "🪟 대면 자막", "duo.intro": "투명 스크린(빔프로젝터)용 마주보기 자막: 위·아래에 서로 다른 언어가 뜨고, 아래쪽은 유리 반대편에서 읽히도록 반전됩니다.",
     "duo.top": "위쪽(내 앞) 언어", "duo.bottom": "아래쪽(맞은편) 언어", "duo.flip": "아래쪽 표시 방향 (프로젝터 설치에 맞게)",
     "duo.flipMirror": "좌우 반전 (거울)", "duo.flipRotate": "180° 회전", "duo.flipNone": "그대로",
@@ -118,6 +120,8 @@ const I18N = {
     "st.langSwitch": "Switching output language…", "tr.outLang": "🔊 Output",
     "mode.prec": "🎯 Precision", "tr.inLang": "🎙️ Input",
     "st.precLive": "🎯 Precision captions — text appears when you finish a sentence", "tr.tts": "Read aloud",
+    "cap.mic": "🎙️ My mic", "cap.system": "🖥️ Screen/tab audio", "st.noTabAudio": "No tab audio was shared — pick the tab and tick ‘Also share tab audio’.",
+    "cap.hint": "🖥️ Interpreting screen/tab audio. On Start, Chrome asks what to share — pick your Google Meet tab and be sure to tick ‘Also share tab audio’. (Desktop Chrome only)",
     "tr.duo": "🪟 Glass captions", "duo.intro": "Face-to-face captions for a beam projector on transparent glass: top and bottom show different languages; the bottom is flipped so it reads correctly through the glass.",
     "duo.top": "Top (my side) language", "duo.bottom": "Bottom (far side) language", "duo.flip": "Bottom orientation (match your projector)",
     "duo.flipMirror": "Mirrored", "duo.flipRotate": "Rotated 180°", "duo.flipNone": "As-is",
@@ -227,7 +231,7 @@ class App {
      "meetIdle","meetLang","meetStartBtn","meetLive","meetQr","meetLink","meetCopyBtn","meetRoster","meetTranscript","meetSaveBtn","meetStopBtn",
      "mjoinForm","mjoinName","mjoinBtn","mjoinLive","mjoinLabel","mjoinSpeak","mjoinTranscript","mjoinLeaveBtn",
      "apkDownloadBtn","apkCopyBtn",
-     "qkRoomBtn","qkSaveBtn","qkLangSel",
+     "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint",
      "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
      "answerToggle","upgradeToggle",
@@ -438,6 +442,17 @@ class App {
     this.el.viewMode.value = this.viewMode;
     this._setMode(this.audioOutput, true);
     this._setPrec(localStorage.getItem("precision") !== "0", true); // precision is the default: validated as the accurate engine
+    // PC-only: capture the OTHER party's audio from a browser tab / the screen
+    // (e.g. a Google Meet tab) instead of the mic — pure web, no desktop app.
+    const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    this._canSystemAudio = !isNative && !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+    if (this._canSystemAudio) {
+      this.el.capSrcSel.hidden = false;
+      this.el.capSrcSel.value = localStorage.getItem("capSrc") || "mic";
+      const syncHint = () => { const sys = this.el.capSrcSel.value === "system"; this.el.capSysHint.hidden = !sys; };
+      this.el.capSrcSel.addEventListener("change", () => { localStorage.setItem("capSrc", this.el.capSrcSel.value); syncHint(); if (this.running) { this._setStatus("connecting", t("st.langSwitch")); this.stop().then(() => this.start()); } });
+      syncHint();
+    }
   }
   _applyTheme(theme) { document.body.classList.toggle("light", theme === "light"); localStorage.setItem("theme", theme); this.el.themeSel.value = theme; }
   _applyFont(size) { ["sm","md","lg","xl"].forEach((s) => { this.el.qkTranscript.classList.toggle("fs-" + s, s === size); this.el.noteTranscript.classList.toggle("fs-" + s, s === size); }); localStorage.setItem("fontSize", size); this.el.fontSel.value = size; }
@@ -1138,13 +1153,24 @@ class App {
 
   // ---- capture ------------------------------------------------------------
   async _startCapture() {
-    // Earphone(Bluetooth) mode: turning OFF the voice-processing constraints
-    // keeps Android in MEDIA audio mode so BT routes via A2DP and the
-    // translated audio actually plays in the earphones. With echoCancellation
-    // on, Android forces communication mode (SCO/HFP) which a WebView can't
-    // drive, so sound never reaches the BT earphones.
-    const proc = localStorage.getItem("earphoneMode") !== "1";
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: proc, noiseSuppression: proc, autoGainControl: proc } });
+    if (this._canSystemAudio && this.el.capSrcSel.value === "system") {
+      // Capture a tab's / the screen's audio (the other party in a call).
+      // Chrome requires a video request; we keep only the audio track.
+      const ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      ds.getVideoTracks().forEach((tk) => tk.stop());
+      const at = ds.getAudioTracks();
+      if (!at.length) { ds.getTracks().forEach((tk) => tk.stop()); throw new Error(t("st.noTabAudio")); }
+      at[0].addEventListener("ended", () => { if (this.running) this.stop(); }); // user hit "Stop sharing"
+      this.mediaStream = new MediaStream(at);
+    } else {
+      // Earphone(Bluetooth) mode: turning OFF the voice-processing constraints
+      // keeps Android in MEDIA audio mode so BT routes via A2DP and the
+      // translated audio actually plays in the earphones. With echoCancellation
+      // on, Android forces communication mode (SCO/HFP) which a WebView can't
+      // drive, so sound never reaches the BT earphones.
+      const proc = localStorage.getItem("earphoneMode") !== "1";
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: proc, noiseSuppression: proc, autoGainControl: proc } });
+    }
     this.captureContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: INPUT_SAMPLE_RATE });
     await this.captureContext.audioWorklet.addModule("./audio-processor.js");
     this.micSource = this.captureContext.createMediaStreamSource(this.mediaStream);
