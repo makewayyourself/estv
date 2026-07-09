@@ -40,7 +40,7 @@ const I18N = {
     "mjoin.name": "표시 이름 (선택)", "mjoin.namePh": "예: 홍길동 / 영업팀", "mjoin.go": "🎙️ 참여하고 말하기",
     "mjoin.you": "당신", "mjoin.speak": "말하면 자동으로 전송됩니다",
     "set.earphone": "🎧 이어폰(블루투스) 모드", "set.earphoneHelp": "블루투스 이어폰으로 소리가 안 나오면 켜세요. 에코 제거를 꺼서 이어폰으로 음성이 정상 출력됩니다(이어폰 착용 시에만 권장).", "set.earphoneApply": "이어폰 모드 변경 — 다시 시작하면 적용됩니다",
-    "set.digest": "🧭 실시간 요약·추천 질문", "digest.title": "🧭 실시간 요약", "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
+    "set.digest": "🧭 실시간 요약·추천 질문", "set.terms": "📖 전문용어 풀이", "digest.title": "🧭 실시간 요약", "set.noiseGate": "🔇 주변 소음 필터", "set.noiseGateHelp": "작은 배경 소리(주변 대화·소음)를 걸러 보내지 않습니다. 엉뚱한 언어 인식·오번역을 줄여줍니다. 내 목소리가 잘리면 끄세요.",
     "set.glossary": "📖 용어집 — 이름·회사·전문용어 (오인식 자동 교정에 사용)", "set.glossaryPh": "예: 안현모(내 이름), ABC무역(회사), FOB, 선하증권",
     "note.audio": "🔊 회의 녹음", "note.audioDl": "다운로드", "note.audioDel": "삭제",
     "note.audioDelConfirm": "이 노트의 녹음 파일을 삭제할까요? (기록·요약은 유지됩니다)",
@@ -108,7 +108,7 @@ const I18N = {
     "mjoin.name": "Display name (optional)", "mjoin.namePh": "e.g. Alex / Sales", "mjoin.go": "🎙️ Join & speak",
     "mjoin.you": "You", "mjoin.speak": "Speak — audio is sent automatically",
     "set.earphone": "🎧 Earphone (Bluetooth) mode", "set.earphoneHelp": "Turn on if sound doesn't reach your Bluetooth earphones. Disables echo cancellation so audio routes to the earphones (recommended only while wearing earphones).", "set.earphoneApply": "Earphone mode changed — restart to apply",
-    "set.digest": "🧭 Live summary & suggested questions", "digest.title": "🧭 Live summary", "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
+    "set.digest": "🧭 Live summary & suggested questions", "set.terms": "📖 Term glossary", "digest.title": "🧭 Live summary", "set.noiseGate": "🔇 Ambient noise filter", "set.noiseGateHelp": "Skips quiet background sound (nearby chatter/noise) so it never reaches the model — reduces wrong-language detection and mistranslation. Turn off if your own voice gets clipped.",
     "set.glossary": "📖 Glossary — names, companies, terms (used to auto-correct mishearings)", "set.glossaryPh": "e.g. Hyunmo Ahn (my name), ABC Trading (company), FOB, B/L",
     "note.audio": "🔊 Meeting audio", "note.audioDl": "Download", "note.audioDel": "Delete",
     "note.audioDelConfirm": "Delete this note's recording? (The transcript and summary are kept.)",
@@ -234,7 +234,7 @@ class App {
      "qkRoomBtn","qkSaveBtn","qkLangSel","capSrcSel","capSysHint","levelWrap","levelBar",
      "qkDuoBtn","duoConfig","duoTopLang","duoBottomLang","duoFlipSel","duoStartBtn","duoOverlay","duoTop","duoBottom",
      "askInput","askBtn","askAnswer","summaryContent","viewMode","noteFeedbackBtn","feedbackContent",
-     "answerToggle","upgradeToggle","digestToggle","digestPanel","digestSummary","digestQs","digestBusy",
+     "answerToggle","upgradeToggle","digestToggle","termsToggle","digestPanel","digestSummary","digestQs","digestBusy",
      "notesList","notesEmpty","noteSearch",
      "uiLang","themeSel","fontSel","langB","displayLang1","displayLang2","displayLang3",
      "voiceSelect","speedRange","speedValue","riskToggle","riskContext","clarifyToggle","earphoneToggle","noiseGateToggle","glossaryInput","assistLang",
@@ -382,6 +382,8 @@ class App {
     this.el.clarifyToggle.addEventListener("change", () => localStorage.setItem("clarify", this.el.clarifyToggle.checked ? "1" : "0"));
     this.el.answerToggle.addEventListener("change", () => localStorage.setItem("answer", this.el.answerToggle.checked ? "1" : "0"));
     this.el.upgradeToggle.addEventListener("change", () => localStorage.setItem("upgrade", this.el.upgradeToggle.checked ? "1" : "0"));
+    this.el.termsToggle.checked = localStorage.getItem("terms") === "1";
+    this.el.termsToggle.addEventListener("change", () => localStorage.setItem("terms", this.el.termsToggle.checked ? "1" : "0"));
     this.el.digestToggle.checked = localStorage.getItem("digest") === "1";
     this.el.digestToggle.addEventListener("change", () => { localStorage.setItem("digest", this.el.digestToggle.checked ? "1" : "0"); if (!this.el.digestToggle.checked) this.el.digestPanel.hidden = true; });
     this.el.earphoneToggle.addEventListener("change", () => {
@@ -791,7 +793,7 @@ class App {
     // Quick Translate only when the toggles are on.
     // Pass the live caption elements so a context correction can rewrite them
     // in place (they are nulled right after commit returns).
-    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked) this._analyzeTurn(entry, this._trLine, this._srcLine);
+    if (this.context === "note" || this.el.riskToggle.checked || this.el.clarifyToggle.checked || this.el.answerToggle.checked || this.el.upgradeToggle.checked || this.el.termsToggle.checked) this._analyzeTurn(entry, this._trLine, this._srcLine);
     if (this._displayLangs().length && source) this._multiTranslate(entry);
     if (this._duoOn && source) this._duoRender(entry);
     if (this.el.digestToggle.checked && (source || translation)) this._scheduleDigest();
@@ -866,13 +868,14 @@ class App {
     const wantClarify = isNote || this.el.clarifyToggle.checked;
     const wantAnswer = this.el.answerToggle.checked;
     const wantUpgrade = this.el.upgradeToggle.checked;
+      const wantTerms = this.el.termsToggle.checked;
     try {
       const r = await fetch(`${base}/api/analyze`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ original: entry.source, translation: entry.translation,
           alert_language: (localStorage.getItem("assistLang") || UI_LANG), target_language: this.el.langB.value,
           context: [this.el.riskContext.value.trim(), (localStorage.getItem("glossary") || "").trim() && ("Glossary (correct names/terms): " + localStorage.getItem("glossary").trim())].filter(Boolean).join("\n"),
           history: this._currentLog().slice(-6).map((e) => `${e.source} → ${e.translation}`).join("\n"),
-          want_risk: wantRisk, want_clarify: wantClarify, want_answer: wantAnswer, want_upgrade: wantUpgrade, token: this._token() || undefined }) });
+          want_risk: wantRisk, want_clarify: wantClarify, want_answer: wantAnswer, want_upgrade: wantUpgrade, want_terms: wantTerms, token: this._token() || undefined }) });
       if (!r.ok) return;
       const d = await r.json(); if (!d) return;
       let warned = false;
@@ -906,6 +909,7 @@ class App {
       }
       if (wantAnswer && d.should_answer && (d.answer_native || d.answer_local)) this._renderAnswer(d);
       if (wantUpgrade && d.upgrade && d.upgrade.trim()) this._renderUpgrade(d.upgrade.trim());
+      if (wantTerms && Array.isArray(d.terms) && d.terms.length) { entry.terms = d.terms; this._renderTerms(d.terms); }
       if (warned) { this._persist(); if (isNote) this._appendWarn(entry); }
     } catch {}
   }
@@ -961,6 +965,7 @@ class App {
       risk_medium: ["border-amber-500/60 bg-amber-950/40 text-amber-100", "⚠️"],
       risk_high: ["border-rose-500/70 bg-rose-950/40 text-rose-100", "🚨"],
       clarify: ["border-sky-500/60 bg-sky-950/40 text-sky-100", "🔎"],
+      terms: ["border-teal-500/60 bg-teal-950/40 text-teal-100", "📖"],
     }[type] || ["border-slate-600 bg-slate-800 text-slate-200", "•"];
     const card = document.createElement("div");
     card.className = `slide-up rounded-xl border p-3 text-sm ${theme[0]}`;
@@ -1100,6 +1105,12 @@ class App {
     }
     if (entry.clarify) entry.clarify.rejected = true;
     this._persist();
+  }
+  _renderTerms(terms) {
+    const head = UI_LANG === "ko" ? "용어 풀이" : "Glossary";
+    const body = terms.slice(0, 3).map((x) =>
+      `<div class="mb-1"><span class="font-semibold text-teal-200">${esc(x.term)}</span> — <span class="text-slate-200">${esc(x.meaning)}</span></div>`).join("");
+    this._pushAssist("terms", head, body);
   }
   _renderRisk(d) {
     const head = UI_LANG === "ko" ? "참고" : "Note";

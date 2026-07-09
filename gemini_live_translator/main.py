@@ -69,7 +69,7 @@ from services.rooms import manager as room_manager
 MAX_SUMMARY_CHARS = 40_000
 
 # Bump this whenever the frontend changes so you can confirm a fresh deploy.
-APP_VERSION = "2026.06.19-x"
+APP_VERSION = "2026.06.19-y"
 
 load_dotenv()
 
@@ -200,6 +200,11 @@ class RiskLevel(str, enum.Enum):
     high = "high"
 
 
+class TermGloss(BaseModel):
+    term: str
+    meaning: str
+
+
 class RiskAnalysis(BaseModel):
     """Structured per-turn copilot output (risk + clarify + answer + upgrade)."""
 
@@ -221,6 +226,8 @@ class RiskAnalysis(BaseModel):
     answer_native: str
     # Native-level rewrite of the latest translation.
     upgrade: str
+    # Jargon/technical terms in the utterance + a one-line plain definition.
+    terms: List[TermGloss]
 
 
 class AnalyzeRequest(BaseModel):
@@ -234,6 +241,7 @@ class AnalyzeRequest(BaseModel):
     want_clarify: bool = False
     want_answer: bool = False
     want_upgrade: bool = False
+    want_terms: bool = False
     token: str | None = None
 
 
@@ -243,6 +251,7 @@ _EMPTY_ANALYSIS = {
     "clarify_did_you_mean": "", "clarify_corrected_translation": "",
     "clarify_corrected_source": "",
     "should_answer": False, "answer_local": "", "answer_native": "", "upgrade": "",
+    "terms": [],
 }
 
 
