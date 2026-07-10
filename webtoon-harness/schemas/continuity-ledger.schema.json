@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://webtoon-harness/schemas/continuity-ledger.schema.json",
+  "title": "Continuity Ledger",
+  "description": "Machine-checkable cross-episode state (U4). Reconciled by continuity-manager after each episode so later episodes never contradict earlier ones.",
+  "type": "object",
+  "required": ["last_episode", "character_state", "open_threads"],
+  "additionalProperties": false,
+  "properties": {
+    "last_episode": { "type": "integer", "minimum": 0 },
+    "character_state": {
+      "type": "array",
+      "description": "current canonical state per character at the end of last_episode",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^CHAR_[A-Z0-9_]+$" },
+          "status": { "type": "string", "description": "alive/injured/missing/revealed-as-... etc." },
+          "appearance_changes": { "type": "array", "items": { "type": "string" }, "description": "deltas vs story-bible appearance_tokens (scar, new outfit)" },
+          "knows": { "type": "array", "items": { "type": "string" }, "description": "facts this character currently knows — guards dramatic irony" },
+          "last_seen_episode": { "type": "integer" }
+        }
+      }
+    },
+    "open_threads": {
+      "type": "array",
+      "description": "foreshadowing/mysteries planted but not yet paid off",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "summary": { "type": "string" },
+          "planted_episode": { "type": "integer" },
+          "status": { "type": "string", "enum": ["open", "advanced", "resolved"] },
+          "payoff_episode": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "revealed_twists": {
+      "type": "array",
+      "description": "twists already used — twist-master must not reuse the same reveal",
+      "items": {
+        "type": "object",
+        "required": ["episode", "twist"],
+        "properties": {
+          "episode": { "type": "integer" },
+          "twist": { "type": "string" }
+        }
+      }
+    },
+    "world_facts_locked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "world rules now canon; new episodes must not contradict these"
+    }
+  }
+}
