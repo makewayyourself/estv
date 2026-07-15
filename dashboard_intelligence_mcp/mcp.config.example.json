@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "dashboard-intelligence": {
+      "command": "python",
+      "args": ["-m", "dashboard_intelligence_mcp.server"],
+      "cwd": "/absolute/path/to/estv",
+      "env": {
+        "DASHBOARD_MCP_DATA_DIR": "/absolute/path/to/persistent/data"
+      }
+    }
+  }
+}

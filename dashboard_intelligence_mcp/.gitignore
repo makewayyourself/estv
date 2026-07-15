@@ -1,0 +1,4 @@
+# Runtime-registered references (not shipped seed data)
+data/references.user.json
+__pycache__/
+*.pyc
